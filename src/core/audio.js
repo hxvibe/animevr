@@ -190,6 +190,41 @@ export class Sfx {
   denied() {
     this.tone({ type: 'square', f0: 180, f1: 150, dur: 0.2, vol: 0.12 });
   }
+  click() {
+    this.tone({ type: 'sine', f0: 1200, f1: 1500, dur: 0.07, vol: 0.12 });
+  }
+  gunshot(at) {
+    this.noise({ dur: 0.18, vol: 0.35, f0: 5000, f1: 300, at });
+    this.tone({ type: 'square', f0: 160, f1: 60, dur: 0.12, vol: 0.15, at });
+  }
+  slash(at, pitch = 1) {
+    this.noise({ dur: 0.22, vol: 0.35, f0: 9000 * pitch, f1: 1200, type: 'bandpass', q: 1.5, at, attack: 0.002 });
+    this.tone({ type: 'sawtooth', f0: 2600 * pitch, f1: 700, dur: 0.12, vol: 0.06, at });
+  }
+  cut(at) {
+    this.noise({ dur: 0.1, vol: 0.3, f0: 7000, f1: 2500, type: 'highpass', q: 0.7, at, attack: 0.001 });
+  }
+  shatter(at) {
+    this.noise({ dur: 0.5, vol: 0.35, f0: 8000, f1: 1500, type: 'highpass', q: 0.5, at });
+    for (let i = 0; i < 4; i++) this.tone({ type: 'sine', f0: 2500 + Math.random() * 3000, f1: 2000 + Math.random() * 2000, dur: 0.15 + Math.random() * 0.2, vol: 0.04, at });
+  }
+  fire(at, size = 1) {
+    this.noise({ dur: 1.2 * size, vol: 0.5, f0: 1200, f1: 120, at, attack: 0.02 });
+    this.tone({ type: 'sine', f0: 70, f1: 30, dur: 1.4 * size, vol: 0.55, at });
+  }
+  punch(at) {
+    this.noise({ dur: 0.12, vol: 0.4, f0: 1800, f1: 200, at });
+    this.tone({ type: 'sine', f0: 140, f1: 50, dur: 0.15, vol: 0.4, at });
+  }
+  blackFlash(at) {
+    this.noise({ dur: 0.5, vol: 0.6, f0: 4000, f1: 60, at, attack: 0.001 });
+    this.tone({ type: 'sawtooth', f0: 90, f1: 25, dur: 0.6, vol: 0.4, at });
+    this.tone({ type: 'square', f0: 2200, f1: 400, dur: 0.15, vol: 0.12, at });
+  }
+  rumble(dur = 2, vol = 0.4) {
+    this.noise({ dur, vol, f0: 300, f1: 60, attack: 0.3 });
+    this.tone({ type: 'sine', f0: 45, f1: 30, dur, vol: vol * 0.8, attack: 0.3 });
+  }
   domain() {
     if (!this.ctx) return;
     this.tone({ type: 'sine', f0: 55, f1: 40, dur: 4, vol: 0.5, attack: 0.3 });

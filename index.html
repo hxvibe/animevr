@@ -6,7 +6,7 @@
   <title>ANIME VR — 술식 시뮬레이터</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&family=Noto+Serif+JP:wght@700;900&display=swap" rel="stylesheet" />
   <style>
     :root { --c: #5ab4ff; }
     * { box-sizing: border-box; }
@@ -26,10 +26,10 @@
       box-shadow: 0 0 60px rgba(60,140,255,.18) inset;
     }
     .char .work { font-size: 13px; color: #9fb6e6; letter-spacing: .2em; }
-    .char .name { font-size: 40px; font-weight: 900; margin: 6px 0 4px; background: linear-gradient(90deg,#bfe6ff,#ffffff,#d8b8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .char .name { font-size: 34px; font-weight: 900; margin: 6px 0 4px; background: linear-gradient(90deg,#bfe6ff,#ffffff,#d8b8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .char .tech { font-size: 15px; color: #c8d6ff; }
     .skills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px 0 4px; }
-    .skills span { font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .skills span { font-family: 'Noto Serif JP', serif; font-size: 15px; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
     .skills .b { border-color: #3aa0ff; color: #a8d8ff; }
     .skills .r { border-color: #ff4a5a; color: #ffb0b0; }
     .skills .p { border-color: #a04cff; color: #dcc0ff; }
@@ -63,16 +63,18 @@
       <h1>ANIME VR · 술식 시뮬레이터</h1>
       <div class="char">
         <div class="work">주술회전</div>
-        <div class="name">고죠 사토루</div>
-        <div class="tech">무하한 주술 · 육안</div>
+        <div class="name">고죠 사토루 · 료멘 스쿠나</div>
+        <div class="tech">더미를 소환하고 술식을 마음껏 시험해보세요</div>
         <div class="skills">
-          <span>무하한</span>
-          <span class="b">술식순전 「창」</span>
-          <span class="r">술식반전 「혁」</span>
-          <span class="p">허식 「자」</span>
-          <span class="d">영역전개 「무량공처」</span>
-          <span>육안</span>
-          <span>반전술식</span>
+          <span class="b">蒼</span>
+          <span class="r">赫</span>
+          <span class="p">茈</span>
+          <span class="d">無量空処</span>
+          <span class="r">解</span>
+          <span class="r">捌</span>
+          <span class="r">開</span>
+          <span class="r">伏魔御廚子</span>
+          <span>黒閃</span>
         </div>
       </div>
       <div class="btns">
@@ -80,7 +82,7 @@
         <button id="btn-desktop">데스크톱으로 체험</button>
       </div>
       <div id="status">WebXR 확인 중…</div>
-      <div class="foot">비공식 팬메이드 시뮬레이션 · 컨트롤러 / 핸드트래킹 지원</div>
+      <div class="foot">비공식 팬메이드 시뮬레이터 · 컨트롤러 / 핸드트래킹 지원 · VR 안에서 캐릭터와 배경을 고릅니다</div>
     </div>
   </div>
   <script type="module" src="./src/main.js"></script>

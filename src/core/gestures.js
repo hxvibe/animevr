@@ -1,5 +1,6 @@
 // 핸드트래킹 관절 데이터(WebXR XRHand 25개 관절)로 손 모양을 판별한다.
-// 모든 계산은 기준 공간(rig 로컬) 좌표에서 이루어지므로 회전/이동에 무관하다.
+// 팔을 뻗어 손가락 일부가 가려지는 상황에서도 흔들리지 않도록
+// 1) 관절 굽힘 각도  2) 손가락 직선도(끝-뿌리 거리 / 뼈 길이 합)  두 지표를 함께 쓴다.
 import * as THREE from 'three';
 
 export const FINGERS = ['index-finger', 'middle-finger', 'ring-finger', 'pinky-finger'];
@@ -12,7 +13,6 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
-
 const RAD2DEG = 180 / Math.PI;
 
 function angleBetween(a, b) {
@@ -22,8 +22,8 @@ function angleBetween(a, b) {
   return Math.acos(THREE.MathUtils.clamp(a.dot(b) / (la * lb), -1, 1)) * RAD2DEG;
 }
 
-/** 손가락 굽힘 정도(도). 펴면 0~40, 주먹이면 200 이상. */
-export function fingerBend(J, f) {
+/** 손가락 굽힘(도) 과 직선도(0~1) */
+export function fingerMetrics(J, f, out) {
   const m = J[f + '-metacarpal'];
   const p = J[f + '-phalanx-proximal'];
   const i = J[f + '-phalanx-intermediate'];
@@ -33,40 +33,51 @@ export function fingerBend(J, f) {
   _v2.subVectors(i, p);
   _v3.subVectors(d, i);
   _v4.subVectors(t, d);
-  return angleBetween(_v1, _v2) + angleBetween(_v2, _v3) + angleBetween(_v3, _v4);
+  out.bend = angleBetween(_v1, _v2) + angleBetween(_v2, _v3) + angleBetween(_v3, _v4);
+  const len = _v2.length() + _v3.length() + _v4.length();
+  out.straight = len > 1e-5 ? t.distanceTo(p) / len : 1;
+  // 상태: 2 = 폄, 0 = 굽힘, 1 = 애매
+  if (out.bend < 70 || (out.straight > 0.93 && out.bend < 110)) out.state = 2;
+  else if (out.bend > 125 && out.straight < 0.78) out.state = 0;
+  else out.state = 1;
+  return out;
 }
 
-export function thumbBend(J) {
-  _v1.subVectors(J['thumb-phalanx-proximal'], J['thumb-metacarpal']);
-  _v2.subVectors(J['thumb-phalanx-distal'], J['thumb-phalanx-proximal']);
-  _v3.subVectors(J['thumb-tip'], J['thumb-phalanx-distal']);
-  return angleBetween(_v1, _v2) + angleBetween(_v2, _v3);
+export function fingerBend(J, f) {
+  return fingerMetrics(J, f, {}).bend;
 }
 
-const EXT = 80; // 이 값보다 작으면 편 손가락
-const CURL = 120; // 이 값보다 크면 굽힌 손가락
+export function makeGestureResult() {
+  return {
+    raw: 'none',
+    bends: [0, 0, 0, 0],
+    states: [1, 1, 1, 1],
+    straight: [1, 1, 1, 1],
+    palm: new THREE.Vector3(),
+    palmNormal: new THREE.Vector3(),
+    tip: new THREE.Vector3(),
+    dir: new THREE.Vector3(0, 0, -1),
+    fingersDir: new THREE.Vector3(0, 0, -1),
+    pinch: false,
+    pinchDist: 1,
+    crossValue: 0,
+    _f: [{}, {}, {}, {}],
+  };
+}
 
 /**
- * 손 모양 분류.
- * @param {Record<string, THREE.Vector3>} J 관절 이름 → 위치(rig 로컬)
- * @param {'left'|'right'} side
- * @param {object} out 결과를 채울 객체
+ * 손 모양 분류. 결과 raw:
+ *  open(손바닥 펼침) / fist(주먹) / point(검지) / two(검지+중지) / crossed(검지·중지 꼬기) / pinch / none
  */
 export function classifyHand(J, side, out) {
-  const bI = fingerBend(J, 'index-finger');
-  const bM = fingerBend(J, 'middle-finger');
-  const bR = fingerBend(J, 'ring-finger');
-  const bP = fingerBend(J, 'pinky-finger');
-  out.bends = [bI, bM, bR, bP];
-
-  const iExt = bI < EXT;
-  const mExt = bM < EXT;
-  const rExt = bR < EXT;
-  const pExt = bP < EXT;
-  const iCurl = bI > CURL;
-  const mCurl = bM > CURL;
-  const rCurl = bR > CURL - 15;
-  const pCurl = bP > CURL - 15;
+  for (let k = 0; k < 4; k++) {
+    const r = fingerMetrics(J, FINGERS[k], out._f[k]);
+    out.bends[k] = r.bend;
+    out.states[k] = r.state;
+    out.straight[k] = r.straight;
+  }
+  const [sI, sM, sR, sP] = out.states;
+  const [bI, bM, bR, bP] = out.bends;
 
   // 손바닥 중심과 법선
   const wrist = J['wrist'];
@@ -76,21 +87,32 @@ export function classifyHand(J, side, out) {
   if (side === 'left') out.palmNormal.crossVectors(_b, _a);
   else out.palmNormal.crossVectors(_a, _b);
   out.palmNormal.normalize();
+  out.fingersDir.subVectors(J['middle-finger-phalanx-proximal'], wrist).normalize();
 
-  // 교차(검지·중지 꼬기) 판정: 검지 끝이 중지 끝보다 새끼손가락 쪽으로 넘어가 있는지
+  out.pinchDist = J['thumb-tip'].distanceTo(J['index-finger-tip']);
+  out.pinch = out.pinchDist < 0.022;
+
+  // 교차 판정: 검지 끝이 중지 끝보다 새끼손가락 쪽으로 넘어가 있는지
   const lateral = _c.subVectors(J['pinky-finger-phalanx-proximal'], J['index-finger-phalanx-proximal']).normalize();
   const baseSep = _d.subVectors(J['middle-finger-phalanx-proximal'], J['index-finger-phalanx-proximal']).dot(lateral);
   const tipSep = _d.subVectors(J['middle-finger-tip'], J['index-finger-tip']).dot(lateral);
   const tipDist = J['middle-finger-tip'].distanceTo(J['index-finger-tip']);
-  const crossed = bI < 110 && bM < 110 && rCurl && pCurl && baseSep > 0 && tipSep < 0.002 && tipDist < 0.04;
   out.crossValue = tipSep;
+  const lowerCurled = sR !== 2 && sP !== 2 && (bR > 95 || bP > 95);
+  const crossed = sI !== 0 && sM !== 0 && lowerCurled && baseSep > 0 && tipSep < 0.003 && tipDist < 0.045;
+
+  // 중지가 약지·새끼보다 확실히 더 펴져 있으면 "두 손가락"으로 본다 (팔을 뻗었을 때 중지가 덜 펴져 보이는 문제 대응)
+  const middleUp = sM === 2 || (sM === 1 && bM < bR - 55 && out.straight[1] > 0.8);
+  const middleDown = sM === 0 || (sM === 1 && bM > 110 && bM > bI + 70);
 
   let g = 'none';
   if (crossed) g = 'crossed';
-  else if (iExt && mExt && rExt && pExt) g = 'open';
-  else if (iExt && mExt && rCurl && pCurl) g = 'two';
-  else if (iExt && mCurl && rCurl && pCurl) g = 'point';
-  else if (iCurl && mCurl && rCurl && pCurl) g = 'fist';
+  else if (sI === 2 && sM === 2 && sR === 2 && sP !== 0) g = 'open';
+  else if (sI === 2 && middleUp && lowerCurled) g = 'two';
+  else if (sI === 2 && middleDown && lowerCurled) g = 'point';
+  else if (sI === 0 && sM === 0 && sR === 0 && sP !== 2) g = 'fist';
+  else if (out.pinch) g = 'pinch';
+  else if (sI !== 0 && sM !== 0 && sR !== 0 && sP !== 0 && bI + bM + bR + bP < 250) g = 'open';
   out.raw = g;
 
   // 조준 방향과 끝점
@@ -98,25 +120,14 @@ export function classifyHand(J, side, out) {
     out.tip.copy(J['index-finger-tip']).add(J['middle-finger-tip']).multiplyScalar(0.5);
     _a.copy(J['index-finger-phalanx-proximal']).add(J['middle-finger-phalanx-proximal']).multiplyScalar(0.5);
     out.dir.subVectors(out.tip, _a).normalize();
-  } else {
+  } else if (g === 'point') {
     out.tip.copy(J['index-finger-tip']);
     out.dir.subVectors(J['index-finger-tip'], J['index-finger-phalanx-proximal']).normalize();
+  } else {
+    out.tip.copy(J['index-finger-tip']);
+    out.dir.copy(out.fingersDir);
   }
-  out.pinch = J['thumb-tip'].distanceTo(J['index-finger-tip']) < 0.02;
   return out;
-}
-
-export function makeGestureResult() {
-  return {
-    raw: 'none',
-    bends: [0, 0, 0, 0],
-    palm: new THREE.Vector3(),
-    palmNormal: new THREE.Vector3(),
-    tip: new THREE.Vector3(),
-    dir: new THREE.Vector3(0, 0, -1),
-    pinch: false,
-    crossValue: 0,
-  };
 }
 
 export const JOINT_NAMES = [

@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { EnergyOrb } from './vfx.js';
 import { UnlimitedVoid } from './domainVoid.js';
+import { Bolts } from '../../core/fx.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -96,7 +97,7 @@ export class Gojo {
         { head: '술식순전 「蒼」 — 인력', color: '#7fc4ff', text: '검지+중지로 앞을 가리키면 손가락 끝에 생성\n그 상태로 손을 펴면 창이 손을 따라 멀리 이동(팔을 뻗을수록 멀리)' },
         { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '검지만 펴서 충전 → 앞으로 찌르거나 손을 펴면 발사' },
         { head: '창 ↔ 혁 전환 · 취소', color: '#ffffff', text: '창 상태에서 검지만 → 혁 / 혁 상태에서 검지+중지 → 창 · 주먹을 쥐면 사라짐' },
-        { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '한 손은 창, 다른 손은 혁인 채로 두 손끝을 맞대기 → 양손을 밀거나 펴서 발사' },
+        { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 펴기\n→ 창과 혁이 돌며 섞여 茈 완성 → 손을 펴거나 앞으로 밀면 발사 · 주먹은 취소' },
         { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '검지·중지를 꼬아 얼굴 앞에 세우고 1.5초 (설정에서 끄기 / 메뉴에서 발동 가능)' },
         { head: '무하한 · 육안 · 잡기 · 흑섬', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 가렸다 떼기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률' },
       ];
@@ -105,7 +106,7 @@ export class Gojo {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
         { head: '蒼 / 赫', color: '#7fc4ff', text: '우클릭 유지: 창 (휠: 거리) · 좌클릭 충전 후 놓기: 혁' },
-        { head: '茈', color: '#c89bff', text: '좌·우클릭을 모두 누른 채 E → 버튼을 놓으면 발사' },
+        { head: '茈', color: '#c89bff', text: 'E 유지 → 창·혁이 섞여 茈 완성 → E를 놓으면 발사' },
         { head: '無量空処 / 토글', color: '#e8f0ff', text: 'Q 1초: 영역전개 · I 무하한 · O 육안 · V 주먹(흑섬)' },
       ];
     }
@@ -154,7 +155,7 @@ export class Gojo {
   // ── 입력 해석 ──
   /** 손 하나의 상태 요약. 핸드트래킹은 손 모양(gesture) 기반 */
   _intent(h) {
-    const I = { blue: false, red: false, sign: false, released: false, fist: false, open: false, gesture: 'none', gt: 0, src: h.source };
+    const I = { blue: false, red: false, sign: false, purple: false, released: false, fist: false, open: false, gesture: 'none', gt: 0, src: h.source };
     if (!h.active || h.uiBlock || this.ctx.ui.menuOpen || this.ctx.grab?.isHolding(h.side)) return I;
     const inp = this.ctx.input;
     if (h.source === 'controller') {
@@ -169,6 +170,7 @@ export class Gojo {
       I.red = h.side === 'right' && inp.mouse.left;
       I.released = h.side === 'left' ? !inp.mouse.right : !inp.mouse.left;
       I.sign = inp.keyDown('KeyQ');
+      I.purple = h.side === 'right' && inp.keyDown('KeyE');
       return I;
     }
     const g = h.gesture;
@@ -186,6 +188,8 @@ export class Gojo {
     I.blue = g === 'two' && gt >= 0.2 && outward && !nearFace && h.dir.y < 0.6 && dist > 0.3;
     // 혁: 검지만 펴고 0.2초
     I.red = g === 'point' && gt >= 0.2 && outward && !nearFace;
+    // 허식 「茈」 수인: 엄지를 접은 검지·중지 위에 얹고 약지·새끼를 편다
+    I.purple = g === 'purple' && gt >= 0.2;
     I.fist = g === 'fist' && gt >= 0.08;
     I.open = g === 'open' && gt >= 0.08;
     I.released = I.open || I.fist;
@@ -203,6 +207,13 @@ export class Gojo {
     const IL = this._intent(inp.left);
     const IR = this._intent(inp.right);
     this._updateDomain(dt, IL.sign || IR.sign);
+    if (!IL.purple && !IR.purple) this._purpleLock = false;
+    if (!this.purple && !this._purpleLock && this.domain.sign <= 0.05) {
+      // 한 손 수인 → 창과 혁을 불러내 섞는다
+      for (const [side, I] of [['left', IL], ['right', IR]]) {
+        if (I.purple && !this.purple && this.void.state === 'idle') this._beginPurple(side, inp.mode === 'desktop' ? 'desk' : 'one');
+      }
+    }
     if (!this.purple) {
       this._updateHand('left', IL, dt);
       this._updateHand('right', IR, dt);
@@ -666,94 +677,231 @@ export class Gojo {
 
   _checkFusion() {
     const inp = this.ctx.input;
+    if (inp.mode === 'desktop') return;
     for (const [a, b] of [['left', 'right'], ['right', 'left']]) {
       const sa = this.hs[a];
       const sb = this.hs[b];
       if (sa.mode === 'blue' && sb.mode === 'red' && sb.charge >= 0.3 && this._handsTogether()) {
-        const mid = new THREE.Vector3().copy(inp.left.pos).add(inp.right.pos).multiplyScalar(0.5);
-        if (!this.spend(30)) {
-          this.denied();
-          return;
-        }
-        const { fx, sfx, ui } = this.ctx;
-        const bluePos = sa.orb.pos.clone();
-        for (let i = 0; i < 40; i++) fx.spawn(_v2.lerpVectors(bluePos, mid, i / 40), _v3.randomDirection().multiplyScalar(0.3), C.blueHi, 0.04, 0.4, 2, 0);
-        this._disposeBlue(sa);
-        this._disposeRed(sb);
-        const orb = new EnergyOrb(this.ctx, 'purple', 0.08);
-        orb.light = fx.borrowLight(C.purple, 4, 8);
-        orb.pos.copy(mid);
-        this.purple = { orb, charge: 0, loop: sfx.loop({ base: 36, noiseF: 500, vol: 0.4 }) };
-        ui.manga({ top: '虚式', main: '「茈」', ruby: 'むらさき', color: '#a64dff' });
-        fx.burst(mid, 60, C.purpleHi, 2, 0.03, 0.5);
-        fx.shockwave(mid, C.purpleHi, 0.8, 0.4, { faceDir: inp.headDir.clone() });
-        inp.left.pulse(1, 120);
-        inp.right.pulse(1, 120);
+        const from = { blue: sa.orb.pos.clone(), red: sb.orb.pos.clone() };
+        const ctrl = inp.left.source === 'controller' || inp.right.source === 'controller';
+        this._beginPurple(a, ctrl ? 'ctrl' : 'two', from);
         return;
       }
     }
+  }
+
+  /** 茈가 만들어질 위치: 손에서 앞으로, 얼굴에서 충분히 떨어진 곳 */
+  _purpleAnchor(p, out) {
+    const inp = this.ctx.input;
+    const head = inp.head;
+    if (p.mode === 'desk') {
+      out.copy(head).addScaledVector(inp.headDir, 1.25);
+      out.y -= 0.12;
+      p.aim.copy(inp.headDir);
+      return out;
+    }
+    let base;
+    if (p.mode === 'one') base = inp[p.side].palm;
+    else base = _v2.copy(inp.left.pos).add(inp.right.pos).multiplyScalar(0.5);
+    _v3.subVectors(base, head);
+    const d = _v3.length();
+    _v3.normalize().multiplyScalar(0.55).addScaledVector(inp.headDir, 0.45).normalize();
+    p.aim.lerp(_v3, 0.25).normalize();
+    out.copy(head).addScaledVector(p.aim, Math.max(1.05, d + 0.6));
+    if (out.y < 0.5) out.y = 0.5;
+    return out;
+  }
+
+  _beginPurple(side, mode, from) {
+    const { input: inp, fx, sfx } = this.ctx;
+    if (!this.spend(30)) {
+      this.denied();
+      return;
+    }
+    for (const sd of ['left', 'right']) {
+      const s = this.hs[sd];
+      if (s.mode === 'blue') this._disposeBlue(s);
+      else if (s.mode === 'red') this._disposeRed(s);
+    }
+    const h = inp[side];
+    const blue = new EnergyOrb(this.ctx, 'blue', 0.04);
+    const red = new EnergyOrb(this.ctx, 'red', 0.04);
+    blue.light = fx.borrowLight(C.blue, 3, 6);
+    red.light = fx.borrowLight(C.red, 3, 6);
+    const start = mode === 'desk' ? _v.copy(inp.head).addScaledVector(inp.headDir, 0.5) : _v.copy(mode === 'one' ? h.palm : h.pos);
+    blue.pos.copy(from?.blue ?? start);
+    red.pos.copy(from?.red ?? start);
+    const bolts = new Bolts(this.ctx.scene, { count: 3, segs: 10, color: 0xe0b0ff, width: 0.006 });
+    const p = {
+      stage: 'merge', mode, side, t: 0, ang: Math.random() * 6.28, blue, red, bolts, orb: null, charge: 0, hold: 0, away: 0,
+      aim: new THREE.Vector3().copy(inp.headDir), anchor: new THREE.Vector3(),
+      loop: sfx.loop({ base: 44, noiseF: 420, vol: 0.32 }),
+    };
+    this._purpleAnchor(p, p.anchor);
+    this.purple = p;
+    this.ctx.ui.manga({ top: '術式順転', main: '「蒼」', ruby: 'あお', color: '#2f8cff', side: 'left', dur: 0.9 });
+    setTimeout(() => {
+      if (this.purple === p && p.stage === 'merge') this.ctx.ui.manga({ top: '術式反転', main: '「赫」', ruby: 'あか', color: '#ff2a3a', side: 'right', dur: 0.9 });
+    }, 380);
+    sfx.tone({ type: 'sine', f0: 120, f1: 520, dur: 1.4, vol: 0.18 });
+    inp.left.pulse(0.4, 60);
+    inp.right.pulse(0.4, 60);
+  }
+
+  _cancelPurple(refund) {
+    const p = this.purple;
+    if (!p) return;
+    const fx = this.ctx.fx;
+    const at = p.orb ? p.orb.pos : p.anchor;
+    fx.implode(at, 30, C.purpleHi, 0.4, 0.25, 0.03);
+    if (refund) this.energy = Math.min(this.maxEnergy, this.energy + 15 * this.costMul);
+    p.loop.stop();
+    p.blue?.dispose();
+    p.red?.dispose();
+    p.bolts?.dispose(this.ctx.scene);
+    p.orb?.dispose();
+    this.purple = null;
+    this._purpleLock = true;
   }
 
   _updatePurple(dt, IL, IR) {
     const p = this.purple;
     if (!p) return;
-    const { input: inp, fx } = this.ctx;
+    const { input: inp, fx, sfx, ui } = this.ctx;
     const L = inp.left;
     const R = inp.right;
-    const mid = _v.copy(L.pos).add(R.pos).multiplyScalar(0.5);
-    if (inp.mode === 'desktop') mid.copy(inp.head).addScaledVector(inp.headDir, 0.5).add(_v2.set(0, -0.1, 0));
-    _v2.subVectors(mid, inp.head).normalize();
-    mid.addScaledVector(_v2, 0.1);
-    p.orb.pos.lerp(mid, 1 - Math.exp(-dt * 14));
-    p.charge = Math.min(1, p.charge + dt / 1.1);
-    p.orb.setRadius(0.08 + 0.14 * p.charge);
+    const Is = p.side === 'left' ? IL : IR;
+    const H = inp[p.side];
+    p.t += dt;
+    this._purpleAnchor(p, _v);
+    p.anchor.lerp(_v, 1 - Math.exp(-dt * 10));
+
+    // 취소: 수인을 맺은 손(두 손 모드면 양손)으로 주먹
+    const cancel = p.mode === 'one' ? Is.fist : p.mode === 'two' ? IL.fist && IR.fist : false;
+    if (cancel) {
+      this._cancelPurple(true);
+      return;
+    }
+
+    if (p.stage === 'merge') {
+      // 창(파랑)과 혁(빨강)이 서로를 돌며 점점 가까워지다 충돌
+      const DUR = 1.8;
+      const k = Math.min(1, p.t / DUR);
+      const e = k * k * (3 - 2 * k);
+      p.ang += dt * (2.5 + 16 * k * k);
+      const rad = 0.42 * (1 - e) + 0.012;
+      const u = _v2.crossVectors(p.aim, UP);
+      if (u.lengthSq() < 1e-4) u.set(1, 0, 0);
+      u.normalize();
+      const w = _v3.crossVectors(u, p.aim).normalize();
+      const c = Math.cos(p.ang);
+      const sn = Math.sin(p.ang);
+      const follow = 1 - Math.exp(-dt * (k < 0.25 ? 7 : 22));
+      const tb = new THREE.Vector3().copy(p.anchor).addScaledVector(u, c * rad).addScaledVector(w, sn * rad);
+      const tr = new THREE.Vector3().copy(p.anchor).addScaledVector(u, -c * rad).addScaledVector(w, -sn * rad);
+      p.blue.pos.lerp(tb, follow);
+      p.red.pos.lerp(tr, follow);
+      const r = 0.05 + 0.05 * e;
+      p.blue.setRadius(r);
+      p.red.setRadius(r);
+      p.blue.update(dt, 0.7 + 0.3 * k);
+      p.red.update(dt, 0.7 + 0.3 * k);
+      if (p.blue.light) p.blue.light.position.copy(p.blue.pos);
+      if (p.red.light) p.red.light.position.copy(p.red.pos);
+      // 꼬리 입자 + 두 구체를 잇는 보랏빛 전류
+      for (let i = 0; i < 3; i++) {
+        fx.spawn(p.blue.pos, _v.randomDirection().multiplyScalar(0.12), i ? C.blue : C.blueHi, 0.03, 0.35, 2, 0);
+        fx.spawn(p.red.pos, _v.randomDirection().multiplyScalar(0.12), i ? C.red : C.redHi, 0.03, 0.35, 2, 0);
+      }
+      if (k > 0.35) {
+        p.boltT = (p.boltT ?? 0) - dt;
+        if (p.boltT <= 0) {
+          p.boltT = 0.05;
+          const amp = 0.03 + 0.05 * (1 - k);
+          const list = [[p.blue.pos, p.red.pos, amp]];
+          if (k > 0.6) list.push([p.blue.pos, p.red.pos, amp * 1.5]);
+          if (k > 0.8) list.push([p.blue.pos, p.red.pos, amp * 2]);
+          p.bolts.regenBetween(list, inp.head);
+        }
+        if (Math.random() < k * 0.6) fx.implode(p.anchor, 4, C.purpleHi, 0.5, 0.3, 0.025);
+      }
+      p.loop.set(0.4 + 0.8 * k, 0.8 + 1.4 * k);
+      p.loop.pos(p.anchor);
+      if (Math.random() < 0.5) {
+        L.pulse(0.1 + 0.5 * k, 15);
+        R.pulse(0.1 + 0.5 * k, 15);
+      }
+      if (k >= 1) {
+        // 충돌 → 가상의 질량 「茈」
+        const at = p.anchor.clone();
+        p.blue.dispose();
+        p.red.dispose();
+        p.bolts.dispose(this.ctx.scene);
+        p.blue = p.red = p.bolts = null;
+        const orb = new EnergyOrb(this.ctx, 'purple', 0.1);
+        orb.light = fx.borrowLight(C.purple, 5, 9);
+        orb.pos.copy(at);
+        p.orb = orb;
+        p.stage = 'hold';
+        p.hold = 0;
+        p.charge = 0.35;
+        ui.manga({ top: '虚式', main: '「茈」', ruby: 'むらさき', color: '#a64dff' });
+        fx.flash(at, C.purpleHi, 10, 0.35, 10);
+        fx.sphereBlast(at, 0xffffff, 0.35, 0.18);
+        fx.burst(at, 70, C.purpleHi, 2.2, 0.03, 0.5);
+        fx.burst(at, 30, C.blue, 1.6, 0.03, 0.4);
+        fx.burst(at, 30, C.red, 1.6, 0.03, 0.4);
+        _v.subVectors(inp.head, at).normalize();
+        fx.shockwave(at, C.purpleHi, 0.6, 0.35, { faceDir: _v.clone() });
+        fx.starFlare(at, 0xffffff, 0.9, 0.3);
+        sfx.explosion(at, 0.6);
+        L.pulse(1, 120);
+        R.pulse(1, 120);
+      }
+      return;
+    }
+
+    // ── 완성된 茈를 앞에 띄워 두고 발사를 기다린다 ──
+    p.hold += dt;
+    p.orb.pos.lerp(p.anchor, 1 - Math.exp(-dt * 12));
+    p.charge = Math.min(1, p.charge + dt / 0.9);
+    p.orb.setRadius(0.1 + 0.12 * p.charge);
     p.orb.update(dt, 0.6 + 0.4 * p.charge);
     p.loop.set(0.6 + 0.6 * p.charge, 1 + p.charge);
     p.loop.pos(p.orb.pos);
-    if (Math.random() < 0.5) {
-      L.pulse(0.2 + 0.5 * p.charge, 20);
-      R.pulse(0.2 + 0.5 * p.charge, 20);
+    if (Math.random() < 0.4) {
+      L.pulse(0.2 + 0.4 * p.charge, 20);
+      R.pulse(0.2 + 0.4 * p.charge, 20);
     }
-    const launchDir = _v3.subVectors(p.orb.pos, inp.head).normalize();
-    const pushL = L.vel.dot(launchDir);
-    const pushR = R.vel.dot(launchDir);
-    const pushed = (pushL + pushR) * 0.5 > 1.1 || Math.max(pushL, pushR) > 2.0 || (inp.mode === 'desktop' && inp.keyDown('KeyF'));
-    let released;
-    if (inp.mode === 'xr' && (L.source === 'hand' || R.source === 'hand')) {
-      if (IL.fist && IR.fist) {
-        fx.implode(p.orb.pos, 30, C.purpleHi, 0.4, 0.25, 0.03);
-        this.energy = Math.min(this.maxEnergy, this.energy + 15 * this.costMul);
-        p.loop.stop();
-        p.orb.dispose();
-        this.purple = null;
-        return;
-      }
-      released = (IL.open && IR.open) || L.pos.distanceTo(R.pos) > 0.55;
+    let fire = false;
+    if (p.mode === 'one') {
+      // 손을 펴거나, 앞으로 밀거나, 수인을 풀면 발사
+      const push = H.vel.dot(p.aim) > 1.3;
+      if (Is.gesture !== 'purple' && Is.gesture !== 'fist') p.away += dt;
+      else p.away = 0;
+      fire = push || Is.open || p.away > 0.15 || !H.active;
+    } else if (p.mode === 'desk') {
+      fire = !inp.keyDown('KeyE') || inp.keyDown('KeyF');
+    } else if (p.mode === 'two') {
+      const pushL = L.vel.dot(p.aim);
+      const pushR = R.vel.dot(p.aim);
+      fire = (pushL + pushR) * 0.5 > 1.1 || Math.max(pushL, pushR) > 2.0 || (IL.open && IR.open) || L.pos.distanceTo(R.pos) > 0.55 || (!L.active && !R.active);
+    } else {
+      const pushL = L.vel.dot(p.aim);
+      const pushR = R.vel.dot(p.aim);
+      fire = (pushL + pushR) * 0.5 > 1.1 || Math.max(pushL, pushR) > 2.0 || !(IL.blue || IL.red || IR.blue || IR.red);
     }
-    else released = !(IL.blue || IL.red || IR.blue || IR.red);
-    if (!L.active && !R.active) released = true;
-    if (p.charge >= 0.3 && (pushed || released)) this._launchPurple();
-    else if (released && p.charge < 0.3) {
-      fx.burst(p.orb.pos, 40, C.purpleHi, 2, 0.03, 0.5);
-      this.energy = Math.min(this.maxEnergy, this.energy + 15 * this.costMul);
-      p.loop.stop();
-      p.orb.dispose();
-      this.purple = null;
-    }
+    if (p.hold > 6) fire = true;
+    if (fire && p.hold > 0.12) this._launchPurple();
   }
 
   _launchPurple() {
     const p = this.purple;
     this.purple = null;
+    this._purpleLock = true;
     const { input: inp, fx, sfx } = this.ctx;
     p.loop.stop(1.5);
-    let dir;
-    if (inp.mode === 'desktop') dir = inp.headDir.clone();
-    else {
-      const toOrb = new THREE.Vector3().subVectors(p.orb.pos, inp.head).normalize();
-      const hands = new THREE.Vector3().copy(inp.left.dir).add(inp.right.dir).normalize();
-      dir = toOrb.multiplyScalar(0.65).add(hands.multiplyScalar(0.35)).normalize();
-    }
+    const dir = p.mode === 'desk' ? inp.headDir.clone() : new THREE.Vector3().subVectors(p.orb.pos, inp.head).normalize().lerp(p.aim, 0.3).normalize();
     const shot = { orb: p.orb, pos: p.orb.pos, vel: dir.clone().multiplyScalar(17), dir: dir.clone(), r: p.orb.radius, rTarget: 0.7 + 0.6 * p.charge, life: 4.2, charge: p.charge, trenchAcc: 0, ringT: 0 };
     if (shot.orb.light) {
       shot.orb.light.intensity = 10;
@@ -763,10 +911,10 @@ export class Gojo {
     this._needRelease.left = this._needRelease.right = true;
     sfx.explosion(shot.pos, 2.2);
     sfx.tone({ type: 'sawtooth', f0: 90, f1: 30, dur: 2.5, vol: 0.35, at: shot.pos });
-    fx.flash(shot.pos, C.purpleHi, 14, 0.5, 20);
-    fx.burst(shot.pos, 100, C.purpleHi, 5, 0.04, 0.5);
-    fx.shockwave(shot.pos, C.purpleHi, 2.5, 0.5, { faceDir: dir });
-    for (let i = 0; i < 5; i++) fx.starFlare(_v.copy(shot.pos).add(_v2.randomDirection().multiplyScalar(0.3)), 0xffffff, 0.8, 0.35);
+    fx.flash(shot.pos, C.purpleHi, 12, 0.5, 20);
+    fx.burst(shot.pos, 80, C.purpleHi, 4, 0.04, 0.5);
+    fx.shockwave(shot.pos, C.purpleHi, 1.2, 0.45, { faceDir: dir });
+    for (let i = 0; i < 4; i++) fx.starFlare(_v.copy(shot.pos).add(_v2.randomDirection().multiplyScalar(0.25)), 0xffffff, 0.6, 0.3);
     inp.left.pulse(1, 250);
     inp.right.pulse(1, 250);
   }
@@ -777,7 +925,9 @@ export class Gojo {
       const s = this.purpleShots[i];
       s.life -= dt;
       const fade = s.life < 0.6 ? Math.max(0, s.life / 0.6) : 1;
-      s.r = THREE.MathUtils.lerp(s.r, s.rTarget, 1 - Math.exp(-dt * 3.5));
+      // 플레이어 가까이에서는 작게, 멀어질수록 커진다 (눈앞을 가리지 않도록)
+      const rCap = Math.max(0.22, (s.pos.distanceTo(this.ctx.input.head) - 0.6) * 0.45);
+      s.r = Math.min(rCap, THREE.MathUtils.lerp(s.r, s.rTarget, 1 - Math.exp(-dt * 3.5)));
       const r = s.r * Math.max(0.05, fade);
       s.orb.setRadius(r);
       s.orb.update(dt, 1);
@@ -930,10 +1080,7 @@ export class Gojo {
     }
     for (const L of this.lingering) this._disposeBlue(L.s);
     for (const r of this.redShots) r.orb.dispose();
-    if (this.purple) {
-      this.purple.loop.stop();
-      this.purple.orb.dispose();
-    }
+    if (this.purple) this._cancelPurple(false);
     for (const p of this.purpleShots) p.orb.dispose();
     for (const t of this.trenches) this.ctx.scene.remove(t.mesh);
     if (this.void.state !== 'idle') {

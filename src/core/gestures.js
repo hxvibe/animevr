@@ -67,7 +67,7 @@ export function makeGestureResult() {
 
 /**
  * 손 모양 분류. 결과 raw:
- *  open(손바닥 펼침) / fist(주먹) / point(검지) / two(검지+중지) / crossed(검지·중지 꼬기) / pinch / none
+ *  open(손바닥 펼침) / fist(주먹) / point(검지) / two(검지+중지) / crossed(검지·중지 꼬기) / purple(茈 수인) / pinch / none
  */
 export function classifyHand(J, side, out) {
   for (let k = 0; k < 4; k++) {
@@ -105,8 +105,18 @@ export function classifyHand(J, side, out) {
   const middleUp = sM === 2 || (sM === 1 && bM < bR - 55 && out.straight[1] > 0.8);
   const middleDown = sM === 0 || (sM === 1 && bM > 110 && bM > bI + 70);
 
+  // 허식 「茈」 수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 편다
+  const th = J['thumb-tip'];
+  let thumbOn = 1;
+  for (const k of ['index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip', 'middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip']) {
+    thumbOn = Math.min(thumbOn, th.distanceTo(J[k]));
+  }
+  out.thumbOn = thumbOn;
+  const purpleSign = sI !== 2 && sM !== 2 && bI > 95 && bM > 95 && sR !== 0 && sP !== 0 && bR + bP < 200 && bR < bM - 40 && thumbOn < 0.04;
+
   let g = 'none';
-  if (crossed) g = 'crossed';
+  if (purpleSign) g = 'purple';
+  else if (crossed) g = 'crossed';
   else if (sI === 2 && sM === 2 && sR === 2 && sP !== 0) g = 'open';
   else if (sI === 2 && middleUp && lowerCurled) g = 'two';
   else if (sI === 2 && middleDown && lowerCurled) g = 'point';

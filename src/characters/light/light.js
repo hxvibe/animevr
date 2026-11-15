@@ -31,7 +31,10 @@ function paperCanvas(paperImg) {
   const g = c.getContext('2d');
   if (paperImg) {
     try {
-      g.drawImage(paperImg, 0, 0, CW, CH);
+      // 원본 텍스처의 검은 여백(테두리)은 잘라내고 종이 부분만 쓴다
+      const iw = paperImg.width || 1024;
+      const ih = paperImg.height || 1024;
+      g.drawImage(paperImg, iw * 0.152, ih * 0.168, iw * 0.696, ih * 0.66, 0, 0, CW, CH);
     } catch (_) {
       paperImg = null;
     }
@@ -48,7 +51,7 @@ function paperCanvas(paperImg) {
   // 가장자리 얼룩
   const grd = g.createRadialGradient(CW / 2, CH / 2, CH * 0.3, CW / 2, CH / 2, CH * 0.75);
   grd.addColorStop(0, 'rgba(0,0,0,0)');
-  grd.addColorStop(1, 'rgba(80,50,20,0.35)');
+  grd.addColorStop(1, 'rgba(80,50,20,0.22)');
   g.fillStyle = grd;
   g.fillRect(0, 0, CW, CH);
   return c;
@@ -88,7 +91,7 @@ export class Light {
 
     this.openG = new THREE.Group();
     this.book.add(this.openG);
-    const board = new THREE.Mesh(new THREE.BoxGeometry(PAGE_W * 2 + 0.014, 0.005, PAGE_H + 0.012), new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.75, map: coverMap }));
+    const board = new THREE.Mesh(new THREE.BoxGeometry(PAGE_W * 2 + 0.006, 0.004, PAGE_H + 0.003), new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.75, map: coverMap }));
     board.position.y = -0.003;
     this.openG.add(board);
     // 왼쪽 장: 사용법, 오른쪽 장: 쓰는 곳
@@ -113,10 +116,10 @@ export class Light {
       this.openG.add(m);
       return { m, tex };
     };
-    this.left = mkPage(this.leftCanvas, -PAGE_W / 2 - 0.002);
-    this.right = mkPage(this.pageCanvas, PAGE_W / 2 + 0.002);
+    this.left = mkPage(this.leftCanvas, -PAGE_W / 2 - 0.0006);
+    this.right = mkPage(this.pageCanvas, PAGE_W / 2 + 0.0006);
     // 가운데 접힌 자국
-    const fold = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.002, PAGE_H), new THREE.MeshBasicMaterial({ color: 0x6a5a40 }));
+    const fold = new THREE.Mesh(new THREE.BoxGeometry(0.0015, 0.0012, PAGE_H), new THREE.MeshBasicMaterial({ color: 0x8a7a60 }));
     this.openG.add(fold);
     this._composePage();
 

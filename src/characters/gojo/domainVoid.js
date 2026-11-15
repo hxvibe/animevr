@@ -30,41 +30,42 @@ float stars(vec3 d, float scale, float thr) {
   float tw = 0.55 + 0.45 * sin(uTime * (1.5 + h * 4.0) + h * 40.0);
   return step(thr, h) * smoothstep(0.14, 0.0, length(p - c)) * tw;
 }
-vec3 hue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
 void main() {
   vec3 d = normalize(vDir);
-  // 성운
-  vec3 col = vec3(0.004, 0.006, 0.03);
-  float n1 = fbm(d * 2.2 + vec3(uTime * 0.01));
-  float n2 = fbm(d * 4.5 + 11.0);
-  col += vec3(0.08, 0.12, 0.42) * pow(n1, 2.2) * 1.6;
-  col += vec3(0.30, 0.10, 0.45) * pow(n2, 3.5) * 1.4;
-  col += vec3(0.02, 0.25, 0.4) * pow(fbm(d * 7.0 + 3.0), 5.0) * 2.0;
-  col += vec3(0.85, 0.9, 1.0) * stars(d, 70.0, 0.86);
-  col += vec3(0.6, 0.8, 1.0) * stars(d, 160.0, 0.9) * 0.8;
-  col += vec3(1.0) * stars(d, 320.0, 0.95) * 0.6;
-  // 블랙홀
   vec3 H = normalize(uHole);
   float a = acos(clamp(dot(d, H), -1.0, 1.0));
-  // 수평 방향 기준축
   vec3 right = normalize(cross(H, vec3(0.0, 1.0, 0.0)));
   vec3 up = normalize(cross(right, H));
   float lx = dot(d, right);
   float ly = dot(d, up);
-  // 수평으로 뻗는 흰 연기 띠
-  float band = exp(-abs(ly) * 9.0) * smoothstep(1.4, 0.1, abs(lx));
-  float smoke = fbm(vec3(lx * 3.0 - uTime * 0.08, ly * 14.0, uTime * 0.05)) ;
-  col += vec3(0.75, 0.82, 1.0) * band * pow(smoke, 1.6) * 1.8;
-  col += vec3(0.5, 0.6, 1.0) * exp(-a * 3.5) * 0.35;
-  // 무지개 후광
-  float halo = smoothstep(0.035, 0.0, abs(a - 0.2));
-  col += hue(fract(atan(ly, lx) / 6.2831 + uTime * 0.02)) * halo * 0.35;
-  // 강착원반 링 (위쪽이 더 밝음)
-  float ring = smoothstep(0.022, 0.0, abs(a - 0.125));
-  col += vec3(1.0, 0.97, 0.95) * ring * (1.6 + ly * 6.0);
-  col += vec3(0.9, 0.95, 1.0) * smoothstep(0.06, 0.0, abs(a - 0.13)) * 0.6;
-  // 사건의 지평선
-  col *= smoothstep(0.095, 0.105, a);
+  // 푸른 우주 바탕 + 은은한 성운
+  vec3 col = mix(vec3(0.05, 0.12, 0.26), vec3(0.02, 0.05, 0.12), smoothstep(0.0, 1.6, a));
+  float n1 = fbm(d * 2.4 + vec3(uTime * 0.01));
+  float n2 = fbm(d * 6.0 + 9.0);
+  col += vec3(0.25, 0.42, 0.7) * pow(n1, 2.5) * 0.9;
+  col += vec3(0.6, 0.75, 1.0) * pow(n2, 5.0) * 0.6;
+  col += vec3(0.85, 0.92, 1.0) * stars(d, 80.0, 0.86);
+  col += vec3(0.7, 0.85, 1.0) * stars(d, 200.0, 0.92) * 0.7;
+  // 중심의 하얀 빛 (안개처럼 퍼지는 광륜)
+  float glow = exp(-a * 3.2);
+  col += vec3(0.75, 0.86, 1.0) * glow * 0.9;
+  col += vec3(0.9, 0.95, 1.0) * exp(-a * 9.0) * 1.2;
+  float mist = fbm(vec3(lx * 6.0, ly * 6.0, uTime * 0.06));
+  col += vec3(0.8, 0.9, 1.0) * mist * exp(-a * 4.0) * 0.6;
+  // 동심원 고리
+  col += vec3(0.7, 0.85, 1.0) * (0.5 + 0.5 * sin(a * 70.0 - uTime * 0.8)) * smoothstep(0.55, 0.15, a) * smoothstep(0.16, 0.24, a) * 0.08;
+  // 가로로 길게 뻗는 빛줄기
+  float band = exp(-abs(ly) * 30.0) * smoothstep(1.6, 0.0, abs(lx));
+  col += vec3(0.85, 0.92, 1.0) * band * 1.4;
+  col += vec3(0.6, 0.75, 1.0) * exp(-abs(ly) * 8.0) * smoothstep(1.2, 0.0, abs(lx)) * 0.25;
+  // 방사형 빛살
+  float ang = atan(ly, lx);
+  float rays = pow(abs(sin(ang * 9.0 + fbm(vec3(ang * 3.0, 0.0, uTime * 0.05)) * 2.0)), 18.0);
+  col += vec3(0.7, 0.85, 1.0) * rays * exp(-a * 2.5) * 0.35;
+  // 블랙홀 (경계에 밝은 테)
+  float rim = smoothstep(0.035, 0.0, abs(a - 0.165));
+  col += vec3(1.0) * rim * 1.5;
+  col *= smoothstep(0.152, 0.16, a);
   gl_FragColor = vec4(col * uFade, 1.0);
 }`;
 
@@ -192,28 +193,93 @@ function eyeTexture(flip) {
 
 function inkTexture(seed) {
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = 512;
   const g = c.getContext('2d');
   let s = seed;
   const r = () => {
     s = (s * 16807) % 2147483647;
     return (s - 1) / 2147483646;
   };
+  const cx = 256;
+  const cy = 256;
   g.fillStyle = '#ffffff';
-  for (let i = 0; i < 26; i++) {
-    const a = r() * Math.PI * 2;
-    const d = r() * r() * 90;
+  g.strokeStyle = '#ffffff';
+  g.lineCap = 'round';
+  // 중심 덩어리
+  g.beginPath();
+  const n = 14;
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const rr = 55 + r() * 45;
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (i === 0) g.moveTo(x, y);
+    else g.quadraticCurveTo(cx + Math.cos(a - 0.2) * (rr + 25), cy + Math.sin(a - 0.2) * (rr + 25), x, y);
+  }
+  g.fill();
+  // 튀어나가는 줄기 (점점 가늘어짐) + 끝 방울
+  const arms = 9 + Math.floor(r() * 7);
+  for (let k = 0; k < arms; k++) {
+    let a = r() * Math.PI * 2;
+    let x = cx + Math.cos(a) * 50;
+    let y = cy + Math.sin(a) * 50;
+    let w = 14 + r() * 22;
+    const len = 90 + r() * 140;
+    const steps = 14;
+    for (let i = 0; i < steps; i++) {
+      a += (r() - 0.5) * 0.5;
+      const nx = x + Math.cos(a) * (len / steps);
+      const ny = y + Math.sin(a) * (len / steps);
+      g.lineWidth = w;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(nx, ny);
+      g.stroke();
+      x = nx;
+      y = ny;
+      w *= 0.84;
+      // 갈라지는 잔가지
+      if (r() < 0.18) {
+        let bx = x;
+        let by = y;
+        let ba = a + (r() < 0.5 ? 1 : -1) * (0.5 + r() * 0.6);
+        let bw = w * 0.7;
+        for (let j = 0; j < 5; j++) {
+          const ex = bx + Math.cos(ba) * 14;
+          const ey = by + Math.sin(ba) * 14;
+          g.lineWidth = bw;
+          g.beginPath();
+          g.moveTo(bx, by);
+          g.lineTo(ex, ey);
+          g.stroke();
+          bx = ex;
+          by = ey;
+          bw *= 0.75;
+          ba += (r() - 0.5) * 0.6;
+        }
+      }
+    }
     g.beginPath();
-    g.arc(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, 8 + r() * 34, 0, Math.PI * 2);
+    g.arc(x + Math.cos(a) * 10, y + Math.sin(a) * 10, 3 + r() * 9, 0, Math.PI * 2);
     g.fill();
   }
-  for (let i = 0; i < 14; i++) {
+  // 흩뿌린 작은 방울
+  for (let i = 0; i < 40; i++) {
     const a = r() * Math.PI * 2;
-    const d = 90 + r() * 30;
+    const d = 80 + r() * 160;
     g.beginPath();
-    g.arc(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, 2 + r() * 7, 0, Math.PI * 2);
+    g.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1.5 + r() * 6, 0, Math.PI * 2);
     g.fill();
   }
+  // 물감의 결 (옅은 회색 음영)
+  g.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 30; i++) {
+    g.fillStyle = `rgba(200,210,225,${0.15 + r() * 0.2})`;
+    g.beginPath();
+    g.ellipse(cx + (r() - 0.5) * 300, cy + (r() - 0.5) * 300, 20 + r() * 60, 4 + r() * 10, r() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -263,10 +329,13 @@ export class UnlimitedVoid {
     this.floorGlow.rotation.x = -Math.PI / 2;
     this.floorGlow.position.y = 0.01;
     // 먹물 얼룩
+    this.inkTex = [];
+    for (let i = 0; i < 10; i++) this.inkTex.push(inkTexture(17 + i * 7919));
     this.inks = [];
-    for (let i = 0; i < 16; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: inkTexture(17 + i * 31), color: 0xf4f7ff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
-      this.inks.push({ s, base: new THREE.Vector3(), drift: new THREE.Vector3(), spin: (Math.random() - 0.5) * 0.3 });
+    for (let i = 0; i < 18; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.inkTex[i % 10], color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+      s.renderOrder = 3;
+      this.inks.push({ s, base: new THREE.Vector3(), drift: new THREE.Vector3(), spin: 0, t: 0, life: 0, size: 1 });
     }
     this.group.add(this.dome, this.sigil, ...this.eyes, this.warp, this.sky, this.floorGlow, ...this.inks.map((x) => x.s));
     this.center = new THREE.Vector3();
@@ -304,6 +373,23 @@ export class UnlimitedVoid {
     this.voidU.uHole.value.copy(this.dir).setY(0.12).normalize();
   }
 
+  /** 튀듯이 나타났다가 사라지고, 다른 곳에 다시 생긴다 */
+  _tickInk(ink, dt) {
+    ink.t += dt;
+    const k = ink.t / ink.life;
+    if (k >= 1) {
+      this._respawnInk(ink);
+      return;
+    }
+    const appear = Math.min(1, ink.t / 0.18);
+    const pop = 1 - Math.pow(1 - appear, 3);
+    const fade = k > 0.75 ? (1 - k) / 0.25 : 1;
+    ink.s.scale.setScalar(ink.size * (0.4 + 0.6 * pop) * (1 + k * 0.08));
+    ink.s.material.opacity = 0.95 * pop * fade;
+    ink.s.position.addScaledVector(ink.drift, dt);
+    ink.s.material.rotation += ink.spin * dt;
+  }
+
   stop() {
     if (this.state === 'idle' || this.state === 'exit') return;
     this.state = 'exit';
@@ -323,15 +409,29 @@ export class UnlimitedVoid {
     this.floorGlow.visible = true;
     this.floorGlow.position.set(this.center.x, 0.01, this.center.z);
     this.inks.forEach((ink, i) => {
-      const a = (i / this.inks.length) * Math.PI * 2 + Math.random() * 0.3;
-      const r = 12 + Math.random() * 22;
-      ink.base.set(this.center.x + Math.cos(a) * r, 2 + Math.random() * 16, this.center.z + Math.sin(a) * r);
-      ink.drift.randomDirection().multiplyScalar(0.3);
-      ink.s.position.copy(ink.base);
-      ink.s.scale.setScalar(3 + Math.random() * 7);
-      ink.s.material.rotation = Math.random() * 6;
+      this._respawnInk(ink);
+      ink.t = Math.random() * ink.life; // 처음부터 엇갈리게
       ink.s.visible = true;
     });
+  }
+
+  /** 물감 얼룩 하나를 새 위치에 다시 뿌린다 */
+  _respawnInk(ink) {
+    const inp = this.ctx.input;
+    const fwd = this.dir;
+    // 시야 앞쪽 반구에 주로 배치
+    const yaw = Math.atan2(fwd.x, fwd.z) + (Math.random() - 0.5) * Math.PI * 1.6;
+    const r = 7 + Math.random() * 16;
+    ink.base.set(this.center.x + Math.sin(yaw) * r, 0.5 + Math.random() * 11, this.center.z + Math.cos(yaw) * r);
+    ink.s.position.copy(ink.base);
+    ink.size = 2.5 + Math.random() * 6;
+    ink.s.material.map = this.inkTex[Math.floor(Math.random() * this.inkTex.length)];
+    ink.s.material.rotation = Math.random() * Math.PI * 2;
+    ink.spin = (Math.random() - 0.5) * 0.15;
+    ink.drift.randomDirection().multiplyScalar(0.2);
+    ink.t = 0;
+    ink.life = 1.6 + Math.random() * 2.4;
+    void inp;
   }
 
   _exitVoid() {
@@ -397,16 +497,13 @@ export class UnlimitedVoid {
     } else if (this.state === 'flash') {
       W.opacity = Math.max(0, 1 - t / 0.6);
       this.floorGlow.material.opacity = 0.35 * Math.min(1, t / 0.6);
-      for (const ink of this.inks) ink.s.material.opacity = Math.min(0.92, t / 0.6);
+      for (const ink of this.inks) this._tickInk(ink, dt);
       if (t > 0.6) {
         this.state = 'active';
         this.t = 0;
       }
     } else if (this.state === 'active') {
-      for (const ink of this.inks) {
-        ink.s.position.addScaledVector(ink.drift, dt);
-        ink.s.material.rotation += ink.spin * dt;
-      }
+      for (const ink of this.inks) this._tickInk(ink, dt);
       if (Math.random() < 0.3) fx.starFlare(_v.copy(inp.head).add(new THREE.Vector3((Math.random() - 0.5) * 30, Math.random() * 12, (Math.random() - 0.5) * 30)), 0xffffff, 0.8 + Math.random() * 1.5, 0.5);
     } else if (this.state === 'exit') {
       W.opacity = t < 0.3 ? t / 0.3 : Math.max(0, 1 - (t - 0.3) / 0.5);

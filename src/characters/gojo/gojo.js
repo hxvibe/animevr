@@ -93,11 +93,12 @@ export class Gojo {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '술식순전 「蒼」 — 인력', color: '#7fc4ff', text: '검지+중지를 펴서 앞을 가리키고 유지. 팔을 뻗을수록 멀리 생성\n손을 펴면 해제 → 붕괴' },
+        { head: '술식순전 「蒼」 — 인력', color: '#7fc4ff', text: '검지+중지로 앞을 가리키면 손가락 끝에 생성\n그 상태로 손을 펴면 창이 손을 따라 멀리 이동(팔을 뻗을수록 멀리)' },
         { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '검지만 펴서 충전 → 앞으로 찌르거나 손을 펴면 발사' },
-        { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '한 손은 창, 다른 손은 혁을 유지한 채 두 손끝을 맞대기\n→ 양손을 앞으로 밀거나 손을 펴서 발사' },
-        { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '검지·중지를 꼬거나(교차) 두 손가락을 하늘로 세우고 1초' },
-        { head: '무하한 · 육안 · 흑섬', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 가렸다 떼기\n주먹으로 더미를 치면 타격, 확률로 흑섬' },
+        { head: '창 ↔ 혁 전환 · 취소', color: '#ffffff', text: '창 상태에서 검지만 → 혁 / 혁 상태에서 검지+중지 → 창 · 주먹을 쥐면 사라짐' },
+        { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '한 손은 창, 다른 손은 혁인 채로 두 손끝을 맞대기 → 양손을 밀거나 펴서 발사' },
+        { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '검지·중지를 꼬아 얼굴 앞에 세우고 1.5초 (설정에서 끄기 / 메뉴에서 발동 가능)' },
+        { head: '무하한 · 육안 · 잡기 · 흑섬', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 가렸다 떼기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률' },
       ];
     }
     if (mode === 'desktop') {
@@ -112,8 +113,8 @@ export class Gojo {
       { head: '술식순전 「蒼」 — 인력', color: '#7fc4ff', text: '왼쪽 트리거 유지. 팔을 뻗을수록 멀리 생성' },
       { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '오른쪽 트리거로 충전 → 놓거나 앞으로 찌르면 발사' },
       { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '창 + 혁 유지 상태로 두 컨트롤러를 맞대기 → 밀거나 트리거를 놓아 발사' },
-      { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '양쪽 그립을 1초 동안 쥐기' },
-      { head: '버튼', color: '#9fe8ff', text: 'X 무하한 · A 육안 · B 더미 소환 · Y 메뉴\n그립 쥐고 휘둘러 치기 → 흑섬 · 왼스틱 이동 · 오른스틱 회전' },
+      { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '양쪽 스틱을 눌러 1.5초 (메뉴에서도 발동)' },
+      { head: '버튼', color: '#9fe8ff', text: 'X 무하한 · A 육안 · B 더미 소환 · Y 메뉴\n그립: 더미 잡기/던지기 · 그립 쥐고 휘둘러 치기 → 흑섬' },
     ];
   }
 
@@ -151,15 +152,16 @@ export class Gojo {
   }
 
   // ── 입력 해석 ──
+  /** 손 하나의 상태 요약. 핸드트래킹은 손 모양(gesture) 기반 */
   _intent(h) {
-    const I = { blue: false, red: false, sign: false, released: false, gesture: 'none' };
-    if (!h.active || h.uiBlock || this.ctx.ui.menuOpen) return I;
+    const I = { blue: false, red: false, sign: false, released: false, fist: false, open: false, gesture: 'none', gt: 0, src: h.source };
+    if (!h.active || h.uiBlock || this.ctx.ui.menuOpen || this.ctx.grab?.isHolding(h.side)) return I;
     const inp = this.ctx.input;
     if (h.source === 'controller') {
       I.blue = h.side === 'left' && h.btn.trigger;
       I.red = h.side === 'right' && h.btn.trigger;
       I.released = !h.btn.trigger;
-      I.sign = inp.left.btn.grip && inp.right.btn.grip && inp.left.active && inp.right.active;
+      I.sign = inp.left.btn.stick && inp.right.btn.stick;
       return I;
     }
     if (h.source === 'desktop') {
@@ -170,16 +172,23 @@ export class Gojo {
       return I;
     }
     const g = h.gesture;
-    const up = h.dir.y > 0.55;
-    const twoLike = g === 'two' || g === 'crossed';
-    I.sign = g === 'crossed' || (twoLike && up && h.palm.y > inp.head.y - 0.5);
-    // 손이 머리에서 바깥쪽을 향해 가리킬 때만 창
-    _v.subVectors(h.pos, inp.head).normalize();
-    const outward = h.dir.dot(_v) > 0.2;
-    I.blue = g === 'two' && !up && outward && h.gestureTime >= 0.08;
-    I.red = g === 'point' && h.gestureTime >= 0.18;
-    I.released = (g === 'open' || g === 'fist') && h.gestureTime >= 0.1;
+    const gt = h.gestureTime;
     I.gesture = g;
+    I.gt = gt;
+    _v.subVectors(h.pos, inp.head);
+    const dist = _v.length();
+    _v.normalize();
+    const outward = h.dir.dot(_v) > 0.25;
+    const nearFace = h.palm.distanceTo(inp.head) < 0.42;
+    // 영역전개 수인: 검지·중지를 꼰 손을 얼굴 앞에 세운다 (설정에서 끌 수 있음)
+    I.sign = this.ctx.settings.domainGesture && g === 'crossed' && nearFace && h.dir.y > 0.3;
+    // 창: 두 손가락으로 앞을 가리키고 0.2초 (얼굴 근처·위를 가리키면 무시)
+    I.blue = g === 'two' && gt >= 0.2 && outward && !nearFace && h.dir.y < 0.6 && dist > 0.3;
+    // 혁: 검지만 펴고 0.2초
+    I.red = g === 'point' && gt >= 0.2 && outward && !nearFace;
+    I.fist = g === 'fist' && gt >= 0.08;
+    I.open = g === 'open' && gt >= 0.08;
+    I.released = I.open || I.fist;
     return I;
   }
 
@@ -340,52 +349,94 @@ export class Gojo {
     const h = inp[side];
     const s = this.hs[side];
     if (this._needRelease[side]) {
-      if (!I.blue && !I.red) this._needRelease[side] = false;
+      if (!I.blue && !I.red && !(h.source === 'hand' && (I.gesture === 'two' || I.gesture === 'point'))) this._needRelease[side] = false;
       else return;
     }
+    const handMode = h.source === 'hand';
 
     if (!s.mode && this.domain.sign <= 0.05) {
       if (I.blue) {
-        if (this.energy > 3) this._startBlue(side, h);
+        if (this.energy > 3) this._startBlue(side, h, handMode ? 'tip' : 'far');
         else this.denied();
       } else if (I.red) {
         if (this.energy > 5) this._startRed(side, h);
         else this.denied();
       }
     }
+    if (!s.mode) return;
+    s.t += dt;
+
+    // 공통: 주먹을 쥐면 사라진다
+    if (handMode && I.fist) {
+      fx.implode(s.orb.pos, 16, s.mode === 'blue' ? C.blueHi : C.redHi, 0.25, 0.2, 0.02);
+      this.ctx.sfx.tone({ type: 'sine', f0: 500, f1: 120, dur: 0.15, vol: 0.12 });
+      if (s.mode === 'blue') this._disposeBlue(s);
+      else this._disposeRed(s);
+      h.pulse(0.3, 30);
+      return;
+    }
+    // 손이 사라지면(추적 끊김) 0.6초 뒤 정리
+    if (!h.active) {
+      s.lost = (s.lost ?? 0) + dt;
+      if (s.lost > 0.6) {
+        if (s.mode === 'blue') {
+          this.lingering.push({ s: { ...s }, t: 0 });
+          Object.assign(s, this._handState());
+        } else this._disposeRed(s);
+      }
+      return;
+    }
+    s.lost = 0;
 
     if (s.mode === 'blue') {
-      s.t += dt;
-      // 영역전개 수인으로 바뀌면 창 취소
-      if (I.sign && s.t < 0.6) {
-        this._disposeBlue(s);
+      // 창 → 혁 전환 (검지만)
+      if (handMode && I.gesture === 'point' && I.gt > 0.15) {
+        this._convert(side, 'red');
         return;
       }
-      const holding = h.source === 'hand' ? !I.released && !h.uiBlock : I.blue;
-      if (holding && h.active && this.drain(4.5 * dt)) {
-        s.dist = THREE.MathUtils.lerp(s.dist, this._blueDistance(h), 1 - Math.exp(-dt * 6));
-        _v.copy(h.pos).addScaledVector(h.dir, s.dist);
-        if (_v.y < 0.35) _v.y = 0.35;
-        s.orb.pos.lerp(_v, 1 - Math.exp(-dt * 10));
-        s.power = Math.min(1, s.power + dt * 2.2);
-        s.orb.setRadius(0.07 + 0.09 * s.power);
-        if (s.orb.light) s.orb.light.intensity = 4 * s.power;
-        s.loop.set(0.4 + 0.6 * s.power, 0.8 + 0.4 * s.power);
-        s.loop.pos(s.orb.pos);
-        this._applyBlue(s.orb.pos, s.power, dt);
-        if (Math.random() < 0.3) h.pulse(0.08 + 0.12 * s.power, 20);
-        if (Math.random() < 0.6) fx.implode(s.orb.pos, 3, C.blueHi, 0.8 + s.power * 1.4, 0.4, 0.03);
-        s.orb.update(dt, s.power);
-      } else {
+      if (handMode) {
+        if (I.open && s.sub !== 'far') {
+          s.sub = 'far';
+          s.dist = 0.4;
+          h.pulse(0.3, 30);
+        } else if (I.gesture === 'two' && I.gt > 0.18 && s.sub === 'far') s.sub = 'tip';
+      } else if (!I.blue) {
         this.lingering.push({ s: { ...s }, t: 0 });
         Object.assign(s, this._handState());
+        return;
       }
+      if (!this.drain((s.sub === 'far' ? 4.5 : 1.5) * dt)) {
+        this.lingering.push({ s: { ...s }, t: 0 });
+        Object.assign(s, this._handState());
+        return;
+      }
+      s.power = Math.min(1, s.power + dt * 2.2);
+      if (s.sub === 'tip') {
+        // 손가락 끝에 작게
+        s.orb.pos.lerp(_v.copy(h.pos).addScaledVector(h.dir, 0.06), 1 - Math.exp(-dt * 25));
+        s.orb.setRadius(0.035 + 0.025 * s.power);
+        if (s.orb.light) s.orb.light.intensity = 1.5 * s.power;
+        this._applyBlue(s.orb.pos, s.power * 0.25, dt, 1.0);
+      } else {
+        // 손을 편 상태: 손 위치·팔 뻗음에 따라 멀리 이동
+        const dir = handMode ? h.fingersDir : h.dir;
+        s.dist = THREE.MathUtils.lerp(s.dist, this._blueDistance(h), 1 - Math.exp(-dt * 5));
+        _v.copy(h.palm).addScaledVector(dir, s.dist);
+        if (_v.y < 0.35) _v.y = 0.35;
+        s.orb.pos.lerp(_v, 1 - Math.exp(-dt * 10));
+        s.orb.setRadius(0.07 + 0.09 * s.power);
+        if (s.orb.light) s.orb.light.intensity = 4 * s.power;
+        this._applyBlue(s.orb.pos, s.power, dt);
+        if (Math.random() < 0.6) fx.implode(s.orb.pos, 3, C.blueHi, 0.8 + s.power * 1.4, 0.4, 0.03);
+      }
+      s.loop.set(0.3 + 0.7 * s.power * (s.sub === 'far' ? 1 : 0.4), 0.8 + 0.4 * s.power);
+      s.loop.pos(s.orb.pos);
+      if (Math.random() < 0.3) h.pulse(0.05 + 0.1 * s.power, 20);
+      s.orb.update(dt, s.sub === 'far' ? s.power : 0.6);
     } else if (s.mode === 'red') {
-      s.t += dt;
-      // 처음 0.35초 안에 두 손가락으로 바뀌면 창으로 정정 (오인식 보정)
-      if (h.source === 'hand' && s.t < 0.35 && I.gesture === 'two') {
-        this._disposeRed(s);
-        this._startBlue(side, h);
+      // 혁 → 창 전환 (두 손가락)
+      if (handMode && I.gesture === 'two' && I.gt > 0.15) {
+        this._convert(side, 'blue');
         return;
       }
       s.charge = Math.min(1, s.charge + dt / 0.6);
@@ -396,37 +447,60 @@ export class Gojo {
       s.loop.pos(s.orb.pos);
       s.orb.update(dt, 0.5 + s.charge * 0.5);
       if (Math.random() < 0.4) h.pulse(0.05 + 0.2 * s.charge, 15);
-      const released = h.source === 'hand' ? I.released : !I.red;
-      const fire = s.charge >= 0.25 && (h.thrust > 1.3 || released || !h.active);
-      if (fire) this._fireRed(side);
-      else if (released || !h.active) this._disposeRed(s);
+      const released = handMode ? I.open : !I.red;
+      if (s.charge >= 0.25 && (h.thrust > 1.4 || released)) this._fireRed(side);
+      else if (released) this._disposeRed(s);
     }
   }
 
-  _startBlue(side, h) {
+  /** 창 ↔ 혁 전환 */
+  _convert(side, to) {
+    const h = this.ctx.input[side];
+    const s = this.hs[side];
+    const keep = s.mode === 'blue' ? s.power : s.charge;
+    const pos = s.orb.pos.clone();
+    if (s.mode === 'blue') this._disposeBlue(s);
+    else this._disposeRed(s);
+    this.ctx.fx.burst(pos, 20, to === 'red' ? C.red : C.blue, 1, 0.02, 0.3);
+    if (to === 'red') {
+      this._startRed(side, h);
+      this.hs[side].charge = Math.min(1, keep * 0.6);
+    } else {
+      this._startBlue(side, h, 'tip');
+      this.hs[side].power = keep;
+    }
+  }
+
+  /** 다른 시스템(잡기 등)이 이 손을 써도 되는지 */
+  handBusy(side) {
+    return !!this.hs[side].mode || !!this.purple;
+  }
+
+  _startBlue(side, h, sub = 'tip') {
     const { fx, sfx, ui } = this.ctx;
     const s = this.hs[side];
-    const orb = new EnergyOrb(this.ctx, 'blue', 0.05);
+    const orb = new EnergyOrb(this.ctx, 'blue', 0.03);
     orb.light = fx.borrowLight(C.blue, 0, 7);
-    orb.pos.copy(h.pos).addScaledVector(h.dir, 0.25);
-    Object.assign(s, { mode: 'blue', orb, power: 0, dist: this._blueDistance(h), loop: sfx.loop({ base: 50, noiseF: 260, vol: 0.3 }), t: 0 });
+    orb.pos.copy(h.pos).addScaledVector(h.dir, 0.06);
+    Object.assign(s, { mode: 'blue', sub, orb, power: 0, dist: this._blueDistance(h), loop: sfx.loop({ base: 50, noiseF: 260, vol: 0.3 }), t: 0 });
     ui.manga({ top: '術式順転', main: '「蒼」', ruby: 'あお', color: '#2f8cff', side });
     h.pulse(0.4, 60);
   }
 
   _startRed(side, h) {
-    const { fx, sfx } = this.ctx;
+    const { fx, sfx, ui } = this.ctx;
     const s = this.hs[side];
     const orb = new EnergyOrb(this.ctx, 'red', 0.03);
     orb.light = fx.borrowLight(C.red, 0, 5);
     orb.pos.copy(h.pos);
     Object.assign(s, { mode: 'red', orb, charge: 0, loop: sfx.loop({ base: 180, type: 'triangle', noiseF: 1500, vol: 0.12 }), t: 0 });
     h.pulse(0.3, 40);
+    void ui;
   }
 
-  _applyBlue(center, power, dt) {
+  _applyBlue(center, power, dt, rOverride) {
     const { world } = this.ctx;
-    const R = 1.5 + 4 * power;
+    const R = rOverride ?? 1.5 + 4 * power;
     world.forEachTarget(center, R, (t, d, c) => {
       _v.subVectors(center, c);
       const dd = Math.max(0.05, d);
@@ -645,7 +719,17 @@ export class Gojo {
     const pushR = R.vel.dot(launchDir);
     const pushed = (pushL + pushR) * 0.5 > 1.1 || Math.max(pushL, pushR) > 2.0 || (inp.mode === 'desktop' && inp.keyDown('KeyF'));
     let released;
-    if (inp.mode === 'xr' && (L.source === 'hand' || R.source === 'hand')) released = (IL.released && IR.released) || L.pos.distanceTo(R.pos) > 0.55;
+    if (inp.mode === 'xr' && (L.source === 'hand' || R.source === 'hand')) {
+      if (IL.fist && IR.fist) {
+        fx.implode(p.orb.pos, 30, C.purpleHi, 0.4, 0.25, 0.03);
+        this.energy = Math.min(this.maxEnergy, this.energy + 15 * this.costMul);
+        p.loop.stop();
+        p.orb.dispose();
+        this.purple = null;
+        return;
+      }
+      released = (IL.open && IR.open) || L.pos.distanceTo(R.pos) > 0.55;
+    }
     else released = !(IL.blue || IL.red || IR.blue || IR.red);
     if (!L.active && !R.active) released = true;
     if (p.charge >= 0.3 && (pushed || released)) this._launchPurple();
@@ -770,7 +854,7 @@ export class Gojo {
     d.cd = Math.max(0, d.cd - dt);
     const V = this.void;
     const ring = this.signRing;
-    const canCast = V.state === 'idle' ? d.cd <= 0 : V.state === 'active' && d.t > 2;
+    const canCast = V.state === 'idle' ? d.cd <= 0 && !this.hs.left.mode && !this.hs.right.mode && !this.purple : V.state === 'active' && d.t > 2;
     if (sign && canCast) {
       d.sign += dt;
       if (Math.random() < 0.5) {
@@ -778,22 +862,28 @@ export class Gojo {
         inp.right.pulse(0.1 + d.sign * 0.4, 20);
       }
       if (V.state === 'idle' && Math.random() < 0.6) fx.implode(_v.copy(inp.head).addScaledVector(inp.headDir, 0.4), 2, C.blueHi, 0.5, 0.3, 0.015);
-      if (d.sign >= 1.0) {
+      if (d.sign >= 1.5) {
         d.sign = 0;
         if (V.state === 'active') this._endDomain();
         else this._castDomain();
       }
     } else d.sign = Math.max(0, d.sign - dt * 2);
-    ring.material.opacity = Math.min(1, d.sign) * 0.9;
+    ring.material.opacity = Math.min(1, d.sign / 1.5) * 0.9;
     ring.visible = d.sign > 0.01;
     ring.position.set(inp.head.x, 0.03, inp.head.z);
-    ring.scale.setScalar(0.4 + d.sign * 1.6);
+    ring.scale.setScalar(0.4 + (d.sign / 1.5) * 1.6);
 
     if (V.frozenPhase && !world.domain) world.domain = { center: V.center.clone(), radius: 45, freeze: true };
     if (V.state === 'active') {
       d.t += dt;
       if (d.t >= d.duration) this._endDomain();
     }
+  }
+
+  /** 메뉴에서 직접 발동 */
+  castDomain() {
+    if (this.void.state === 'idle' && this.domain.cd <= 0) this._castDomain();
+    else this.ctx.ui.callout('영역전개 재사용 대기 중');
   }
 
   _castDomain() {
@@ -814,7 +904,7 @@ export class Gojo {
 
   _endDomain() {
     const d = this.domain;
-    d.cd = 6;
+    d.cd = 10;
     d.t = 0;
     this.void.stop();
     this.ctx.world.domain = null;

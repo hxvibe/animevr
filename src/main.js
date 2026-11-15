@@ -6,12 +6,15 @@ import { Fx } from './core/fx.js';
 import { Sfx } from './core/audio.js';
 import { UI, JFONT } from './core/ui.js';
 import { Melee } from './core/melee.js';
+import { Grab } from './core/grab.js';
+import { preload } from './core/assets.js';
 import { CHARACTERS } from './characters/index.js';
 
 // ── 설정 (브라우저에 저장) ──
 const DEFAULTS = {
   character: 'gojo', background: 'white', hud: false, skillNames: true, damageNumbers: true,
   invincible: false, dummyAI: true, locomotion: true, kaminoRule: false, heightOffset: 0, blackFlashChance: 0.2,
+  domainGesture: true, shinigamiEyes: true, deathDelay40: false,
 };
 let saved = {};
 try {
@@ -44,6 +47,7 @@ ctx.world = new World(ctx);
 ctx.env = new Environment(ctx);
 ctx.ui = new UI(ctx);
 ctx.melee = new Melee(ctx);
+ctx.grab = new Grab(ctx);
 ctx.character = null;
 
 const game = {
@@ -58,6 +62,7 @@ const game = {
   },
   setBackground(id) {
     settings.background = id;
+    ctx.grab.releaseAll();
     ctx.character?.cancelDomain?.();
     return ctx.env.setBackground(id);
   },
@@ -65,6 +70,7 @@ const game = {
     settings.character = charId;
     settings.background = bgId;
     this.saveSettings();
+    ctx.grab.releaseAll();
     ctx.character?.dispose();
     const bg = this.setBackground(bgId);
     rig.position.set(bg.spawn.x, settings.heightOffset, bg.spawn.z);
@@ -80,6 +86,7 @@ const game = {
     ctx.ui.callout(`${def.name} — 메뉴: Y 버튼 / 왼손바닥 위로 / H`, { size: 54, dur: 3 });
   },
   toTitle() {
+    ctx.grab.releaseAll();
     ctx.character?.dispose();
     ctx.character = null;
     ctx.world.clearDummies();
@@ -89,7 +96,17 @@ const game = {
   },
 };
 ctx.game = game;
-game.setBackground(settings.background);
+
+// 모델(더미·하얀 방·사당·데스노트·연필)을 먼저 받은 뒤 시작 버튼을 연다
+const btnVR0 = document.getElementById('btn-vr');
+const btnDesk0 = document.getElementById('btn-desktop');
+btnDesk0.disabled = true;
+btnVR0.disabled = true;
+document.getElementById('status').textContent = '모델 불러오는 중…';
+const loading = preload(['dummy', 'white_room', 'shrine', 'death_note', 'pencil']).then(() => {
+  game.setBackground(settings.background);
+  btnDesk0.disabled = false;
+});
 
 // 폰트(한글·일본어)를 미리 받아둔다
 const JP_CHARS = '術式順転反蒼赫虚茈領域展開無量空処下限六眼黒閃解捌竈開伏魔御廚子世界を断つ龍鱗反発番いの流星あおかむらさきりょうくうしょげんりくがんこくせんカイハチカミノフーガふくまみづしゅんはつつがいせ「」■';
@@ -112,16 +129,21 @@ const crosshair = document.getElementById('crosshair');
 
 async function checkXR() {
   if (!('xr' in navigator)) {
+    await loading;
     status.textContent = '이 브라우저는 WebXR을 지원하지 않습니다. VR 기기 브라우저에서 HTTPS 주소로 열거나 데스크톱 모드로 체험하세요.';
     btnVR.disabled = true;
     return;
   }
   try {
     const ok = await navigator.xr.isSessionSupported('immersive-vr');
+    window.__xrOK = ok;
+    await loading;
+    btnVR.disabled = !ok;
     if (!ok) {
+      await loading;
       status.textContent = 'VR 기기가 감지되지 않았습니다. 데스크톱 모드로 체험할 수 있습니다.';
       btnVR.disabled = true;
-    } else status.textContent = 'VR 준비 완료 — 컨트롤러와 핸드트래킹 모두 지원 (컨트롤러를 내려놓으면 손 인식으로 전환)';
+    } else status.textContent = 'VR 준비 완료 — 핸드트래킹 권장 (컨트롤러를 내려놓으면 손 인식으로 전환)';
   } catch (e) {
     status.textContent = 'WebXR 확인 실패: ' + e.message;
     btnVR.disabled = true;
@@ -198,6 +220,7 @@ renderer.setAnimationLoop(() => {
   }
   if (inp.mode !== 'none' && ctx.character) {
     ctx.character.update(simDt);
+    ctx.grab.update(simDt);
     ctx.melee.update(dt);
     ctx.world.update(simDt);
   }

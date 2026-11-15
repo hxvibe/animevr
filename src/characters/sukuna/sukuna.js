@@ -69,8 +69,8 @@ export class Sukuna {
         { head: '捌(팔) — 난도질', color: '#ff9a7a', text: '편 손으로 더미를 직접 건드리기. 약한 상대일수록 잘게 썰림' },
         { head: '竈 開(フーガ) — 화염', color: '#ffb050', text: '한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기' },
         { head: '세계를 가르는 해', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 1.3초 유지(영창) → 그 손을 크게 휘두르기' },
-        { head: '영역전개 「伏魔御廚子」', color: '#ff4040', text: '얼굴 앞에서 양손을 맞대고 1.2초 (염마천인)' },
-        { head: '흑섬', color: '#ff3040', text: '주먹으로 더미를 치면 확률적으로 흑섬. 메뉴: 왼손바닥을 하늘로' },
+        { head: '영역전개 「伏魔御廚子」', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 손가락을 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
+        { head: '잡기 · 흑섬', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
       ];
     }
     if (mode === 'desktop') {
@@ -86,7 +86,7 @@ export class Sukuna {
       { head: '捌(팔) — 난도질', color: '#ff9a7a', text: '컨트롤러를 더미에 댄 채 트리거' },
       { head: '竈 開(フーガ) — 화염', color: '#ffb050', text: '왼쪽 그립 유지 + 오른 컨트롤러를 왼손에 대고 트리거 → 뒤로 당겼다 놓기' },
       { head: '세계를 가르는 해', color: '#ffffff', text: 'A 버튼 1.3초 (영창) → 오른 컨트롤러를 크게 휘두르기' },
-      { head: '영역전개 「伏魔御廚子」', color: '#ff4040', text: '두 컨트롤러를 모으고 양쪽 그립 1.2초' },
+      { head: '영역전개 「伏魔御廚子」', color: '#ff4040', text: '양쪽 스틱을 눌러 1.5초 (메뉴에서도 발동)' },
       { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · B 더미 소환 · Y 메뉴' },
     ];
   }
@@ -205,9 +205,10 @@ export class Sukuna {
     }
 
     // ── 捌: 편 손으로 접촉 ──
-    if (h.source === 'hand' && s.cleaveCd <= 0 && h.gesture !== 'fist' && h.gesture !== 'pinch') {
-      const t = world.nearestTarget(h.palm, 0.08) ?? world.nearestTarget(h.indexTip, 0.05);
-      if (t && h.speed > 0.4) {
+    if (h.source === 'hand' && s.cleaveCd <= 0 && h.gesture !== 'fist' && h.gesture !== 'pinch' && !this.ctx.grab?.isHolding(side)) {
+      const free = (x) => !x.heldBy && !x.held;
+      const t = world.nearestTarget(h.palm, 0.06, free) ?? world.nearestTarget(h.indexTip, 0.04, free);
+      if (t && h.speed > 0.6) {
         s.cleaveCd = 0.6;
         this._cleave(t, h);
       }
@@ -658,10 +659,12 @@ export class Sukuna {
     if (inp.mode === 'desktop') sign = inp.keyDown('KeyQ');
     else if (L.active && R.active) {
       if (L.source === 'hand' && R.source === 'hand') {
+        // 염마천인: 얼굴 앞에서 손바닥을 마주 대고, 손가락은 위로
         const mid = _v.addVectors(L.palm, R.palm).multiplyScalar(0.5);
-        sign = L.palm.distanceTo(R.palm) < 0.13 && mid.distanceTo(inp.head) < 0.5 && L.gesture !== 'fist' && R.gesture !== 'fist' && L.speed < 1 && R.speed < 1;
+        sign = this.ctx.settings.domainGesture && L.palm.distanceTo(R.palm) < 0.1 && mid.distanceTo(inp.head) < 0.42 && L.fingersDir.y > 0.55 && R.fingersDir.y > 0.55 &&
+          L.gesture !== 'fist' && R.gesture !== 'fist' && L.speed < 0.6 && R.speed < 0.6 && L.palmNormal.dot(R.palmNormal) < -0.4;
       } else if (L.source === 'controller' && R.source === 'controller') {
-        sign = L.btn.grip && R.btn.grip && L.pos.distanceTo(R.pos) < 0.28;
+        sign = L.btn.stick && R.btn.stick;
       }
     }
     if (sign && this.shrine.state === 'idle' && d.cd <= 0 && !this.bow) {
@@ -671,11 +674,20 @@ export class Sukuna {
         R.pulse(0.1 + d.sign * 0.4, 20);
         fx.spawnDark(_v.copy(inp.head).addScaledVector(inp.headDir, 0.35), _v2.randomDirection().multiplyScalar(0.3), SMOKE, 0.05, 0.6, 1, 0, 1);
       }
-      if (d.sign >= 1.2) {
+      if (d.sign >= 1.5) {
         d.sign = 0;
         this._castDomain();
       }
     } else d.sign = Math.max(0, d.sign - dt * 2);
+  }
+
+  castDomain() {
+    if (this.shrine.state === 'idle' && this.domain.cd <= 0) this._castDomain();
+    else this.ctx.ui.callout('영역전개 재사용 대기 중');
+  }
+
+  handBusy(side) {
+    return !!this.bow;
   }
 
   _castDomain() {
@@ -701,7 +713,7 @@ export class Sukuna {
     d.t += dt;
     if (d.t >= d.duration) {
       S.stop();
-      d.cd = 8;
+      d.cd = 10;
       world.domain = null;
       return;
     }

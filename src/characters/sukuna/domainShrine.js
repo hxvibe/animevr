@@ -1,6 +1,7 @@
 // 영역전개 「伏魔御廚子(복마어주자)」 연출
 // 결계를 닫지 않고 현실에 사찰을 세운다. 사찰 주위에 소 두개골, 안쪽에 거대한 입. 하늘이 핏빛으로 물든다.
 import * as THREE from 'three';
+import { getModel, fitModel } from '../../core/assets.js';
 
 const skyVert = /* glsl */ `
 varying vec3 vDir;
@@ -130,13 +131,24 @@ export class MalevolentShrine {
     this.group = new THREE.Group();
     this.group.visible = false;
     this.scene.add(this.group);
-    this.shrine = buildShrine(ctx.world.envMap);
+    // 첨부 GLB 사당 (없으면 코드로 만든 사당)
+    const glb = getModel('shrine');
+    if (glb) {
+      this.shrine = fitModel(glb, { width: 17 });
+      this.shrine.traverse((o) => {
+        if (o.isMesh) o.material.envMapIntensity = 0.5;
+      });
+      this.depth = 20;
+    } else {
+      this.shrine = buildShrine(ctx.world.envMap);
+      this.depth = 10;
+    }
     this.group.add(this.shrine);
     this.skyU = { uTime: { value: 0 }, uFade: { value: 0 } };
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(380, 32, 16), new THREE.ShaderMaterial({ vertexShader: skyVert, fragmentShader: skyFrag, uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, fog: false }));
     this.sky.renderOrder = -9;
     this.sky.frustumCulled = false;
-    this.pool = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x2a0003, roughness: 0.06, metalness: 0.7, envMap: ctx.world.envMap, envMapIntensity: 0.8 }));
+    this.pool = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x3a0005, roughness: 0.15, metalness: 0.3, envMap: ctx.world.envMap, envMapIntensity: 0.12, emissive: 0x1a0000 }));
     this.pool.rotation.x = -Math.PI / 2;
     this.pool.position.y = 0.012;
     this.group.add(this.sky, this.pool);
@@ -153,8 +165,8 @@ export class MalevolentShrine {
     this.t = 0;
     this.center.copy(center);
     const d = dir.clone().setY(0).normalize();
-    const pos = center.clone().addScaledVector(d, 10);
-    this.shrine.position.set(pos.x, -10, pos.z);
+    const pos = center.clone().addScaledVector(d, this.depth);
+    this.shrine.position.set(pos.x, -16, pos.z);
     this.shrine.rotation.y = Math.atan2(-d.x, -d.z);
     this.pool.position.set(center.x, 0.012, center.z);
     this.pool.scale.setScalar(0.01);
@@ -177,7 +189,7 @@ export class MalevolentShrine {
     if (this.state === 'rise') {
       const k = Math.min(1, this.t / 1.6);
       const e = 1 - Math.pow(1 - k, 3);
-      this.shrine.position.y = -10 + e * 10;
+      this.shrine.position.y = -16 + e * 16;
       this.pool.scale.setScalar(0.01 + e * this.radius);
       // 하늘과 조명을 핏빛으로
       env.fog.color.lerp(new THREE.Color(0x200000), Math.min(1, dt * 3));
@@ -199,7 +211,7 @@ export class MalevolentShrine {
       }
     } else if (this.state === 'sink') {
       const k = Math.min(1, this.t / 1.2);
-      this.shrine.position.y = -k * k * 10;
+      this.shrine.position.y = -k * k * 16;
       this.pool.scale.setScalar(Math.max(0.01, this.radius * (1 - k)));
       this.skyU.uFade.value = 1 - k;
       if (k > 0.5 && this.sky.visible) {

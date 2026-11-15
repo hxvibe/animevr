@@ -40,7 +40,7 @@ export class Prop {
   }
 
   impulse(v) {
-    if (!this.alive || this.fixed) return;
+    if (!this.alive || this.fixed || this.held) return;
     this.vel.add(v);
     this.asleep = false;
     this.restT = 0;
@@ -177,10 +177,11 @@ export class World {
   }
 
   /** 점에 가장 가까운 대상 (몸 표면까지 거리) */
-  nearestTarget(p, maxDist) {
+  nearestTarget(p, maxDist, filter) {
     let best = null;
     let bd = maxDist;
     for (const t of this.targets()) {
+      if (filter && !filter(t)) continue;
       const d = t.distanceTo(p);
       if (d < bd) {
         bd = d;
@@ -249,7 +250,7 @@ export class World {
 
     // 소품 물리
     for (const p of this.props) {
-      if (!p.alive || p.asleep || p.fixed) continue;
+      if (!p.alive || p.asleep || p.fixed || p.held) continue;
       p.vel.y -= 9.8 * dt;
       if (p.vel.lengthSq() > 900) p.vel.setLength(30);
       p.pos.addScaledVector(p.vel, dt);

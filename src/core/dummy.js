@@ -1,44 +1,133 @@
-// SUPERHOT VR 느낌의 붉은 유리질 인간형 더미
+// 테스트 더미 (첨부 GLB 모델 사용, 로드 실패 시 코드로 만든 인간형)
+// GLB의 본 계층을 그대로 쓰지 않고, 본 위치에 축 정렬 관절을 새로 만들어 부위별 메시를 붙인다.
 import * as THREE from 'three';
+import { getModel } from './assets.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
+const _c = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
 
 export const DUMMY_TYPES = {
-  basic: { label: '기본', color: 0xd8160a, scale: 1, ai: 'idle' },
-  shooter: { label: '사격형', color: 0xc20f08, scale: 1, ai: 'shooter' },
-  rusher: { label: '돌격형', color: 0xe0300a, scale: 1, ai: 'rusher' },
-  giant: { label: '거대', color: 0x9a0a06, scale: 1.45, ai: 'rusher' },
-  sandbag: { label: '샌드백(∞)', color: 0xe85040, scale: 1, ai: 'idle', infinite: true },
+  basic: { label: '기본', color: null, scale: 1, ai: 'idle' },
+  shooter: { label: '사격형', color: 0xc8261c, scale: 1, ai: 'shooter' },
+  rusher: { label: '돌격형', color: 0xe8640c, scale: 1, ai: 'rusher' },
+  giant: { label: '거대', color: 0x6a3ad0, scale: 1.45, ai: 'rusher' },
+  sandbag: { label: '샌드백(∞)', color: 0xe8e8e8, scale: 1, ai: 'idle', infinite: true },
 };
 
-// 공유 지오메트리 (각진 로우폴리)
+const NAMES = ['다나카 히로시', '스즈키 켄타', '야마다 타로', '사토 유이치', '이토 마사키', '와타나베 쇼', '나카무라 료', '고바야시 준', '카토 다이스케', '요시다 하루', '야마모토 렌', '마츠모토 카이', '이노우에 소타', '기무라 히나', '하야시 아오이', '시미즈 유키', '모리 겐지', '이케다 세나'];
+let _nameIdx = Math.floor(Math.random() * NAMES.length);
+
+// ───────── GLB 더미 템플릿 ─────────
+const MODEL_H = 7.315;
+const DUMMY_H = 1.8;
+let TEMPLATE = null;
+
+function buildTemplate(src) {
+  src = src.clone(true);
+  src.updateMatrixWorld(true);
+  const find = (prefix) => {
+    let r = null;
+    src.traverse((o) => {
+      if (!r && o.name.startsWith(prefix)) r = o;
+    });
+    return r;
+  };
+  const wp = (prefix) => find(prefix).getWorldPosition(new THREE.Vector3());
+  const P = {
+    hips: wp('Bone_41'), spine: wp('Bone001'), chest: wp('Bone002'), neck: wp('Bone003'), head: wp('Bone004'),
+    shL: wp('Bone005'), elL: wp('Bone006'), hdL: wp('Bone007'),
+    shR: wp('Bone011'), elR: wp('Bone012'), hdR: wp('Bone013'),
+    hpL: wp('Bone008'), knL: wp('Bone009'), ftL: wp('Bone010'),
+  };
+  // 오른다리는 리깅이 없어 왼다리 관절을 좌우 반전해 사용
+  const mx = P.hips.x * 2 + 0.02;
+  P.hpR = new THREE.Vector3(mx - P.hpL.x, P.hpL.y, P.hpL.z);
+  P.knR = new THREE.Vector3(mx - P.knL.x, P.knL.y, P.knL.z);
+  P.ftR = new THREE.Vector3(mx - P.ftL.x, P.ftL.y, P.ftL.z);
+
+  const origin = new THREE.Vector3(P.hips.x, 0.026, P.hips.z);
+  const s = DUMMY_H / MODEL_H;
+  const model = new THREE.Group();
+  model.name = 'dummyModel';
+  model.scale.setScalar(s);
+  const joints = {};
+  const parentOf = {};
+  const mk = (key, parentKey) => {
+    const g = new THREE.Group();
+    g.name = 'J_' + key;
+    g.position.subVectors(P[key], parentKey ? P[parentKey] : origin);
+    (parentKey ? joints[parentKey] : model).add(g);
+    joints[key] = g;
+    parentOf[key] = parentKey;
+  };
+  mk('hips');
+  mk('spine', 'hips');
+  mk('chest', 'spine');
+  mk('neck', 'chest');
+  mk('head', 'neck');
+  mk('shL', 'chest'); mk('elL', 'shL'); mk('hdL', 'elL');
+  mk('shR', 'chest'); mk('elR', 'shR'); mk('hdR', 'elR');
+  mk('hpL', 'hips'); mk('knL', 'hpL'); mk('ftL', 'knL');
+  mk('hpR', 'hips'); mk('knR', 'hpR'); mk('ftR', 'knR');
+
+  const boneToJoint = { Bone_41: 'hips', Bone001: 'spine', Bone002: 'chest', Bone003: 'neck', Bone004: 'head', Bone005: 'shL', Bone006: 'elL', Bone007: 'hdL', Bone011: 'shR', Bone012: 'elR', Bone013: 'hdR' };
+  const meshes = [];
+  src.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
+  });
+  for (const o of meshes) {
+    let p = o.parent;
+    let bone = null;
+    while (p) {
+      if (/^Bone/.test(p.name)) {
+        const head = p.name.split('_')[0];
+        bone = head === 'Bone' ? 'Bone_41' : head;
+        break;
+      }
+      p = p.parent;
+    }
+    const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+    let key = boneToJoint[bone];
+    if (!key) {
+      const side = bone ? 'L' : 'R';
+      if (bone === 'Bone010' || c.y < P['ft' + side].y) key = 'ft' + side;
+      else if (c.y > P['kn' + side].y) key = 'hp' + side;
+      else key = 'kn' + side;
+    }
+    // 관절의 모델 공간 위치 = P[key]
+    const jw = P[key];
+    const local = new THREE.Matrix4().makeTranslation(-jw.x, -jw.y, -jw.z).multiply(o.matrixWorld);
+    const m = new THREE.Mesh(o.geometry, o.material);
+    local.decompose(m.position, m.quaternion, m.scale);
+    joints[key].add(m);
+  }
+  return { model, scale: s };
+}
+
+export function dummyTemplate() {
+  if (TEMPLATE) return TEMPLATE;
+  const src = getModel('dummy');
+  if (!src) return null;
+  TEMPLATE = buildTemplate(src);
+  return TEMPLATE;
+}
+
+// ───────── 코드로 만든 대체 모델 ─────────
 let G = null;
 function geos() {
   if (G) return G;
-  const cyl = (rt, rb, h, seg = 6) => {
-    const g = new THREE.CylinderGeometry(rt, rb, h, seg, 1);
-    return g;
-  };
+  const cyl = (rt, rb, h, seg = 6) => new THREE.CylinderGeometry(rt, rb, h, seg, 1);
   G = {
-    pelvis: new THREE.BoxGeometry(0.3, 0.16, 0.18),
-    torso: cyl(0.14, 0.19, 0.5, 6),
-    head: new THREE.IcosahedronGeometry(0.115, 1),
-    neck: cyl(0.045, 0.05, 0.08, 5),
-    upperArm: cyl(0.055, 0.045, 0.3, 5),
-    forearm: cyl(0.045, 0.038, 0.27, 5),
-    hand: new THREE.BoxGeometry(0.07, 0.1, 0.035),
-    thigh: cyl(0.08, 0.06, 0.45, 6),
-    shin: cyl(0.06, 0.045, 0.42, 6),
-    foot: new THREE.BoxGeometry(0.09, 0.06, 0.22),
-    gun: new THREE.BoxGeometry(0.035, 0.07, 0.2),
+    pelvis: new THREE.BoxGeometry(0.3, 0.16, 0.18), torso: cyl(0.14, 0.19, 0.5, 6), head: new THREE.IcosahedronGeometry(0.115, 1),
+    neck: cyl(0.045, 0.05, 0.08, 5), upperArm: cyl(0.055, 0.045, 0.3, 5), forearm: cyl(0.045, 0.038, 0.27, 5),
+    hand: new THREE.BoxGeometry(0.07, 0.1, 0.035), thigh: cyl(0.08, 0.06, 0.45, 6), shin: cyl(0.06, 0.045, 0.42, 6), foot: new THREE.BoxGeometry(0.09, 0.06, 0.22),
   };
   for (const k of ['torso', 'upperArm', 'forearm', 'thigh', 'shin', 'neck']) G[k].translate(0, -G[k].parameters.height / 2, 0);
-  G.torso.rotateX(Math.PI); // 위로 향하게
+  G.torso.rotateX(Math.PI);
   return G;
 }
 
@@ -53,16 +142,13 @@ export class Dummy {
     this.hp = this.maxHp = this.infinite ? 1e9 : hp;
     this.alive = true;
     this.kind = 'dummy';
-    this.color = new THREE.Color(def.color);
-    this.mat = new THREE.MeshStandardMaterial({
-      color: this.color, roughness: 0.08, metalness: 0.25, flatShading: true,
-      envMap: world.envMap, envMapIntensity: 1.0, emissive: new THREE.Color(def.color).multiplyScalar(0.18),
-    });
-    this.baseEmissive = this.mat.emissive.clone();
+    this.name = NAMES[_nameIdx++ % NAMES.length];
     this.root = new THREE.Group();
     this.root.position.copy(pos);
     this.root.scale.setScalar(this.scale);
-    this._build();
+    const tpl = dummyTemplate();
+    if (tpl) this._buildFromTemplate(tpl);
+    else this._buildProcedural();
     this.vel = new THREE.Vector3();
     this.angVel = new THREE.Vector3();
     this.state = 'stand';
@@ -75,16 +161,60 @@ export class Dummy {
     this.punchCd = 0;
     this.totalDamage = 0;
     this.dpsWindow = [];
-    this.lastHitBy = null;
     this.radius = 0.24 * this.scale;
     this.mass = 3 * this.scale * this.scale;
     this.yaw = 0;
+    this.heldBy = null;
+    this.dying = false;
     this._upright = new THREE.Quaternion();
     this.faceTo(world.ctx.input.head);
     world.scene.add(this.root);
   }
 
-  _build() {
+  _buildFromTemplate(tpl) {
+    this.glb = true;
+    const model = tpl.model.clone(true);
+    this.root.add(model);
+    const map = new Map();
+    this.mats = [];
+    const tint = this.def.color;
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      let m = map.get(o.material);
+      if (!m) {
+        m = o.material.clone();
+        const dark = m.color.r + m.color.g + m.color.b < 0.1;
+        if (tint !== null && !dark) m.color.set(tint);
+        m.envMap = this.world.envMap;
+        m.envMapIntensity = 0.6;
+        m.userData.baseEmissive = m.emissive.clone();
+        map.set(o.material, m);
+        this.mats.push(m);
+      }
+      o.material = m;
+    });
+    this.mat = this.mats.find((m) => m.color.r + m.color.g + m.color.b > 0.1) ?? this.mats[0];
+    this.color = this.mat.color.clone();
+    const J = (k) => model.getObjectByName('J_' + k);
+    this.hips = J('hips');
+    this.spine = J('chest');
+    this.neck = J('neck');
+    this.head = J('head');
+    this.armL = { sh: J('shL'), el: J('elL'), hd: J('hdL') };
+    this.armR = { sh: J('shR'), el: J('elR'), hd: J('hdR') };
+    this.legL = { hp: J('hpL'), kn: J('knL'), ft: J('ftL') };
+    this.legR = { hp: J('hpR'), kn: J('knR'), ft: J('ftR') };
+    this.restZ = 0;
+    this.unit = 1 / tpl.scale;
+    if (this.def.ai === 'shooter') this._addGun();
+  }
+
+  _buildProcedural() {
+    this.glb = false;
+    this.color = new THREE.Color(this.def.color ?? 0xd8a010);
+    this.mat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.3, metalness: 0.1, flatShading: true, envMap: this.world.envMap, envMapIntensity: 0.6 });
+    this.mat.userData.baseEmissive = new THREE.Color(0);
+    this.mats = [this.mat];
     const g = geos();
     const m = this.mat;
     const mk = (geo, parent, x = 0, y = 0, z = 0) => {
@@ -99,11 +229,10 @@ export class Dummy {
       parent.add(j);
       return j;
     };
-    const R = this.root;
-    this.hips = J(R, 0, 0.92, 0);
+    this.hips = J(this.root, 0, 0.92, 0);
     mk(g.pelvis, this.hips, 0, 0.02, 0);
     this.spine = J(this.hips, 0, 0.08, 0);
-    mk(g.torso, this.spine, 0, 0, 0);
+    mk(g.torso, this.spine);
     this.neck = J(this.spine, 0, 0.52, 0);
     mk(g.neck, this.neck, 0, 0.08, 0).rotation.x = Math.PI;
     this.head = J(this.neck, 0, 0.14, 0);
@@ -115,11 +244,10 @@ export class Dummy {
       mk(g.forearm, el);
       const hd = J(el, 0, -0.29, 0);
       mk(g.hand, hd, 0, -0.04, 0);
-      sh.rotation.z = 0.08 * s;
       return { sh, el, hd };
     };
-    this.armL = arm(-1);
-    this.armR = arm(1);
+    this.armL = arm(1);
+    this.armR = arm(-1);
     const leg = (s) => {
       const hp = J(this.hips, 0.1 * s, -0.02, 0);
       mk(g.thigh, hp);
@@ -129,14 +257,19 @@ export class Dummy {
       mk(g.foot, ft, 0, 0, 0.05);
       return { hp, kn, ft };
     };
-    this.legL = leg(-1);
-    this.legR = leg(1);
-    if (this.def.ai === 'shooter') {
-      const gun = new THREE.Mesh(g.gun, new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, flatShading: true }));
-      gun.position.set(0, -0.07, 0.07);
-      this.armR.hd.add(gun);
-      this.gun = gun;
-    }
+    this.legL = leg(1);
+    this.legR = leg(-1);
+    this.restZ = 0.08;
+    this.unit = 1;
+    if (this.def.ai === 'shooter') this._addGun();
+  }
+
+  _addGun() {
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.07, 0.2), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, flatShading: true }));
+    gun.scale.setScalar(this.unit);
+    gun.position.set(0, -0.09 * this.unit, 0.08 * this.unit);
+    this.armR.hd.add(gun);
+    this.gun = gun;
   }
 
   faceTo(p) {
@@ -146,42 +279,28 @@ export class Dummy {
     if (this.state === 'stand') this.root.quaternion.setFromAxisAngle(UP, this.yaw);
   }
 
-  /** 몸통 중심 (월드) */
   center(out = new THREE.Vector3()) {
     return this.root.localToWorld(out.set(0, 1.05, 0));
   }
 
   headPos(out = new THREE.Vector3()) {
-    return this.head.getWorldPosition(out);
+    return this.root.localToWorld(out.set(0, 1.62, 0));
   }
 
-  /** 점에서 몸(캡슐)까지 거리 */
   distanceTo(p) {
     const a = this.root.localToWorld(_v2.set(0, 0.25, 0));
     const b = this.root.localToWorld(_v3.set(0, 1.65, 0));
     const ab = _v.subVectors(b, a);
     const t = THREE.MathUtils.clamp(_v3.subVectors(p, a).dot(ab) / ab.lengthSq(), 0, 1);
-    const closest = a.addScaledVector(ab, t);
-    return closest.distanceTo(p) - this.radius;
-  }
-
-  /** 선분(p0→p1)과 몸의 최단거리 */
-  segmentDistance(p0, p1) {
-    // 간단 샘플링
-    let best = Infinity;
-    for (let i = 0; i <= 6; i++) {
-      _v.lerpVectors(p0, p1, i / 6);
-      best = Math.min(best, this.distanceTo(_v));
-    }
-    return best;
+    return a.addScaledVector(ab, t).distanceTo(p) - this.radius;
   }
 
   impulse(v, spin = 0) {
-    if (!this.alive) return;
+    if (!this.alive || this.state === 'held') return;
     this.vel.add(v);
     if (this.frozen) return;
     if (v.length() > 2.2 * Math.sqrt(this.scale) || this.vel.y > 1.5) {
-      if (this.state !== 'air') {
+      if (this.state !== 'air' && this.state !== 'heart') {
         this.state = 'air';
         this.stateT = 0;
       }
@@ -189,11 +308,9 @@ export class Dummy {
     }
   }
 
-  /** @returns 실제 적용된 피해 */
   damage(amount, info = {}) {
     if (!this.alive || amount <= 0) return 0;
     this.flash = 0.1;
-    this.lastHitBy = info.type;
     this.totalDamage += amount;
     this.dpsWindow.push([this.world.time, amount]);
     this.world.onDamage?.(this, amount, info);
@@ -203,18 +320,51 @@ export class Dummy {
     return amount;
   }
 
+  // ── 잡기 / 던지기 ──
+  grab(by) {
+    if (!this.alive || this.dying) return false;
+    this.heldBy = by;
+    this.state = 'held';
+    this.stateT = 0;
+    this.vel.set(0, 0, 0);
+    this.angVel.set(0, 0, 0);
+    return true;
+  }
+
+  release(vel) {
+    this.heldBy = null;
+    if (!this.alive) return;
+    this.state = 'air';
+    this.stateT = 0;
+    this.vel.copy(vel);
+    const k = Math.min(1, vel.length() / 4);
+    this.angVel.set((Math.random() - 0.5) * 4 * k, (Math.random() - 0.5) * 2 * k, (Math.random() - 0.5) * 4 * k);
+  }
+
+  // ── 데스노트: 심장마비 ──
+  heartAttack() {
+    if (!this.alive || this.dying) return;
+    this.dying = true;
+    this.heldBy?.drop?.();
+    this.heldBy = null;
+    this.state = 'heart';
+    this.stateT = 0;
+    this.vel.set(0, 0, 0);
+  }
+
   kill(info = {}) {
     if (!this.alive) return;
     this.alive = false;
+    this.heldBy?.drop?.();
     this.world.onKill?.(this, info);
     const W = this.world;
     const c = this.center();
     this.root.updateMatrixWorld(true);
     const type = info.type ?? 'shatter';
     if (type === 'slash' && info.plane) {
-      const pieces = W.slicer.slice(this.root, info.plane, { color: this.color, vel: this.vel.clone().add(info.push ?? _v.set(0, 0, 0)), center: c, radius: 0.35 * this.scale, sep: 1.2 });
-      W.shatter.emit(info.plane.projectPoint(c, new THREE.Vector3()), 14, this.color, { spread: 0.3, speed: 2.5, size: 0.04 });
-      this._disposeLater(pieces);
+      W.slicer.slice(this.root, info.plane, { color: this.color, vel: this.vel.clone().add(info.push ?? _v.set(0, 0, 0)), center: c, radius: 0.35 * this.scale, sep: 1.2 });
+      W.shatter.emit(info.plane.projectPoint(c, new THREE.Vector3()), 12, this.color, { spread: 0.3, speed: 2.5, size: 0.04 });
+      this._dispose();
     } else if (type === 'cleave' && info.planes?.length) {
       let pieces = W.slicer.slice(this.root, info.planes[0], { color: this.color, vel: this.vel.clone(), center: c, radius: 0.32 * this.scale, sep: 0.8 });
       for (let i = 1; i < Math.min(3, info.planes.length); i++) {
@@ -223,36 +373,32 @@ export class Dummy {
         pieces = next;
       }
       if (info.planes.length > 3) {
-        // 격하의 상대는 먼지가 될 때까지 썰린다
         for (const p of pieces) W.slicer.shatterPiece(p, 30);
         W.shatter.emit(c, 60, this.color, { box: _v.set(0.5, 1.6, 0.4).multiplyScalar(this.scale), speed: 1.5, size: 0.035, up: 0.5 });
       }
-      this._disposeLater([]);
+      this._dispose();
     } else if (type === 'erase') {
       W.ctx.fx.burst(c, 50, new THREE.Color(0xc07bff), 2, 0.05, 0.7, { spread: 0.5 * this.scale, drag: 3 });
       W.scene.remove(this.root);
       this._dispose();
+    } else if (type === 'fade') {
+      W.ctx.fx.burst(c, 60, new THREE.Color(0x222222), 1.2, 0.06, 1.4, { dark: true, spread: 0.6, up: 1, grav: -0.5, drag: 1.5 });
+      W.scene.remove(this.root);
+      this._dispose();
     } else {
-      const dir = info.dir ?? _v.set(0, 0, 0);
       W.shatter.emit(c, Math.round(70 * this.scale), info.burn ? 0x2a1a14 : this.color, {
-        box: _v2.set(0.45, 1.7, 0.35).multiplyScalar(this.scale), speed: info.speed ?? 3.5, dir, dirAmt: info.dirAmt ?? 3, size: 0.055 * this.scale,
+        box: _v2.set(0.45, 1.7, 0.35).multiplyScalar(this.scale), speed: info.speed ?? 3.5, dir: info.dir ?? _v.set(0, 0, 0), dirAmt: info.dirAmt ?? 3, size: 0.055 * this.scale,
       });
       W.scene.remove(this.root);
       this._dispose();
     }
   }
 
-  _disposeLater() {
-    // 조각들이 재질을 복제해 쓰므로 원본 재질만 정리
-    this._dispose();
-  }
-
   _dispose() {
-    this.mat.dispose();
+    for (const m of this.mats) m.dispose();
     this.gun?.material.dispose();
   }
 
-  /** 최근 2초 DPS */
   get dps() {
     const now = this.world.time;
     this.dpsWindow = this.dpsWindow.filter((d) => now - d[0] < 2);
@@ -261,50 +407,66 @@ export class Dummy {
     return s / 2;
   }
 
+  _setEmissive(c) {
+    for (const m of this.mats) m.emissive.copy(c);
+  }
+
   update(dt) {
     if (!this.alive) return;
     this.t += dt;
     this.stateT += dt;
-    const W = this.world;
     if (this.flash > 0) {
       this.flash -= dt;
-      this.mat.emissive.setRGB(1, 1, 1).multiplyScalar(Math.max(0, this.flash) * 6);
-      if (this.flash <= 0) this.mat.emissive.copy(this.baseEmissive);
+      this._setEmissive(_c.setRGB(1, 1, 1).multiplyScalar(Math.max(0, this.flash) * 5));
+      if (this.flash <= 0) for (const m of this.mats) m.emissive.copy(m.userData.baseEmissive);
+    }
+    if (this.state === 'held') {
+      this._pose(dt, 'limp');
+      return;
     }
     if (this.frozen) {
-      // 무량공처: 미세한 경련
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.angVel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.head.rotation.z = (Math.random() - 0.5) * 0.15;
       this.armL.sh.rotation.x = (Math.random() - 0.5) * 0.1;
       this.armR.sh.rotation.x = (Math.random() - 0.5) * 0.1;
-      if (this.flash <= 0) this.mat.emissive.setHSL(0.58, 0.8, 0.1 + Math.random() * 0.15);
+      if (this.flash <= 0) this._setEmissive(_c.setHSL(0.58, 0.8, 0.08 + Math.random() * 0.1));
       if (this.state === 'air') this._integrate(dt, 0.15);
       return;
     }
-
+    if (this.state === 'heart') {
+      const k = Math.min(1, this.stateT / 1.1);
+      this._pose(dt, 'clutch', k);
+      if (this.stateT > 1.4) {
+        this.state = 'air';
+        this.stateT = 0;
+        this.angVel.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).multiplyScalar(2.2);
+      }
+      return;
+    }
     if (this.state === 'stand') {
       this._ai(dt);
-      // 남은 속도는 미끄러지듯 감쇠
       this.root.position.addScaledVector(this.vel, dt);
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.root.position.y = Math.max(0, this.root.position.y);
     } else if (this.state === 'air') {
       this._integrate(dt, 1);
-      if (this.grounded && this.vel.lengthSq() < 0.3 && this.angVel.lengthSq() < 1) {
-        if (this.stateT > 0.8) {
-          this.state = 'down';
-          this.stateT = 0;
-        }
+      if (this.dying) this._pose(dt, 'clutch', 1);
+      if (this.grounded && this.vel.lengthSq() < 0.3 && this.angVel.lengthSq() < 1 && this.stateT > 0.8) {
+        this.state = 'down';
+        this.stateT = 0;
       }
     } else if (this.state === 'down') {
       this.vel.set(0, 0, 0);
+      if (this.dying) {
+        if (this.stateT > 2.5) this.kill({ type: 'fade' });
+        return;
+      }
       if (this.stateT > 1.2) {
         this.state = 'getup';
         this.stateT = 0;
         this._getupFrom = this.root.quaternion.clone();
         this._getupPos = this.root.position.clone();
-        // 넘어진 방향의 yaw 유지
         _v.set(0, 0, 1).applyQuaternion(this.root.quaternion).setY(0);
         if (_v.lengthSq() > 1e-3) this.yaw = Math.atan2(_v.x, _v.z);
         this._upright.setFromAxisAngle(UP, this.yaw);
@@ -313,22 +475,48 @@ export class Dummy {
       const k = Math.min(1, this.stateT / 0.7);
       const e = k * k * (3 - 2 * k);
       this.root.quaternion.slerpQuaternions(this._getupFrom, this._upright, e);
-      // 발이 바닥에 오도록 높이 보정
       this.root.position.copy(this._getupPos).lerp(_v.set(this._getupPos.x, 0, this._getupPos.z), e);
       if (k >= 1) {
         this.state = 'stand';
         this.stateT = 0;
       }
     }
-    // 아레나 밖으로 너무 멀리 가면 제거
     if (this.root.position.lengthSq() > 250 * 250 || this.root.position.y < -20) this.kill({ type: 'erase' });
+  }
+
+  _pose(dt, kind, k = 1) {
+    const L = (o, axis, v, sp = 8) => (o.rotation[axis] = THREE.MathUtils.lerp(o.rotation[axis], v, Math.min(1, dt * sp)));
+    if (kind === 'limp') {
+      const sw = Math.sin(this.t * 3) * 0.25;
+      L(this.armL.sh, 'x', -0.3 + sw);
+      L(this.armR.sh, 'x', -0.3 - sw);
+      L(this.armL.el, 'x', -0.4);
+      L(this.armR.el, 'x', -0.4);
+      L(this.legL.hp, 'x', 0.3 + sw * 0.5);
+      L(this.legR.hp, 'x', 0.1 - sw * 0.5);
+      L(this.legL.kn, 'x', 0.5);
+      L(this.legR.kn, 'x', 0.3);
+      L(this.head, 'x', 0.4);
+    } else if (kind === 'clutch') {
+      L(this.armR.sh, 'x', -1.3 * k);
+      L(this.armR.sh, 'z', 0.6 * k);
+      L(this.armR.el, 'x', -1.6 * k);
+      L(this.armL.sh, 'x', -1.1 * k);
+      L(this.armL.sh, 'z', -0.5 * k);
+      L(this.armL.el, 'x', -1.4 * k);
+      L(this.spine, 'x', 0.35 * k);
+      L(this.head, 'x', 0.3 * k + (Math.random() - 0.5) * 0.1 * k);
+      L(this.legL.kn, 'x', 0.6 * k);
+      L(this.legR.kn, 'x', 0.6 * k);
+      L(this.legL.hp, 'x', -0.3 * k);
+      L(this.legR.hp, 'x', -0.3 * k);
+    }
   }
 
   _integrate(dt, gScale) {
     this.vel.y -= 9.8 * dt * gScale;
     if (this.vel.lengthSq() > 30 * 30) this.vel.setLength(30);
     const c = this.center(_v3);
-    // 중심 기준 회전
     const ang = this.angVel.length();
     if (ang > 1e-4) {
       _q.setFromAxisAngle(_v.copy(this.angVel).divideScalar(ang), ang * dt);
@@ -336,7 +524,6 @@ export class Dummy {
       this.root.position.sub(c).applyQuaternion(_q).add(c);
     }
     this.root.position.addScaledVector(this.vel, dt);
-    // 바닥: 발과 머리 두 점으로 판정
     this.grounded = false;
     for (const y of [0.05, 1.75, 1.0]) {
       const p = this.root.localToWorld(_v.set(0, y, 0));
@@ -345,6 +532,15 @@ export class Dummy {
         this.root.position.y += r - p.y;
         this.grounded = true;
       }
+    }
+    // 배경 경계(벽)에서 튕김
+    const b = this.world.ctx.env.bounds;
+    if (b) {
+      const P = this.root.position;
+      if (P.x < b.minX) { P.x = b.minX; this.vel.x = Math.abs(this.vel.x) * 0.4; }
+      if (P.x > b.maxX) { P.x = b.maxX; this.vel.x = -Math.abs(this.vel.x) * 0.4; }
+      if (P.z < b.minZ) { P.z = b.minZ; this.vel.z = Math.abs(this.vel.z) * 0.4; }
+      if (P.z > b.maxZ) { P.z = b.maxZ; this.vel.z = -Math.abs(this.vel.z) * 0.4; }
     }
     if (this.grounded) {
       if (this.vel.y < 0) {
@@ -355,7 +551,6 @@ export class Dummy {
       this.vel.x *= Math.max(0, 1 - dt * 4);
       this.vel.z *= Math.max(0, 1 - dt * 4);
       this.angVel.multiplyScalar(Math.max(0, 1 - dt * 5));
-      // 눕도록 유도: 위쪽 축을 수평으로
       _v.set(0, 1, 0).applyQuaternion(this.root.quaternion);
       if (_v.y > 0.3) this.angVel.add(_v2.crossVectors(_v, UP).normalize().multiplyScalar(-dt * 10));
     }
@@ -363,21 +558,20 @@ export class Dummy {
 
   _ai(dt) {
     const W = this.world;
-    const ctx = W.ctx;
-    const head = ctx.input.head;
+    const head = W.ctx.input.head;
     const ai = W.settings.dummyAI ? this.def.ai : 'idle';
-    const breathe = Math.sin(this.t * 1.6) * 0.02;
-    this.spine.rotation.x = breathe;
+    this.spine.rotation.x = Math.sin(this.t * 1.6) * 0.02;
+    this.spine.rotation.z = THREE.MathUtils.lerp(this.spine.rotation.z, 0, dt * 5);
+    this.head.rotation.x = THREE.MathUtils.lerp(this.head.rotation.x, 0, dt * 5);
     this.head.rotation.y = Math.sin(this.t * 0.4) * 0.15;
-    // 기본 자세
     const rest = (arm, s) => {
       arm.sh.rotation.x = THREE.MathUtils.lerp(arm.sh.rotation.x, 0, dt * 6);
-      arm.sh.rotation.z = THREE.MathUtils.lerp(arm.sh.rotation.z, 0.08 * s, dt * 6);
-      arm.el.rotation.x = THREE.MathUtils.lerp(arm.el.rotation.x, -0.15, dt * 6);
+      arm.sh.rotation.z = THREE.MathUtils.lerp(arm.sh.rotation.z, this.restZ * s, dt * 6);
+      arm.el.rotation.x = THREE.MathUtils.lerp(arm.el.rotation.x, -0.1, dt * 6);
     };
     if (ai === 'idle') {
-      rest(this.armL, -1);
-      rest(this.armR, 1);
+      rest(this.armL, 1);
+      rest(this.armR, -1);
       this._legs(0, dt);
       return;
     }
@@ -385,33 +579,28 @@ export class Dummy {
     const flat = _v.subVectors(head, this.root.position).setY(0);
     const dist = flat.length();
     if (ai === 'shooter') {
-      rest(this.armL, -1);
+      rest(this.armL, 1);
       this._legs(0, dt);
       this.shootT -= dt;
       const aiming = this.shootT < 0.7;
-      // 팔을 들어 조준
-      const target = aiming ? -Math.PI / 2 : 0;
-      this.armR.sh.rotation.x = THREE.MathUtils.lerp(this.armR.sh.rotation.x, target, dt * 8);
+      this.armR.sh.rotation.x = THREE.MathUtils.lerp(this.armR.sh.rotation.x, aiming ? -Math.PI / 2 : 0, dt * 8);
       this.armR.el.rotation.x = THREE.MathUtils.lerp(this.armR.el.rotation.x, 0, dt * 8);
       if (this.shootT <= 0) {
         this.shootT = 2.2 + Math.random() * 1.5;
-        const muzzle = this.gun.localToWorld(_v2.set(0, 0, 0.12));
-        W.spawnBullet(muzzle, head);
+        W.spawnBullet(this.gun.localToWorld(_v2.set(0, 0, 0.12)), head);
       }
     } else if (ai === 'rusher') {
       const reach = 0.85 * this.scale;
       this.punchCd -= dt;
       if (this.punchT > 0) {
-        // 주먹질
         this.punchT -= dt;
         const k = 1 - this.punchT / 0.45;
         const ext = k < 0.4 ? k / 0.4 : 1 - (k - 0.4) / 0.6;
-        this.armR.sh.rotation.x = -Math.PI / 2 * ext;
+        this.armR.sh.rotation.x = (-Math.PI / 2) * ext;
         this.armR.el.rotation.x = -0.2 * (1 - ext);
         if (!this._punchHit && k > 0.38) {
           this._punchHit = true;
-          const fist = this.armR.hd.getWorldPosition(_v2);
-          W.dummyMelee(this, fist, 8);
+          W.dummyMelee(this, this.armR.hd.getWorldPosition(_v2), 8);
         }
         this._legs(0, dt);
       } else if (dist > reach) {
@@ -419,7 +608,6 @@ export class Dummy {
         flat.normalize();
         this.root.position.addScaledVector(flat, sp * dt);
         this._legs(sp, dt);
-        rest(this.armL, -1);
         this.armR.sh.rotation.x = Math.sin(this.t * 7) * 0.4;
         this.armL.sh.rotation.x = -Math.sin(this.t * 7) * 0.4;
       } else {
@@ -442,5 +630,3 @@ export class Dummy {
     lerp(this.legR.kn, speed > 0 ? Math.max(0, a) * 1.2 + 0.1 : 0);
   }
 }
-
-void _e;

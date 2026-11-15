@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import * as T from './textures.js';
 import { glowTexture } from '../fx.js';
+import { getModel } from '../assets.js';
 
 const skyVert = /* glsl */ `
 varying vec3 vDir;
@@ -64,6 +65,8 @@ function floor(size, mat, segs = 80) {
 // ───────────────────────── 하얀 방 ─────────────────────────
 export function buildWhiteRoom(ctx) {
   T.reseed(11);
+  const glb = getModel('white_room');
+  if (glb) return buildWhiteRoomGLB(ctx, glb);
   const group = new THREE.Group();
   const W = 44;
   const tiles = T.whiteTiles();
@@ -122,6 +125,53 @@ export function buildWhiteRoom(ctx) {
     exposure: 0.95,
     bounds: { minX: -W / 2 + 0.5, maxX: W / 2 - 0.5, minZ: -W / 2 + 0.5, maxZ: W / 2 - 0.5 },
     spawn: new THREE.Vector3(0, 0, 4),
+  };
+}
+
+// 첨부 GLB 하얀 방
+function buildWhiteRoomGLB(ctx, src) {
+  const group = new THREE.Group();
+  const S = 0.08; // 원본 단위 → m (폭 약 19m, 높이 10m)
+  const room = src.clone(true);
+  room.scale.setScalar(S);
+  room.position.set(-1 * S, 0, 4 - 64 * S);
+  room.traverse((o) => {
+    if (o.isMesh) {
+      o.material = new THREE.MeshLambertMaterial({ color: 0xf6f7f9, side: THREE.DoubleSide });
+    }
+  });
+  group.add(room);
+  // 바닥 타일 느낌의 옅은 격자 (원본 바닥 위)
+  const tiles = T.whiteTiles();
+  tiles.repeat.set(9, 15);
+  const grid = floor([18, 30], new THREE.MeshLambertMaterial({ map: tiles, transparent: true, opacity: 0.5, depthWrite: false }), 4);
+  grid.position.set(0, 0.012, -11);
+  group.add(grid);
+  // 파괴 가능한 흰 큐브
+  const cubeMat = new THREE.MeshLambertMaterial({ color: 0xfafafa });
+  const cubeGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+  for (const [sx, sz] of [[-4, -7], [5, -6], [-6, -1], [6, -12], [0, -15]]) {
+    const n = 3 + Math.floor(T.rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const m = new THREE.Mesh(cubeGeo, cubeMat);
+      const layer = k < 3 ? 0 : 1;
+      m.position.set(sx + (k % 3) * 0.65 - 0.65 + layer * 0.3, 0.3 + layer * 0.6, sz + (T.rnd() - 0.5) * 0.1);
+      m.rotation.y = (T.rnd() - 0.5) * 0.3;
+      group.add(m);
+      ctx.world.addProp(m, { radius: 0.32, mass: 1.5, hp: 30, color: 0xf0f0f0 });
+    }
+  }
+  return {
+    id: 'white',
+    bright: true,
+    group,
+    sky: makeSky({ top: 0xf6f7fa, hor: 0xffffff, bot: 0xeef0f4, sunCol: 0x000000 }),
+    fog: { color: 0xf3f4f7, near: 25, far: 90 },
+    hemi: { sky: 0xffffff, ground: 0xc8ccd6, intensity: 1.8 },
+    sun: { color: 0xffffff, intensity: 1.4, pos: [-6, 30, 10] },
+    exposure: 0.95,
+    bounds: { minX: -8.4, maxX: 8.4, minZ: -25, maxZ: 3.4 },
+    spawn: new THREE.Vector3(0, 0, 1),
   };
 }
 

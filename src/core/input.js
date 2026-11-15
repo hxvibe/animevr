@@ -33,6 +33,11 @@ export class HandState {
     this._rawT = 0;
     this.pinch = false;
     this.pinchDist = 1;
+    this.pinching = false; // 히스테리시스가 적용된 집기 (원거리 클릭용)
+    this.pinchPrev = false;
+    this.rayPos = new THREE.Vector3();
+    this.rayDir = new THREE.Vector3(0, 0, -1);
+    this.quat = new THREE.Quaternion();
 
     this.inputSource = null;
     this.gamepad = null;
@@ -44,6 +49,10 @@ export class HandState {
     this.uiBlock = false; // 메뉴를 조작 중이면 true → 캐릭터는 이 손을 무시
     this.joints = null;
     this.indexTip = new THREE.Vector3();
+  }
+
+  get pinchPressed() {
+    return this.pinching && !this.pinchPrev;
   }
 
   pressed(name) {
@@ -134,7 +143,7 @@ export class Input {
 
   /** 메뉴가 열렸을 때만 컨트롤러 레이저 표시 */
   setRaysVisible(on) {
-    for (const s of this.slots) s.ray.visible = on && !!s.inputSource && !s.inputSource.hand;
+    for (const s of this.slots) s.ray.visible = on && !!s.inputSource;
   }
 
   _setupDesktop() {
@@ -194,7 +203,10 @@ export class Input {
 
   endFrame() {
     for (const k in this.actions) this.actions[k] = false;
-    for (const h of this.hands) Object.assign(h.prevBtn, h.btn);
+    for (const h of this.hands) {
+      Object.assign(h.prevBtn, h.btn);
+      h.pinchPrev = h.pinching;
+    }
     this.mouse.leftPrev = this.mouse.left;
     this.mouse.rightPrev = this.mouse.right;
     this.mouse.dx = this.mouse.dy = 0;
@@ -277,18 +289,8 @@ export class Input {
       } else if (Math.abs(x) < 0.3) this._snapReady = true;
     }
 
-    if (L.source === 'controller' && L.pressed('b')) this.actions.toggleMenu = true; // Y
+    if (L.source === 'controller' && (L.pressed('b') || L.pressed('menu'))) this.actions.toggleMenu = true; // Y / 메뉴
     if (R.source === 'controller' && R.pressed('b')) this.actions.quickSpawn = true; // B
-
-    // 핸드트래킹 메뉴: 왼손바닥을 하늘로 펴고 0.8초
-    if (L.active && L.source === 'hand' && L.gesture === 'open' && L.palmNormal.y > 0.75 && L.palm.y > this.head.y - 0.6) {
-      this._palmUp += dt;
-      if (this._palmUp > 0.8) {
-        this.actions.toggleMenu = true;
-        this._palmUp = -2;
-      }
-    } else if (this._palmUp > 0) this._palmUp = 0;
-    else this._palmUp = Math.min(0, this._palmUp + dt);
   }
 
   snapTurn(angle) {
@@ -308,6 +310,9 @@ export class Input {
     slot.controller.getWorldQuaternion(_q);
     h.dir.set(0, 0, -1).applyQuaternion(_q);
     h.fingersDir.copy(h.dir);
+    h.rayPos.copy(h.pos);
+    h.rayDir.copy(h.dir);
+    slot.grip.getWorldQuaternion(h.quat);
     slot.grip.getWorldPosition(h.palm);
     if (h.palm.lengthSq() === 0) h.palm.copy(h.pos);
     h.palmNormal.set(h.side === 'left' ? 1 : -1, 0, 0).applyQuaternion(_q);
@@ -321,6 +326,8 @@ export class Input {
     h.btn.stick = !!b[3]?.pressed;
     h.btn.a = !!b[4]?.pressed;
     h.btn.b = !!b[5]?.pressed;
+    // 일부 브라우저는 메뉴 버튼을 추가 인덱스로 노출
+    h.btn.menu = b.length > 7 && b.slice(7).some((x) => x?.pressed);
     const ax = gp.axes;
     if (ax.length >= 4) {
       h.axes[0] = ax[2];
@@ -333,6 +340,7 @@ export class Input {
     const g = h.btn.grip && h.btn.trigger ? 'fist' : h.btn.trigger ? 'point' : h.btn.grip ? 'fist' : 'open';
     this._setGesture(h, g, dt);
     h.pinch = h.btn.trigger;
+    h.pinching = h.btn.trigger;
   }
 
   _readHand(h, slot, dt) {
@@ -364,6 +372,21 @@ export class Input {
     h.palm.copy(g.palm).applyMatrix4(m);
     h.palmNormal.copy(g.palmNormal).transformDirection(m);
     h.indexTip.copy(J['index-finger-tip']).applyMatrix4(m);
+    // 원거리 조작용 레이(손 포인터)와 집기
+    slot.controller.getWorldPosition(h.rayPos);
+    slot.controller.getWorldQuaternion(_q);
+    h.rayDir.set(0, 0, -1).applyQuaternion(_q);
+    if (h.rayPos.lengthSq() === 0) {
+      h.rayPos.copy(h.palm);
+      h.rayDir.copy(h.fingersDir);
+    }
+    h.pinching = h.pinching ? g.pinchDist < 0.035 : g.pinchDist < 0.018;
+    // 손 방향 쿼터니언 (X=측면, Y=손바닥 반대, Z=손목 쪽)
+    const yv = _v.copy(h.palmNormal).negate();
+    const zv = new THREE.Vector3().copy(h.fingersDir).negate();
+    zv.addScaledVector(yv, -zv.dot(yv)).normalize();
+    const xv = new THREE.Vector3().crossVectors(yv, zv);
+    h.quat.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
   }
 
   _updateDesktop(dt) {

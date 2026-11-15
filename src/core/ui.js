@@ -104,6 +104,25 @@ export class UI {
     this.options = new Panel(1400, 1050, 1.4, 1.05, (g, p) => this._drawOptions(g, p));
     scene.add(this.title.mesh, this.options.mesh);
 
+    // 메타 퀘스트식 메뉴 아이콘: 왼손바닥을 얼굴 쪽으로 돌리면 나타나고, 왼손 집기로 열기
+    this.menuIcon = canvasPlane(128, 128, 0.05, 0.05, { renderOrder: 65, depthTest: false });
+    {
+      const g = this.menuIcon.g;
+      g.beginPath();
+      g.arc(64, 64, 58, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(30,32,40,0.9)';
+      g.fill();
+      g.lineWidth = 6;
+      g.strokeStyle = 'rgba(255,255,255,0.9)';
+      g.stroke();
+      g.fillStyle = '#ffffff';
+      for (let i = 0; i < 3; i++) g.fillRect(36, 40 + i * 20, 56, 8);
+      this.menuIcon.tex.needsUpdate = true;
+    }
+    this.menuIcon.mesh.visible = false;
+    scene.add(this.menuIcon.mesh);
+    this._iconCd = 0;
+    this._iconShow = 0;
     this.hud = canvasPlane(512, 300, 0.17, 0.1, { renderOrder: 40 });
     this.hud.mesh.visible = false;
     scene.add(this.hud.mesh);
@@ -172,21 +191,22 @@ export class UI {
     g.font = `700 34px ${FONT}`;
     g.fillStyle = '#ffffff';
     g.fillText('캐릭터', 90, 300);
-    const cw = 680;
+    const n = CHARACTERS.length;
+    const cw = (W - 180 - (n - 1) * 40) / n;
     CHARACTERS.forEach((c, i) => {
-      const x = 90 + i * (cw + 60);
+      const x = 90 + i * (cw + 40);
       const active = this.sel.character === c.id;
       p.button(x, 325, cw, 250, '', 'char:' + c.id, { active, accent: c.color + 'aa', r: 24 });
       g.textAlign = 'left';
       g.fillStyle = '#ffffff';
-      g.font = `900 64px ${FONT}`;
-      g.fillText(c.name, x + 36, 410);
-      g.font = `400 30px ${FONT}`;
+      g.font = `900 ${n > 2 ? 52 : 64}px ${FONT}`;
+      g.fillText(c.name, x + 30, 405);
+      g.font = `400 ${n > 2 ? 26 : 30}px ${FONT}`;
       g.fillStyle = 'rgba(255,255,255,0.8)';
-      g.fillText(`${c.work} · ${c.technique}`, x + 38, 460);
-      g.font = `900 46px ${JFONT}`;
+      g.fillText(`${c.work} · ${c.technique}`, x + 32, 458);
+      g.font = `900 ${n > 2 ? 32 : 46}px ${JFONT}`;
       g.fillStyle = c.color;
-      g.fillText(c.kanji, x + 36, 535);
+      g.fillText(c.kanji, x + 30, 530);
     });
 
     g.font = `700 34px ${FONT}`;
@@ -198,8 +218,8 @@ export class UI {
     p.button(W - 90 - 420, 820, 420, 120, '시작', 'start', { active: true, accent: '#d6334a', size: 52, weight: 900, r: 28 });
     g.font = `400 26px ${FONT}`;
     g.fillStyle = 'rgba(255,255,255,0.55)';
-    g.fillText('손가락으로 누르거나, 컨트롤러로 가리키고 트리거', 90, 900);
-    g.fillText('게임 중 메뉴: Y 버튼 / 왼손바닥을 하늘로 / H 키', 90, 940);
+    g.fillText('손가락으로 직접 누르기 · 멀리서는 손으로 가리키고 엄지와 검지를 맞대기', 90, 900);
+    g.fillText('게임 중 메뉴: 왼손바닥을 얼굴 쪽으로 → ≡ 아이콘을 집기 · Y 버튼 · H 키', 90, 940);
   }
 
   // ───────────────── 옵션 ─────────────────
@@ -240,10 +260,14 @@ export class UI {
       Object.entries(BACKGROUNDS).forEach(([id, b], i) => p.button(50 + i * 258, 200, 240, 90, b.label, 'bg:' + id, { active: this.ctx.env.id === id, size: 32 }));
       const toggles = [
         ['hud', '손목 HUD'], ['skillNames', '기술명 표시'], ['damageNumbers', '데미지 숫자'],
-        ['invincible', '플레이어 무적'], ['locomotion', '스틱 이동'], ['kaminoRule', '카미노 원작 조건'],
+        ['invincible', '플레이어 무적'], ['locomotion', '스틱 이동'], ['domainGesture', '영역전개 손동작'],
       ];
+      const cid = this.ctx.character?.id;
+      if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건']);
+      if (cid === 'light') toggles.push(['shinigamiEyes', '사신의 눈'], ['deathDelay40', '사망까지 40초(원작)']);
       g.fillText('옵션', 50, 345);
-      toggles.forEach(([k, l], i) => p.button(50 + (i % 3) * 430, 365 + Math.floor(i / 3) * 110, 410, 90, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 30, accent: '#2e6a9a' }));
+      toggles.forEach(([k, l], i) => p.button(50 + (i % 3) * 430, 365 + Math.floor(i / 3) * 105, 410, 88, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 28, accent: '#2e6a9a' }));
+      if (this.ctx.character?.castDomain) p.button(910, 640 - 75, 440, 90, '영역전개 발동', 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
       g.fillStyle = '#ffffff';
       g.font = `700 32px ${FONT}`;
       g.fillText(`높이 보정  ${S.heightOffset >= 0 ? '+' : ''}${Math.round(S.heightOffset * 100)} cm`, 50, 640);
@@ -303,6 +327,10 @@ export class UI {
       ctx.world.clearDebris();
     } else if (id === 'ai') S.dummyAI = !S.dummyAI;
     else if (id === 'resetArena') ctx.game.setBackground(ctx.env.id);
+    else if (id === 'castDomain') {
+      this.showOptions(false);
+      ctx.character?.castDomain?.();
+    }
     else if (k === 'opt') {
       S[v] = !S[v];
       if (v === 'locomotion') ctx.input.locomotion = S.locomotion;
@@ -315,14 +343,28 @@ export class UI {
     if (this.options.mesh.visible) this.options.redraw();
   }
 
-  _place(panel, dist, yOff = 0) {
+  _place(panel, dist, yOff = 0, scale = 1) {
     const inp = this.ctx.input;
     _v.copy(inp.headDir).setY(0);
     if (_v.lengthSq() < 1e-4) _v.set(0, 0, -1);
     _v.normalize();
+    panel.mesh.scale.setScalar(scale);
     panel.mesh.position.copy(inp.head).addScaledVector(_v, dist);
-    panel.mesh.position.y = Math.max(1.0, inp.head.y - 0.12 + yOff);
+    panel.mesh.position.y = Math.max(0.9, inp.head.y - 0.12 + yOff);
     panel.mesh.lookAt(inp.head.x, panel.mesh.position.y, inp.head.z);
+  }
+
+  /** 왼손 위에 작게 띄움 */
+  _placeAtHand(panel, scale) {
+    const inp = this.ctx.input;
+    const L = inp.left;
+    panel.mesh.scale.setScalar(scale);
+    _v.subVectors(inp.head, L.palm).setY(0).normalize();
+    panel.mesh.position.copy(L.palm).addScaledVector(_v, -0.05).add(_v2.set(0, 0.17 + (panel.mh * scale) / 2 - 0.15, 0));
+    // 오른손으로 누르기 쉽게 살짝 오른쪽으로
+    const right = _v2.set(-_v.z, 0, _v.x);
+    panel.mesh.position.addScaledVector(right, -0.12);
+    panel.mesh.lookAt(inp.head);
   }
 
   showTitle(show) {
@@ -330,7 +372,8 @@ export class UI {
     this.title.mesh.visible = show;
     if (show) {
       this.options.mesh.visible = false;
-      this._place(this.title, 2.0, 0.05);
+      const xr = this.ctx.input.mode === 'xr';
+      this._place(this.title, xr ? 0.62 : 2.0, xr ? -0.05 : 0.05, xr ? 0.55 : 1);
       this.title.redraw();
     }
     this.ctx.input.setRaysVisible(this.menuOpen);
@@ -340,7 +383,9 @@ export class UI {
     if (this.mode !== 'game') return;
     this.options.mesh.visible = show;
     if (show) {
-      this._place(this.options, 1.35, -0.05);
+      const inp = this.ctx.input;
+      if (inp.mode === 'xr' && inp.left.active) this._placeAtHand(this.options, 0.42);
+      else this._place(this.options, inp.mode === 'xr' ? 0.6 : 1.35, -0.1, inp.mode === 'xr' ? 0.45 : 1);
       this.options.redraw();
     }
     this.ctx.input.setRaysVisible(this.menuOpen);
@@ -364,11 +409,15 @@ export class UI {
       if (h.source === 'hand') {
         const local = mesh.worldToLocal(_v.copy(h.indexTip));
         const r = panel.hit(local);
+        const zw = local.z * mesh.scale.x; // 패널 면까지의 실제 거리(m)
         const prev = this._pokePrev[h.side];
-        this._pokePrev[h.side] = local.z;
-        if (r.inside && Math.abs(local.z) < 0.1) {
+        this._pokePrev[h.side] = zw;
+        const near = r.inside && Math.abs(zw) < 0.1;
+        // 멀리 있으면 손 포인터 + 집기(엄지·검지)로 클릭
+        if (!near) pointers.push([h.rayPos, h.rayDir, h.pinchPressed, h]);
+        if (near) {
           if (r.index >= 0) hover = r.index;
-          if (r.index >= 0 && prev > 0.008 && local.z <= 0.008 && this._pokeCd <= 0) {
+          if (r.index >= 0 && prev > 0.008 && zw <= 0.008 && this._pokeCd <= 0) {
             h.pulse(0.5, 25);
             this._pokeCd = 0.35;
             this._onClick(panel.buttons[r.index].id);
@@ -637,9 +686,42 @@ export class UI {
     }
   }
 
+  _updateMenuIcon(dt) {
+    const inp = this.ctx.input;
+    const L = inp.left;
+    const R = inp.right;
+    const icon = this.menuIcon.mesh;
+    this._iconCd -= dt;
+    let show = false;
+    if (inp.mode === 'xr' && L.active && L.source === 'hand') {
+      _v.subVectors(inp.head, L.palm);
+      const d = _v.length();
+      _v.normalize();
+      show = d < 0.65 && L.palmNormal.dot(_v) > 0.6 && Math.abs(L.palmNormal.y) < 0.7 && L.gesture !== 'fist';
+      if (show) {
+        icon.position.copy(L.palm).addScaledVector(_v, 0.06).add(_v2.set(0, 0.08, 0));
+        icon.lookAt(inp.head);
+      }
+    }
+    this._iconShow = show ? Math.min(1, this._iconShow + dt * 6) : Math.max(0, this._iconShow - dt * 6);
+    icon.visible = this._iconShow > 0.01;
+    this.menuIcon.mat.opacity = this._iconShow;
+    icon.scale.setScalar(0.7 + 0.3 * this._iconShow);
+    if (!show || this._iconCd > 0) return;
+    const poke = R.active && R.source === 'hand' && R.indexTip.distanceTo(icon.position) < 0.03;
+    if (L.pinchPressed || poke) {
+      this._iconCd = 0.6;
+      this.ctx.sfx.click();
+      L.pulse(0.4, 30);
+      if (this.mode === 'game') this.showOptions(!this.options.mesh.visible);
+      else if (this.mode === 'title') this.showTitle(true);
+    }
+  }
+
   update(dt) {
     const inp = this.ctx.input;
     const S = this.ctx.settings;
+    this._updateMenuIcon(dt);
     // HUD
     const hm = this.hud.mesh;
     const L = inp.left;

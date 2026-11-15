@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>ANIME VR — 술식 시뮬레이터</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root { --c: #5ab4ff; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #05060c; color: #e8eeff; font-family: 'Noto Sans KR', sans-serif; overflow: hidden; }
+    #app canvas { display: block; }
+    #overlay {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 50% 30%, rgba(30,60,140,0.55), rgba(3,4,12,0.92) 70%);
+      transition: opacity .4s; z-index: 10; padding: 20px;
+    }
+    #overlay.hidden { opacity: 0; pointer-events: none; }
+    .card { max-width: 620px; width: 100%; text-align: center; }
+    h1 { font-size: 15px; letter-spacing: .4em; color: #8fb8ff; font-weight: 500; margin: 0 0 18px; }
+    .char {
+      border: 1px solid rgba(120,190,255,.35); border-radius: 22px; padding: 26px 24px 22px;
+      background: linear-gradient(160deg, rgba(40,80,170,.28), rgba(10,14,36,.6));
+      box-shadow: 0 0 60px rgba(60,140,255,.18) inset;
+    }
+    .char .work { font-size: 13px; color: #9fb6e6; letter-spacing: .2em; }
+    .char .name { font-size: 40px; font-weight: 900; margin: 6px 0 4px; background: linear-gradient(90deg,#bfe6ff,#ffffff,#d8b8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .char .tech { font-size: 15px; color: #c8d6ff; }
+    .skills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px 0 4px; }
+    .skills span { font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); }
+    .skills .b { border-color: #3aa0ff; color: #a8d8ff; }
+    .skills .r { border-color: #ff4a5a; color: #ffb0b0; }
+    .skills .p { border-color: #a04cff; color: #dcc0ff; }
+    .skills .d { border-color: #e0ecff; color: #fff; }
+    .btns { display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+    button {
+      font: inherit; font-size: 17px; font-weight: 700; padding: 14px 26px; border-radius: 14px; cursor: pointer;
+      border: 1px solid rgba(140,200,255,.6); color: #fff; background: rgba(40,100,200,.55);
+    }
+    button.primary { background: linear-gradient(90deg,#2a6bff,#7a3cff); border: none; box-shadow: 0 6px 30px rgba(80,120,255,.4); }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    #status { margin-top: 16px; font-size: 13px; color: #9fb0d8; min-height: 1.5em; line-height: 1.5; }
+    .foot { margin-top: 14px; font-size: 11px; color: #5e6c90; }
+    #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #fff; opacity: .7; z-index: 5; pointer-events: none; }
+    #crosshair.hidden { display: none; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="overlay">
+    <div class="card">
+      <h1>ANIME VR · 술식 시뮬레이터</h1>
+      <div class="char">
+        <div class="work">주술회전</div>
+        <div class="name">고죠 사토루</div>
+        <div class="tech">무하한 주술 · 육안</div>
+        <div class="skills">
+          <span>무하한</span>
+          <span class="b">술식순전 「창」</span>
+          <span class="r">술식반전 「혁」</span>
+          <span class="p">허식 「자」</span>
+          <span class="d">영역전개 「무량공처」</span>
+          <span>육안</span>
+          <span>반전술식</span>
+        </div>
+      </div>
+      <div class="btns">
+        <button id="btn-vr" class="primary">VR 시작</button>
+        <button id="btn-desktop">데스크톱으로 체험</button>
+      </div>
+      <div id="status">WebXR 확인 중…</div>
+      <div class="foot">비공식 팬메이드 시뮬레이션 · 컨트롤러 / 핸드트래킹 지원</div>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

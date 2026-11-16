@@ -354,8 +354,10 @@ export class UnlimitedVoid {
     if (this.dir.lengthSq() < 0.5) this.dir.set(0, 0, -1);
     this.group.visible = true;
     this.white.visible = true;
-    this.dome.visible = this.sigil.visible = true;
-    this.eyes.forEach((e) => (e.visible = true));
+    // (요청에 따라 하늘의 눈과 발밑 문양은 쓰지 않는다)
+    this.dome.visible = true;
+    this.sigil.visible = false;
+    this.eyes.forEach((e) => (e.visible = false));
     this.domeU.uFade.value = 0;
     this.sigil.material.opacity = 0;
     this.dome.position.copy(center).setY(1.2);
@@ -384,9 +386,8 @@ export class UnlimitedVoid {
     const appear = Math.min(1, ink.t / 0.18);
     const pop = 1 - Math.pow(1 - appear, 3);
     const fade = k > 0.75 ? (1 - k) / 0.25 : 1;
-    ink.s.scale.setScalar(ink.size * (0.4 + 0.6 * pop) * (1 + k * 0.08));
+    ink.s.scale.setScalar(ink.size * (0.4 + 0.6 * pop));
     ink.s.material.opacity = 0.95 * pop * fade;
-    ink.s.position.addScaledVector(ink.drift, dt);
     ink.s.material.rotation += ink.spin * dt;
   }
 
@@ -415,23 +416,21 @@ export class UnlimitedVoid {
     });
   }
 
-  /** 물감 얼룩 하나를 새 위치에 다시 뿌린다 */
+  /** 물감 얼룩 하나를 영역(구)의 겉면 위 새 위치에 다시 뿌린다 — 위치는 고정, 머리를 따라오지 않는다 */
   _respawnInk(ink) {
-    const inp = this.ctx.input;
-    const fwd = this.dir;
-    // 시야 앞쪽 반구에 주로 배치
-    const yaw = Math.atan2(fwd.x, fwd.z) + (Math.random() - 0.5) * Math.PI * 1.6;
-    const r = 7 + Math.random() * 16;
-    ink.base.set(this.center.x + Math.sin(yaw) * r, 0.5 + Math.random() * 11, this.center.z + Math.cos(yaw) * r);
+    const R = 20;
+    const d = _v.randomDirection();
+    d.y = 0.04 + Math.abs(d.y) * 0.9;
+    d.normalize();
+    ink.base.set(this.center.x, 1.5, this.center.z).addScaledVector(d, R);
     ink.s.position.copy(ink.base);
-    ink.size = 2.5 + Math.random() * 6;
+    ink.size = 3 + Math.random() * 6;
     ink.s.material.map = this.inkTex[Math.floor(Math.random() * this.inkTex.length)];
     ink.s.material.rotation = Math.random() * Math.PI * 2;
-    ink.spin = (Math.random() - 0.5) * 0.15;
-    ink.drift.randomDirection().multiplyScalar(0.2);
+    ink.spin = (Math.random() - 0.5) * 0.08;
+    ink.drift.set(0, 0, 0);
     ink.t = 0;
     ink.life = 1.6 + Math.random() * 2.4;
-    void inp;
   }
 
   _exitVoid() {
@@ -457,11 +456,7 @@ export class UnlimitedVoid {
     if (this.state === 'barrier') {
       const k = Math.min(1, t / 0.6);
       this.domeU.uFade.value = k;
-      this.sigil.material.opacity = k;
-      this.sigil.rotation.z += dt * 0.3;
-      if (Math.random() < 0.7) fx.spawn(_v.set(this.center.x + (Math.random() - 0.5) * 3, 0.1, this.center.z + (Math.random() - 0.5) * 3), new THREE.Vector3(0, 1.5 + Math.random(), 0), new THREE.Color(0x7fc0ff), 0.03, 1, 0.5, 0);
-      const ek = THREE.MathUtils.clamp((t - 0.5) / 0.6, 0, 1);
-      this.eyes.forEach((e) => (e.material.opacity = ek * (0.85 + Math.random() * 0.15)));
+      if (Math.random() < 0.5) fx.spawn(_v.copy(this.dome.position).addScaledVector(new THREE.Vector3().randomDirection(), 1.7), new THREE.Vector3(0, 0.6, 0), new THREE.Color(0x7fc0ff), 0.025, 0.8, 0.5, 0);
       if (t > 1.5) {
         // 화이트아웃
         W.opacity = Math.min(1, (t - 1.5) / 0.6);
@@ -473,7 +468,10 @@ export class UnlimitedVoid {
           this.eyes.forEach((e) => (e.visible = false));
           this.warp.visible = true;
           this.warp.position.copy(inp.head);
-          this.warp.lookAt(_v.copy(inp.head).add(inp.headDir));
+          // 고개를 숙이거나 들어도 수평(좌우 방향)만 따라 정면에서 날아오게
+          const yawDir = new THREE.Vector3(inp.headDir.x, 0, inp.headDir.z);
+          if (yawDir.lengthSq() < 1e-4) yawDir.copy(this.dir);
+          this.warp.lookAt(_v.copy(inp.head).add(yawDir.normalize()));
           this.ctx.sfx.rumble(1.4, 0.3);
         }
       }
@@ -484,7 +482,7 @@ export class UnlimitedVoid {
       // 앞에서 날아오는 흰 빛 구슬
       for (let i = 0; i < 3; i++) {
         const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.warp.quaternion);
-        const p = inp.head.clone().addScaledVector(fwd, 30).add(new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6));
+        const p = inp.head.clone().addScaledVector(fwd, 30).add(new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, 0));
         fx.spawn(p, fwd.clone().multiplyScalar(-40), new THREE.Color(0xffffff), 0.12 + Math.random() * 0.2, 0.8, 0, 0);
       }
       if (t > 1.2) W.opacity = Math.min(1, (t - 1.2) / 0.25);

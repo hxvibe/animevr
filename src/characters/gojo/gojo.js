@@ -57,7 +57,6 @@ export class Gojo {
       new THREE.RingGeometry(0.9, 1, 64),
       new THREE.MeshBasicMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
     );
-    this.signRing.rotation.x = -Math.PI / 2;
     ctx.scene.add(this.signRing);
     this.trenchGeo = new THREE.PlaneGeometry(1, 1);
     this.trenchGeo.rotateX(-Math.PI / 2);
@@ -98,8 +97,8 @@ export class Gojo {
         { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '검지만 펴서 충전 → 앞으로 찌르거나 손을 펴면 발사' },
         { head: '창 ↔ 혁 전환 · 취소', color: '#ffffff', text: '창 상태에서 검지만 → 혁 / 혁 상태에서 검지+중지 → 창 · 주먹을 쥐면 사라짐' },
         { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 펴기\n→ 창과 혁이 돌며 섞여 茈 완성 → 손을 펴거나 앞으로 밀면 발사 · 주먹은 취소' },
-        { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '검지·중지를 꼬아 얼굴 앞에 세우고 1.5초 (설정에서 끄기 / 메뉴에서 발동 가능)' },
-        { head: '무하한 · 육안 · 잡기 · 흑섬', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 가렸다 떼기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률' },
+        { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '검지·중지만 펴서 얼굴 앞에 세우고 6초 유지 (1초째부터 영창)\n전개 중 같은 자세 1.5초 → 해제 · 설정에서 손동작 끄기 / 메뉴에서 발동' },
+        { head: '무하한 · 육안 · 잡기 · 흑섬', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 0.5초 가리기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률' },
       ];
     }
     if (mode === 'desktop') {
@@ -107,14 +106,14 @@ export class Gojo {
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
         { head: '蒼 / 赫', color: '#7fc4ff', text: '우클릭 유지: 창 (휠: 거리) · 좌클릭 충전 후 놓기: 혁' },
         { head: '茈', color: '#c89bff', text: 'E 유지 → 창·혁이 섞여 茈 완성 → E를 놓으면 발사' },
-        { head: '無量空処 / 토글', color: '#e8f0ff', text: 'Q 1초: 영역전개 · I 무하한 · O 육안 · V 주먹(흑섬)' },
+        { head: '無量空処 / 토글', color: '#e8f0ff', text: 'Q 6초: 영역전개 · I 무하한 · O 육안 · V 주먹(흑섬)' },
       ];
     }
     return [
       { head: '술식순전 「蒼」 — 인력', color: '#7fc4ff', text: '왼쪽 트리거 유지. 팔을 뻗을수록 멀리 생성' },
       { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '오른쪽 트리거로 충전 → 놓거나 앞으로 찌르면 발사' },
       { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '창 + 혁 유지 상태로 두 컨트롤러를 맞대기 → 밀거나 트리거를 놓아 발사' },
-      { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '양쪽 스틱을 눌러 1.5초 (메뉴에서도 발동)' },
+      { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '양쪽 스틱을 눌러 6초 (1초째부터 영창, 메뉴에서도 발동)' },
       { head: '버튼', color: '#9fe8ff', text: 'X 무하한 · A 육안 · B 더미 소환 · Y 메뉴\n그립: 더미 잡기/던지기 · 그립 쥐고 휘둘러 치기 → 흑섬' },
     ];
   }
@@ -162,14 +161,14 @@ export class Gojo {
       I.blue = h.side === 'left' && h.btn.trigger;
       I.red = h.side === 'right' && h.btn.trigger;
       I.released = !h.btn.trigger;
-      I.sign = inp.left.btn.stick && inp.right.btn.stick;
+      I.sign = inp.left.btn.stick && inp.right.btn.stick ? 1 : 0;
       return I;
     }
     if (h.source === 'desktop') {
       I.blue = h.side === 'left' && inp.mouse.right;
       I.red = h.side === 'right' && inp.mouse.left;
       I.released = h.side === 'left' ? !inp.mouse.right : !inp.mouse.left;
-      I.sign = inp.keyDown('KeyQ');
+      I.sign = inp.keyDown('KeyQ') ? 1 : 0;
       I.purple = h.side === 'right' && inp.keyDown('KeyE');
       return I;
     }
@@ -182,8 +181,13 @@ export class Gojo {
     _v.normalize();
     const outward = h.dir.dot(_v) > 0.25;
     const nearFace = h.palm.distanceTo(inp.head) < 0.42;
-    // 영역전개 수인: 검지·중지를 꼰 손을 얼굴 앞에 세운다 (설정에서 끌 수 있음)
-    I.sign = this.ctx.settings.domainGesture && g === 'crossed' && nearFace && h.dir.y > 0.3;
+    // 영역전개 수인 (설정에서 끌 수 있음)
+    //  · 검지·중지만 펴서(또는 꼬아서) 얼굴 앞에 세우고 6초 유지 — 1초째부터 영창 음성
+    const inFront = _v.dot(_v3.copy(inp.headDir).setY(0).normalize()) > 0.2;
+    if (this.ctx.settings.domainGesture && nearFace && inFront) {
+      if (g === 'crossed' && h.dir.y > 0.3) I.sign = 1;
+      else if (g === 'two' && h.dir.y > 0.6) I.sign = 1;
+    }
     // 창: 두 손가락으로 앞을 가리키고 0.2초 (얼굴 근처·위를 가리키면 무시)
     I.blue = g === 'two' && gt >= 0.2 && outward && !nearFace && h.dir.y < 0.6 && dist > 0.3;
     // 혁: 검지만 펴고 0.2초
@@ -206,7 +210,8 @@ export class Gojo {
 
     const IL = this._intent(inp.left);
     const IR = this._intent(inp.right);
-    this._updateDomain(dt, IL.sign || IR.sign);
+    this._signSide = IL.sign ? 'left' : IR.sign ? 'right' : null;
+    this._updateDomain(dt, !!(IL.sign || IR.sign));
     if (!IL.purple && !IR.purple) this._purpleLock = false;
     if (!this.purple && !this._purpleLock && this.domain.sign <= 0.05) {
       // 한 손 수인 → 창과 혁을 불러내 섞는다
@@ -286,18 +291,34 @@ export class Gojo {
       }
     } else if (H.palmOut > 0) H.palmOut = 0;
     else H.palmOut = Math.min(0, H.palmOut + dt);
+    // 육안: 손으로 눈을 가리고 0.5초 → 전환 (손을 떼야 다시 가능)
+    //  얼굴에 손을 대면 추적이 끊기기 쉬우므로, 가까이 다가온 직후 추적이 끊겨도 가린 것으로 본다
     let covering = false;
     for (const h of inp.hands) {
-      if (!hand(h) || h.gesture !== 'open') continue;
-      _v.subVectors(inp.head, h.palm);
-      const d = _v.length();
-      if (d < 0.16 && h.palmNormal.dot(_v.normalize()) > 0.4) covering = true;
+      if (h.source !== 'hand') continue;
+      if (h.active) {
+        if (['two', 'crossed', 'point', 'purple'].includes(h.gesture)) continue;
+        _v.subVectors(h.palm, inp.head);
+        const d = _v.length();
+        const front = _v.dot(inp.headDir);
+        h._nearEyes = d < 0.2 && front > -0.02;
+        if (h._nearEyes) covering = true;
+        h._lostNear = 0;
+      } else if (h._nearEyes) {
+        h._lostNear = (h._lostNear ?? 0) + dt;
+        if (h._lostNear < 1.5) covering = true;
+        else h._nearEyes = false;
+      }
     }
-    if (covering) {
+    if (covering && !this.hs.left.mode && !this.hs.right.mode && !this.purple) {
       H.eyeArm += dt;
-      if (H.eyeArm > 0.45) H.eyeArmed = true;
+      if (H.eyeArm > 0.5 && !H.eyeArmed) {
+        H.eyeArmed = true;
+        this.setSixEyes(!this.sixEyes);
+        inp.left.pulse(0.6, 80);
+        inp.right.pulse(0.6, 80);
+      }
     } else {
-      if (H.eyeArmed) this.setSixEyes(!this.sixEyes);
       H.eyeArmed = false;
       H.eyeArm = 0;
     }
@@ -1005,23 +1026,44 @@ export class Gojo {
     const V = this.void;
     const ring = this.signRing;
     const canCast = V.state === 'idle' ? d.cd <= 0 && !this.hs.left.mode && !this.hs.right.mode && !this.purple : V.state === 'active' && d.t > 2;
-    if (sign && canCast) {
+    // 수인을 6초 유지 → 1초째부터 영창 음성(약 5초)이 나오고, 끝날 즈음 전개. 해제는 1.5초
+    const casting = V.state === 'idle';
+    const need = casting ? 6 : 1.5;
+    if (d.auto && !(casting && canCast)) d.auto = false;
+    const held = (sign || d.auto) && canCast;
+    if (held) {
+      d.lost = 0;
       d.sign += dt;
       if (Math.random() < 0.5) {
-        inp.left.pulse(0.1 + d.sign * 0.4, 20);
-        inp.right.pulse(0.1 + d.sign * 0.4, 20);
+        inp.left.pulse(0.1 + (d.sign / need) * 0.6, 20);
+        inp.right.pulse(0.1 + (d.sign / need) * 0.6, 20);
       }
-      if (V.state === 'idle' && Math.random() < 0.6) fx.implode(_v.copy(inp.head).addScaledVector(inp.headDir, 0.4), 2, C.blueHi, 0.5, 0.3, 0.015);
-      if (d.sign >= 1.5) {
+      if (casting && d.sign >= 1 && !d.voice) d.voice = this.ctx.sfx.playClip('gojoDomain', { vol: 1.1 });
+      if (d.sign >= need) {
         d.sign = 0;
+        d.auto = false;
+        d.voice = null;
         if (V.state === 'active') this._endDomain();
         else this._castDomain();
       }
-    } else d.sign = Math.max(0, d.sign - dt * 2);
-    ring.material.opacity = Math.min(1, d.sign / 1.5) * 0.9;
+    } else if ((d.lost = (d.lost ?? 0) + dt) > 0.3 || !canCast) {
+      // 추적이 잠깐 흔들리는 정도(0.3초)는 봐준다
+      d.sign = 0;
+      if (d.voice) {
+        d.voice.stop(0.25);
+        d.voice = null;
+      }
+    }
+    // 진행 표시: 수인을 맺은 손 앞에 작은 고리가 차오른다
+    const k = Math.min(1, d.sign / need);
+    ring.material.opacity = k * 0.9;
     ring.visible = d.sign > 0.01;
-    ring.position.set(inp.head.x, 0.03, inp.head.z);
-    ring.scale.setScalar(0.4 + (d.sign / 1.5) * 1.6);
+    const sh = this._signSide ? inp[this._signSide] : null;
+    if (sh && sh.active) ring.position.copy(sh.pos);
+    else ring.position.copy(inp.head).addScaledVector(inp.headDir, 0.35);
+    ring.quaternion.copy(inp.headQuat);
+    ring.scale.setScalar(0.03 + k * 0.05);
+    if (ring.visible && Math.random() < 0.5) fx.implode(ring.position, 2, C.blueHi, 0.12, 0.25, 0.01);
 
     if (V.frozenPhase && !world.domain) world.domain = { center: V.center.clone(), radius: 45, freeze: true };
     if (V.state === 'active') {
@@ -1032,8 +1074,11 @@ export class Gojo {
 
   /** 메뉴에서 직접 발동 */
   castDomain() {
-    if (this.void.state === 'idle' && this.domain.cd <= 0) this._castDomain();
-    else this.ctx.ui.callout('영역전개 재사용 대기 중');
+    // 메뉴에서 발동: 영창 음성을 먼저 들려주고 전개
+    if (this.void.state === 'idle' && this.domain.cd <= 0) {
+      this.domain.auto = true;
+      this.domain.sign = Math.max(this.domain.sign, 1);
+    } else this.ctx.ui.callout('영역전개 재사용 대기 중');
   }
 
   _castDomain() {
@@ -1047,7 +1092,6 @@ export class Gojo {
     this.void.start(center, inp.headDir);
     ui.manga({ top: '領域展開', main: '無量空処', ruby: 'むりょうくうしょ', color: '#6fb8ff', big: true });
     sfx.domain();
-    fx.shockwave(_v.copy(center).setY(0.05), new THREE.Color(0xdff0ff), 6, 1.2);
     inp.left.pulse(1, 300);
     inp.right.pulse(1, 300);
   }
@@ -1063,6 +1107,11 @@ export class Gojo {
 
   /** 배경 전환 등으로 영역을 즉시 해제 */
   cancelDomain() {
+    const d = this.domain;
+    d.voice?.stop(0.2);
+    d.voice = null;
+    d.auto = false;
+    d.sign = 0;
     if (this.void.state !== 'idle') {
       this.void._exitVoid();
       this.void.state = 'idle';
@@ -1073,6 +1122,7 @@ export class Gojo {
 
   dispose() {
     window.removeEventListener('wheel', this._onWheel);
+    this.domain.voice?.stop(0.2);
     for (const side of ['left', 'right']) {
       const s = this.hs[side];
       if (s.mode === 'blue') this._disposeBlue(s);

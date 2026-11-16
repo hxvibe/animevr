@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { classifyHand, makeGestureResult, JOINT_NAMES } from './gestures.js';
+import { markHandTree } from './handmask.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -217,6 +218,15 @@ export class Input {
     if (xr.isPresenting) {
       this.mode = 'xr';
       xr.updateCamera(this.camera);
+      // 손·컨트롤러 모델(비동기 로드)에 스텐실 표시 → 오버레이 글자가 손을 뚫고 보이지 않게
+      this._maskT = (this._maskT ?? 0) - dt;
+      if (this._maskT <= 0) {
+        this._maskT = 0.5;
+        for (const sl of this.slots) {
+          markHandTree(sl.hand);
+          markHandTree(sl.grip);
+        }
+      }
     }
     this.camera.getWorldPosition(this.head);
     this.camera.getWorldQuaternion(this.headQuat);

@@ -223,6 +223,11 @@ export class EnergyOrb {
     this.hot.material.opacity = 0.7 + Math.random() * 0.3;
     const r = this.radius;
     const cam = this.ctx.input.head;
+    // 빛 번짐 스프라이트를 카메라 쪽으로 살짝 당겨, 손가락과 교차하며 손이 잘려 보이는 현상을 막는다
+    _v.subVectors(cam, this.pos);
+    const camD = _v.length();
+    _v.multiplyScalar(Math.min(r * 1.6, 0.14, camD * 0.4) / Math.max(1e-4, camD));
+    for (const sp of [this.halo, this.tint, this.ring, this.hot, ...this.arcs]) sp.position.copy(_v);
     this.boltT -= dt;
     if (this.boltT <= 0) {
       this.boltT = 0.05 + Math.random() * 0.04;

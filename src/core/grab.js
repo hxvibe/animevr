@@ -35,11 +35,10 @@ export class Grab {
           continue;
         }
         const release = !h.active || (h.source === 'hand' ? h.gesture !== 'fist' && h.gestureTime > 0.05 : !h.btn.grip);
-        // 손을 따라감
+        // 손을 따라감 (더미는 잡은 관절만 손에 붙고 나머지는 중력에 늘어진다)
         const target = _v.copy(h.palm).add(H.offset);
-        const obj = t.kind === 'dummy' ? t.root.position : t.pos;
-        obj.lerp(target, 1 - Math.exp(-dt * 25));
-        if (t.kind === 'dummy') t.root.quaternion.slerp(H.quat, 1 - Math.exp(-dt * 10));
+        if (t.kind === 'dummy') t.holdAt(target);
+        else t.pos.lerp(target, 1 - Math.exp(-dt * 25));
         if (release) this._release(side, h.vel.clone().multiplyScalar(1.7));
       }
     }
@@ -64,14 +63,14 @@ export class Grab {
         }
         if (t) {
           this.desk = { t };
-          if (t.kind === 'dummy') t.grab({ drop: () => (this.desk = null) });
+          if (t.kind === 'dummy') t.grab({ drop: () => (this.desk = null) }, null);
           else t.held = true;
         }
       } else if (this.desk) {
         const t = this.desk.t;
-        const target = _v.copy(inp.head).addScaledVector(inp.headDir, 1.4).add(new THREE.Vector3(0, t.kind === 'dummy' ? -1.2 : -0.2, 0));
-        const obj = t.kind === 'dummy' ? t.root.position : t.pos;
-        obj.lerp(target, 1 - Math.exp(-dt * 15));
+        const target = _v.copy(inp.head).addScaledVector(inp.headDir, 1.4).add(new THREE.Vector3(0, -0.2, 0));
+        if (t.kind === 'dummy') t.holdAt(target);
+        else t.pos.lerp(target, 1 - Math.exp(-dt * 15));
         if (!down || !t.alive) {
           const v = inp.headDir.clone().multiplyScalar(11).add(new THREE.Vector3(0, 2, 0));
           if (t.kind === 'dummy') t.release(v);
@@ -86,17 +85,18 @@ export class Grab {
   }
 
   _grab(side, t, h) {
-    const offset = new THREE.Vector3();
+    let offset = new THREE.Vector3();
     if (t.kind === 'dummy') {
-      // 잡은 지점이 손에 붙도록
-      offset.subVectors(t.root.position, h.palm);
-      t.grab({ drop: () => this._release(side, new THREE.Vector3()) });
+      // 손에 가장 가까운 관절을 잡는다 (손바닥에서 조금만 떨어지게)
+      offset = t.grab({ drop: () => this._release(side, new THREE.Vector3()) }, h.palm);
+      if (!offset) return;
+      if (offset.length() > 0.06) offset.setLength(0.06);
     } else {
       offset.subVectors(t.pos, h.palm);
       t.held = true;
       t.asleep = false;
     }
-    this.held[side] = { t, offset, quat: t.kind === 'dummy' ? t.root.quaternion.clone() : null };
+    this.held[side] = { t, offset };
     h.pulse(0.6, 60);
     this.ctx.sfx.tone({ type: 'sine', f0: 300, f1: 200, dur: 0.08, vol: 0.12 });
   }

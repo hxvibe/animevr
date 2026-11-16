@@ -34,7 +34,7 @@ export class Sukuna {
     this.bow = null;
     this.used = { kai: false, hachi: false };
     this.shrine = new MalevolentShrine(ctx);
-    this.domain = { sign: 0, cd: 0, t: 0, duration: 12, hitT: new Map(), cutSfx: 0 };
+    this.domain = { sign: 0, cd: 0, t: 0, duration: 20, hitT: new Map(), cutSfx: 0 };
     this._mangaCd = { kai: 0, hachi: 0 };
     this._deskSlashT = 0;
     this.scarGeo = new THREE.PlaneGeometry(1, 1);
@@ -126,7 +126,7 @@ export class Sukuna {
     this._updateDomain(dt);
     this._updateScars(dt);
     this.lines.bright = this.ctx.fx.brightBg;
-    this.lines.update(dt);
+    this.lines.update(dt, this.ctx.input.head);
     this.shrine.update(dt);
   }
 
@@ -288,12 +288,13 @@ export class Sukuna {
     along.normalize();
     const n = new THREE.Vector3().crossVectors(travel, along).normalize();
     const g = makeCrescent(0.55);
-    const basis = new THREE.Matrix4().makeBasis(travel, along, n);
+    // 칼날 길이 = along, 두께 = n, 면은 진행 방향(=플레이어 반대쪽)을 바라본다
+    const basis = new THREE.Matrix4().makeBasis(along, n, travel);
     g.quaternion.setFromRotationMatrix(basis);
     const start = (h.source === 'desktop' ? inp.head.clone().addScaledVector(inp.headDir, 0.4) : h.palm.clone()).addScaledVector(travel, 0.25);
     g.position.copy(start);
     this.ctx.scene.add(g);
-    this.slashes.push({ g, pos: g.position, start, travel, along, n, speed: 32, life: 0.55, hit: new Set() });
+    this.slashes.push({ g, pos: g.position, start, travel, along, n, speed: 26, life: 0.55, hit: new Set() });
     sfx.slash(start, 0.9 + Math.random() * 0.3);
     h.pulse?.(0.5, 30);
     this.used.kai = true;
@@ -342,7 +343,9 @@ export class Sukuna {
         }
       }
       const k = Math.max(0, s.life / 0.55);
-      s.g.children.forEach((m, j) => (m.material.opacity = [0.5, 1, 0.35, this.ctx.fx.brightBg ? 0.8 : 0][j] * k));
+      const fade = Math.min(1, k * 3);
+      s.g.children.forEach((m, j) => (m.material.opacity = [1, 0.75][j] * fade));
+      s.g.scale.setScalar(1 + (1 - k) * 0.6);
       if (s.pos.y < 0.05 || s.life <= 0) {
         if (s.pos.y < 0.3) this._scar(s.pos, s.along, 1.2, 0.04);
         this.ctx.scene.remove(s.g);
@@ -414,7 +417,7 @@ export class Sukuna {
           this.denied();
           return;
         }
-        this.bow = { ...start, draw: 0, t: 0, arrow: new FireArrow(this.ctx.scene), light: fx.borrowLight(FIRE, 3, 6) };
+        this.bow = { ...start, draw: 0, t: 0, arrow: new FireArrow(this.ctx), light: fx.borrowLight(FIRE, 3, 6) };
         ui.manga({ top: '■', main: '開', ruby: 'フーガ', color: '#ff6a10' });
         sfx.tone({ type: 'sawtooth', f0: 80, f1: 160, dur: 0.6, vol: 0.2 });
       }
@@ -444,11 +447,11 @@ export class Sukuna {
     const len = tip.distanceTo(tail) + 0.25;
     A.group.position.copy(tail);
     A.group.lookAt(_v.copy(tail).sub(dir)); // -Z 가 진행 방향이 되도록
-    A.setLength(len, 0.8 + b.draw);
+    A.setLength(len, 0.45 + b.draw * 0.6);
     A.update(dt);
     if (b.light) b.light.position.copy(tip);
     if (Math.random() < 0.9) fx.spawn(tip, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.3), Math.random() < 0.5 ? FIRE : FIRE_HI, 0.04 + b.draw * 0.06, 0.4, 1, -1, 0.5);
-    if (Math.random() < 0.3) fx.spawnDark(tip, new THREE.Vector3(0, 0.6, 0), SMOKE, 0.06, 0.8, 1, -0.5, 1.5);
+    if (Math.random() < 0.15) fx.spawnDark(_v3.copy(tip).addScaledVector(dir, 0.1), new THREE.Vector3(0, 0.6, 0), SMOKE, 0.03, 0.6, 1, -0.5, 1.2);
     if (Math.random() < 0.4) {
       B.pulse?.(0.1 + b.draw * 0.5, 15);
       D.pulse?.(0.1 + b.draw * 0.5, 15);
@@ -464,8 +467,8 @@ export class Sukuna {
 
   _fireArrow(pos, dir, draw) {
     const { fx, sfx } = this.ctx;
-    const arrow = new FireArrow(this.ctx.scene);
-    arrow.setLength(0.9, 1.4);
+    const arrow = new FireArrow(this.ctx);
+    arrow.setLength(2.6, 1.25);
     arrow.group.position.copy(pos);
     arrow.group.lookAt(_v.copy(pos).add(dir));
     arrow.group.rotateY(Math.PI); // -Z 가 진행 방향
@@ -497,8 +500,13 @@ export class Sukuna {
         }
       }
       if (a.light) a.light.position.copy(a.pos);
-      for (let k = 0; k < 4; k++) fx.spawn(a.pos, _v.randomDirection().multiplyScalar(0.8).addScaledVector(a.vel, -0.05), k % 2 ? FIRE : FIRE_HI, 0.08, 0.4, 2, -1, 0.8);
-      if (Math.random() < 0.5) fx.spawnDark(a.pos, _v.set(0, 0.5, 0), SMOKE, 0.1, 0.9, 1, -0.5, 2);
+      // 불티와 꼬리 연기
+      const back = _v3.copy(a.vel).normalize();
+      for (let k = 0; k < 5; k++) {
+        const p = _v2.copy(a.pos).addScaledVector(back, -Math.random() * 2.2).add(_v.randomDirection().multiplyScalar(0.25));
+        fx.spawn(p, _v.randomDirection().multiplyScalar(1.2).addScaledVector(a.vel, -0.04), k % 2 ? FIRE : FIRE_HI, 0.025 + Math.random() * 0.03, 0.5 + Math.random() * 0.4, 1.5, -0.6, 0);
+      }
+      if (Math.random() < 0.6 && a.pos.distanceTo(this.ctx.input.head) > 4) fx.spawnDark(_v2.copy(a.pos).addScaledVector(back, -1.6), _v.set((Math.random() - 0.5) * 0.4, 0.5, (Math.random() - 0.5) * 0.4), new THREE.Color(0x3a3030), 0.18, 1.2, 1, -0.4, 2.5);
       if (hit) {
         this._kamino(a.pos.clone(), a.draw, true);
         a.arrow.dispose();
@@ -587,17 +595,27 @@ export class Sukuna {
     for (const pc of [...world.slicer.pieces]) {
       if (Math.abs(plane.distanceToPoint(pc.pivot.position)) < pc.radius && pc.localPlanes.length < 3) world.slicer.sliceAgain(pc, plane.clone(), { sep: 1 });
     }
-    // 연출: 공간 자체가 갈라지는 선 + 순간적인 면
-    const mid = o.clone().addScaledVector(travel, 45);
-    this.lines.add(mid, travel, n, 95, 0.06, 0.6, 0xffffff);
-    this.lines.add(mid, travel, n, 95, 0.25, 0.35, 0xff3030);
+    // 연출: 휘두른 방향(along)으로 화면을 가로지르는 거대한 칼날이 앞으로 뻗어 나가며 공간을 가른다
+    for (let i = 0; i < 7; i++) {
+      const d = 2.5 + i * i * 1.6;
+      this.lines.add(_v.copy(o).addScaledVector(travel, d), along, n, 3 + d * 1.25, 0.05 + d * 0.012, 0.45 + i * 0.07, 0xffffff);
+    }
+    const big = makeCrescent(1);
+    big.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(along, n, travel));
+    big.position.copy(o).addScaledVector(travel, 1.5);
+    fx.addTransient(big, 0.6, (k) => {
+      const d = 1.5 + k * 60;
+      big.position.copy(o).addScaledVector(travel, d);
+      big.scale.set(1 + d * 0.9, 1 + d * 0.25, 1 + d * 0.2);
+      big.children.forEach((m, j) => (m.material.opacity = (j ? 0.6 : 1) * (k < 0.7 ? 1 : (1 - k) / 0.3)));
+    }, () => big.children.forEach((m) => m.material.dispose()));
     const sheet = new THREE.Mesh(this.sheetGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    const mid = o.clone().addScaledVector(travel, 45);
     sheet.position.copy(mid);
     sheet.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(travel, along, n));
-    sheet.scale.set(90, 0.01, 1);
+    sheet.scale.set(90, 120, 1);
     fx.addTransient(sheet, 0.35, (k) => {
-      sheet.scale.y = 0.01 + Math.sin(k * Math.PI) * 14;
-      sheet.material.opacity = 0.3 * (1 - k);
+      sheet.material.opacity = 0.18 * Math.sin(k * Math.PI);
     });
     // 바닥과의 교선에 흉터
     const groundDir = new THREE.Vector3().crossVectors(n, UP);
@@ -701,6 +719,11 @@ export class Sukuna {
     ui.manga({ top: '領域展開', main: '伏魔御廚子', ruby: 'ふくまみづし', color: '#ff2020', big: true });
     sfx.rumble(2.5, 0.6);
     sfx.tone({ type: 'sawtooth', f0: 55, f1: 40, dur: 3, vol: 0.3, attack: 0.4 });
+    // 영창 음성 → 끝나기 0.5초 전부터 영역 음악
+    this._stopMusic(0.1);
+    const voice = sfx.playClip('sukunaDomain', { vol: 1.1 });
+    const lead = Math.max(0, (voice.duration || sfx.clipDuration('sukunaDomain')) - 0.5);
+    this.music = sfx.playClip('shrineMusic', { vol: 0.75, delay: lead, fadeIn: 0.3 });
     inp.left.pulse(1, 400);
     inp.right.pulse(1, 400);
   }
@@ -715,6 +738,7 @@ export class Sukuna {
       S.stop();
       d.cd = 10;
       world.domain = null;
+      this._stopMusic(2);
       return;
     }
     if (d.stopSlashes) return;
@@ -755,7 +779,13 @@ export class Sukuna {
     }
   }
 
+  _stopMusic(fade = 1) {
+    this.music?.stop(fade);
+    this.music = null;
+  }
+
   cancelDomain() {
+    this._stopMusic(0.3);
     if (this.shrine.state !== 'idle') {
       this.shrine.state = 'idle';
       this.shrine.group.visible = false;
@@ -769,6 +799,7 @@ export class Sukuna {
 
   dispose() {
     const { scene, fx } = this.ctx;
+    this._stopMusic(0.3);
     for (const s of this.slashes) scene.remove(s.g);
     for (const a of this.arrows) {
       a.arrow.dispose();

@@ -21,6 +21,23 @@ export const DUMMY_TYPES = {
 const NAMES = ['다나카 히로시', '스즈키 켄타', '야마다 타로', '사토 유이치', '이토 마사키', '와타나베 쇼', '나카무라 료', '고바야시 준', '카토 다이스케', '요시다 하루', '야마모토 렌', '마츠모토 카이', '이노우에 소타', '기무라 히나', '하야시 아오이', '시미즈 유키', '모리 겐지', '이케다 세나'];
 let _nameIdx = Math.floor(Math.random() * NAMES.length);
 
+// ───────── 래그돌 (위치 기반 물리) ─────────
+// 관절 위치를 입자로 두고 거리 구속으로 몸을 유지한다. 잡은 부위는 손에 고정되고 나머지는 중력에 따라 늘어진다.
+const RAG = ['hips', 'chest', 'neck', 'head', 'shL', 'elL', 'hdL', 'shR', 'elR', 'hdR', 'hpL', 'knL', 'ftL', 'hpR', 'knR', 'ftR'];
+const RI = Object.fromEntries(RAG.map((k, i) => [k, i]));
+const TORSO = ['hips', 'chest', 'neck', 'shL', 'shR', 'hpL', 'hpR'];
+const LIMBS = [['neck', 'head'], ['shL', 'elL'], ['elL', 'hdL'], ['shR', 'elR'], ['elR', 'hdR'], ['hpL', 'knL'], ['knL', 'ftL'], ['hpR', 'knR'], ['knR', 'ftR']];
+// 너무 접히지 않도록 하는 최소 거리 (팔꿈치·무릎·목)
+const MINS = [['shL', 'hdL', 0.45], ['shR', 'hdR', 0.45], ['hpL', 'ftL', 0.55], ['hpR', 'ftR', 0.55], ['chest', 'head', 0.8], ['hips', 'knL', 0.5], ['hips', 'knR', 0.5]];
+const RAD = { hips: 0.11, chest: 0.12, neck: 0.08, head: 0.1, shL: 0.06, shR: 0.06, elL: 0.045, elR: 0.045, hdL: 0.04, hdR: 0.04, hpL: 0.08, hpR: 0.08, knL: 0.06, knR: 0.06, ftL: 0.05, ftR: 0.05 };
+const _qa = new THREE.Quaternion();
+const _qb = new THREE.Quaternion();
+const _m4 = new THREE.Matrix4();
+const _m5 = new THREE.Matrix4();
+const _bx = new THREE.Vector3();
+const _by = new THREE.Vector3();
+const _bz = new THREE.Vector3();
+
 // ───────── GLB 더미 템플릿 ─────────
 const MODEL_H = 7.315;
 const DUMMY_H = 1.8;
@@ -301,8 +318,13 @@ export class Dummy {
     if (this.frozen) return;
     if (v.length() > 2.2 * Math.sqrt(this.scale) || this.vel.y > 1.5) {
       if (this.state !== 'air' && this.state !== 'heart') {
+        const v0 = this.vel.clone().sub(v);
         this.state = 'air';
         this.stateT = 0;
+        if (!this.dying) {
+          this._ragStart(v0);
+          this.rag.vel.copy(v0); // 이번 충격량은 다음 단계에서 전 입자에 더해진다
+        }
       }
       if (spin) this.angVel.add(_v.randomDirection().multiplyScalar(spin));
     }
@@ -321,14 +343,38 @@ export class Dummy {
   }
 
   // ── 잡기 / 던지기 ──
-  grab(by) {
+  /**
+   * @param by { drop() }
+   * @param at 잡은 지점(월드). 가장 가까운 관절이 손에 고정된다. 없으면 가슴
+   * @returns 잡은 관절 위치 - at (손에 붙일 오프셋)
+   */
+  grab(by, at = null) {
     if (!this.alive || this.dying) return false;
     this.heldBy = by;
+    if (!this.rag) this._ragStart(this.state === 'air' ? this.vel : _v.set(0, 0, 0));
     this.state = 'held';
     this.stateT = 0;
-    this.vel.set(0, 0, 0);
+    const R = this.rag;
+    let pin = RI.chest;
+    if (at) {
+      let bd = Infinity;
+      for (let i = 0; i < RAG.length; i++) {
+        const d = R.p[i].distanceToSquared(at);
+        if (d < bd) {
+          bd = d;
+          pin = i;
+        }
+      }
+    }
+    R.pin = pin;
+    R.pinTarget.copy(R.p[pin]);
     this.angVel.set(0, 0, 0);
-    return true;
+    return at ? R.p[pin].clone().sub(at) : new THREE.Vector3();
+  }
+
+  /** 잡고 있는 동안 고정 관절이 따라갈 위치 */
+  holdAt(p) {
+    if (this.rag) this.rag.pinTarget.copy(p);
   }
 
   release(vel) {
@@ -336,9 +382,189 @@ export class Dummy {
     if (!this.alive) return;
     this.state = 'air';
     this.stateT = 0;
-    this.vel.copy(vel);
-    const k = Math.min(1, vel.length() / 4);
-    this.angVel.set((Math.random() - 0.5) * 4 * k, (Math.random() - 0.5) * 2 * k, (Math.random() - 0.5) * 4 * k);
+    if (this.rag) {
+      this.rag.pin = -1;
+      // 손의 움직임으로 생긴 흔들림은 유지하고, 던진 속도를 더한다
+      this.rag.vel.copy(this.vel);
+      this.vel.add(vel);
+      if (vel.lengthSq() < 0.01) this.vel.copy(this.rag.vel);
+    } else {
+      this.vel.copy(vel);
+    }
+  }
+
+  // ── 래그돌 ──
+  _jointMap() {
+    if (this._jm) return this._jm;
+    const m = {
+      hips: this.hips, chest: this.spine, neck: this.neck, head: this.head,
+      shL: this.armL.sh, elL: this.armL.el, hdL: this.armL.hd, shR: this.armR.sh, elR: this.armR.el, hdR: this.armR.hd,
+      hpL: this.legL.hp, knL: this.legL.kn, ftL: this.legL.ft, hpR: this.legR.hp, knR: this.legR.kn, ftR: this.legR.ft,
+    };
+    this._jm = m;
+    // GLB: 엉덩이와 가슴 사이의 중간 관절
+    this._spineLow = this.root.getObjectByName('J_spine') ?? null;
+    return m;
+  }
+
+  /** 기본 자세(모든 관절 회전 0)에서의 관절 위치 (root 로컬) */
+  _ragRestPose() {
+    if (this._rest) return this._rest;
+    const J = this._jointMap();
+    const all = [...Object.values(J), this._spineLow].filter(Boolean);
+    const saved = all.map((j) => j.quaternion.clone());
+    const rq = this.root.quaternion.clone();
+    const rp = this.root.position.clone();
+    for (const j of all) j.quaternion.identity();
+    this.root.quaternion.identity();
+    this.root.position.set(0, 0, 0);
+    this.root.updateMatrixWorld(true);
+    const rest = RAG.map((k) => J[k].getWorldPosition(new THREE.Vector3()).divideScalar(this.scale));
+    all.forEach((j, i) => j.quaternion.copy(saved[i]));
+    this.root.quaternion.copy(rq);
+    this.root.position.copy(rp);
+    this.root.updateMatrixWorld(true);
+    const len = (a, b) => rest[RI[a]].distanceTo(rest[RI[b]]) * this.scale;
+    const cons = [];
+    for (let i = 0; i < TORSO.length; i++) for (let j = i + 1; j < TORSO.length; j++) cons.push([RI[TORSO[i]], RI[TORSO[j]], len(TORSO[i], TORSO[j]), 1]);
+    for (const [a, b] of LIMBS) cons.push([RI[a], RI[b], len(a, b), 1]);
+    const mins = MINS.map(([a, b, f]) => [RI[a], RI[b], len(a, b) * f]);
+    // 다리 관절의 자식 방향(로컬)
+    const dir0 = {};
+    for (const [a, b] of LIMBS) dir0[a] = J[b].position.clone().normalize();
+    this._rest = { rest, cons, mins, dir0 };
+    return this._rest;
+  }
+
+  _ragStart(vel) {
+    const RP = this._ragRestPose();
+    this.root.updateMatrixWorld(true);
+    const J = this._jointMap();
+    const p = [];
+    const v = [];
+    for (const k of RAG) {
+      p.push(J[k].getWorldPosition(new THREE.Vector3()));
+      v.push(new THREE.Vector3().copy(vel));
+    }
+    this.rag = { p, v, prev: p.map((x) => x.clone()), pin: -1, pinTarget: new THREE.Vector3(), vel: new THREE.Vector3().copy(vel), still: 0, rest: RP };
+  }
+
+  _ragStep(dt) {
+    const R = this.rag;
+    const { cons, mins } = R.rest;
+    const n = RAG.length;
+    // 외부에서 바뀐 속도(충격·인력 등)를 모든 입자에 반영
+    _v.subVectors(this.vel, R.vel);
+    if (_v.lengthSq() > 1e-8) for (let i = 0; i < n; i++) if (i !== R.pin) R.v[i].add(_v);
+    const g = 9.8 * (this.frozen ? 0.15 : 1);
+    const damp = this.frozen ? 6 : 0.25;
+    const sub = Math.min(4, Math.max(1, Math.ceil(dt / (1 / 90))));
+    const h = dt / sub;
+    const b = this.world.ctx.env.bounds;
+    let impact = 0;
+    for (let s = 0; s < sub; s++) {
+      for (let i = 0; i < n; i++) {
+        R.prev[i].copy(R.p[i]);
+        if (i === R.pin) {
+          R.p[i].lerp(R.pinTarget, 1 - Math.exp(-h * 40));
+          continue;
+        }
+        R.v[i].y -= g * h;
+        R.v[i].multiplyScalar(Math.max(0, 1 - damp * h));
+        R.p[i].addScaledVector(R.v[i], h);
+      }
+      for (let it = 0; it < 6; it++) {
+        for (const [a, c, L] of cons) this._ragSolve(a, c, L, 0);
+        for (const [a, c, L] of mins) this._ragSolve(a, c, L, -1);
+        for (let i = 0; i < n; i++) {
+          const P = R.p[i];
+          const r = RAD[RAG[i]] * this.scale;
+          if (P.y < r) {
+            if (it === 0) impact = Math.max(impact, -R.v[i].y);
+            P.y = r;
+          }
+          if (b) {
+            P.x = THREE.MathUtils.clamp(P.x, b.minX, b.maxX);
+            P.z = THREE.MathUtils.clamp(P.z, b.minZ, b.maxZ);
+          }
+        }
+      }
+      for (let i = 0; i < n; i++) {
+        R.v[i].subVectors(R.p[i], R.prev[i]).divideScalar(h);
+        const r = RAD[RAG[i]] * this.scale;
+        if (R.p[i].y <= r + 0.002) {
+          // 바닥 마찰
+          const f = Math.max(0, 1 - 12 * h);
+          R.v[i].x *= f;
+          R.v[i].z *= f;
+          if (R.v[i].y > 0) R.v[i].y *= 0.3;
+        }
+      }
+    }
+    if (impact > 9 && this.state === 'air') this.damage((impact - 9) * 4, { type: 'impact' });
+    // 평균 속도 = 몸 전체 속도
+    this.vel.set(0, 0, 0);
+    for (let i = 0; i < n; i++) this.vel.add(R.v[i]);
+    this.vel.divideScalar(n);
+    R.vel.copy(this.vel);
+    this._ragApply();
+  }
+
+  /** 거리 구속. mode 0: 정확히 L, -1: 최소 L */
+  _ragSolve(a, c, L, mode) {
+    const R = this.rag;
+    const pa = R.p[a];
+    const pc = R.p[c];
+    _v2.subVectors(pc, pa);
+    const d = _v2.length();
+    if (d < 1e-6) return;
+    if (mode < 0 && d >= L) return;
+    const wa = a === R.pin ? 0 : 1;
+    const wc = c === R.pin ? 0 : 1;
+    const w = wa + wc;
+    if (!w) return;
+    const k = (d - L) / (d * w);
+    pa.addScaledVector(_v2, k * wa);
+    pc.addScaledVector(_v2, -k * wc);
+  }
+
+  /** 입자 위치 → 몸통 방향 + 팔다리 관절 회전 */
+  _ragApply() {
+    const R = this.rag;
+    const { rest, dir0 } = R.rest;
+    const P = R.p;
+    const J = this._jointMap();
+    // 몸통 기준축 (현재 / 기본 자세)
+    const basis = (hips, chest, shL, shR, out) => {
+      _by.subVectors(chest, hips).normalize();
+      _bx.subVectors(shL, shR);
+      _bx.addScaledVector(_by, -_bx.dot(_by)).normalize();
+      _bz.crossVectors(_bx, _by);
+      return out.makeBasis(_bx, _by, _bz);
+    };
+    basis(P[RI.hips], P[RI.chest], P[RI.shL], P[RI.shR], _m4);
+    basis(rest[RI.hips], rest[RI.chest], rest[RI.shL], rest[RI.shR], _m5);
+    _m4.multiply(_m5.transpose());
+    const Q = this.root.quaternion.setFromRotationMatrix(_m4);
+    this.root.position.copy(P[RI.hips]).sub(_v.copy(rest[RI.hips]).multiplyScalar(this.scale).applyQuaternion(Q));
+    this.hips.quaternion.identity();
+    this.spine.quaternion.identity();
+    this._spineLow?.quaternion.identity();
+    // 팔다리·목: 부모 월드 회전 기준으로 자식 관절을 입자 쪽으로 향하게
+    const chain = (a, b, parentQ) => {
+      _v.subVectors(P[RI[b]], P[RI[a]]);
+      if (_v.lengthSq() < 1e-8) return parentQ;
+      _v.normalize().applyQuaternion(_qa.copy(parentQ).invert());
+      J[a].quaternion.setFromUnitVectors(dir0[a], _v);
+      return _qb.copy(parentQ).multiply(J[a].quaternion);
+    };
+    for (const [a, b, c] of [['shL', 'elL', 'hdL'], ['shR', 'elR', 'hdR'], ['hpL', 'knL', 'ftL'], ['hpR', 'knR', 'ftR']]) {
+      const q1 = chain(a, b, Q).clone();
+      chain(b, c, q1);
+      J[c].quaternion.identity();
+    }
+    chain('neck', 'head', Q);
+    J.head.quaternion.identity();
   }
 
   // ── 데스노트: 심장마비 ──
@@ -421,7 +647,32 @@ export class Dummy {
       if (this.flash <= 0) for (const m of this.mats) m.emissive.copy(m.userData.baseEmissive);
     }
     if (this.state === 'held') {
-      this._pose(dt, 'limp');
+      if (!this.rag) this._ragStart(_v.set(0, 0, 0));
+      this._ragStep(dt);
+      return;
+    }
+    if (this.state === 'air' && this.rag) {
+      this._ragStep(dt);
+      if (this.frozen) {
+        if (this.flash <= 0) this._setEmissive(_c.setHSL(0.58, 0.8, 0.08 + Math.random() * 0.1));
+        return;
+      }
+      // 거의 멈추면 쓰러진 자세 그대로 'down'
+      let maxV = 0;
+      let low = true;
+      for (let i = 0; i < RAG.length; i++) {
+        maxV = Math.max(maxV, this.rag.v[i].lengthSq());
+        if (i === RI.hips && this.rag.p[i].y > 0.45 * this.scale) low = false;
+      }
+      this.rag.still = maxV < 0.25 ? this.rag.still + dt : 0;
+      if ((this.rag.still > 0.35 && (low || this.stateT > 3)) || this.stateT > 8) {
+        this.rag = null;
+        this.vel.set(0, 0, 0);
+        this.angVel.set(0, 0, 0);
+        this.state = 'down';
+        this.stateT = 0;
+      }
+      if (this.root.position.lengthSq() > 250 * 250 || this.root.position.y < -20) this.kill({ type: 'erase' });
       return;
     }
     if (this.frozen) {
@@ -470,10 +721,15 @@ export class Dummy {
         _v.set(0, 0, 1).applyQuaternion(this.root.quaternion).setY(0);
         if (_v.lengthSq() > 1e-3) this.yaw = Math.atan2(_v.x, _v.z);
         this._upright.setFromAxisAngle(UP, this.yaw);
+        const J = this._jointMap();
+        this._getupJ = Object.values(J).map((j) => [j, j.quaternion.clone()]);
       }
     } else if (this.state === 'getup') {
       const k = Math.min(1, this.stateT / 0.7);
       const e = k * k * (3 - 2 * k);
+      // 래그돌로 꺾인 관절을 기본 자세로 되돌린다
+      if (this._getupJ) for (const [j, q0] of this._getupJ) j.quaternion.slerpQuaternions(q0, _q.identity(), e);
+      if (k >= 1) this._getupJ = null;
       this.root.quaternion.slerpQuaternions(this._getupFrom, this._upright, e);
       this.root.position.copy(this._getupPos).lerp(_v.set(this._getupPos.x, 0, this._getupPos.z), e);
       if (k >= 1) {

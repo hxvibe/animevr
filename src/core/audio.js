@@ -4,6 +4,74 @@ export class Sfx {
     this.ctx = null;
     this.master = null;
     this._noise = null;
+    this._raw = new Map(); // name → ArrayBuffer (미디코딩)
+    this._buf = new Map(); // name → AudioBuffer
+  }
+
+  /** 음성·음악 파일을 미리 받아 둔다 (디코딩은 오디오가 열린 뒤) */
+  preloadClips(map) {
+    for (const [name, url] of Object.entries(map)) {
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : null))
+        .then((ab) => {
+          if (!ab) return;
+          this._raw.set(name, ab);
+          this._decode(name);
+        })
+        .catch(() => {});
+    }
+  }
+
+  _decode(name) {
+    if (!this.ctx || this._buf.has(name) || !this._raw.has(name)) return null;
+    const ab = this._raw.get(name);
+    this._raw.delete(name);
+    const p = this.ctx.decodeAudioData(ab).then((b) => {
+      this._buf.set(name, b);
+      return b;
+    }).catch(() => null);
+    this._buf.set(name, null);
+    p.then((b) => this._buf.set(name, b));
+    return p;
+  }
+
+  clipDuration(name) {
+    return this._buf.get(name)?.duration ?? 0;
+  }
+
+  /** 디코딩된 파일 재생. 반환: { stop(fade), duration } */
+  playClip(name, { vol = 1, delay = 0, loop = false, fadeIn = 0 } = {}) {
+    const none = { stop() {}, duration: 0 };
+    if (!this.ctx) return none;
+    const buf = this._buf.get(name);
+    if (!buf) return none;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = loop;
+    const g = ctx.createGain();
+    const t0 = ctx.currentTime + Math.max(0, delay);
+    if (fadeIn > 0) {
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(vol, t0 + fadeIn);
+    } else g.gain.value = vol;
+    src.connect(g).connect(this.master);
+    src.start(t0);
+    let stopped = false;
+    return {
+      duration: buf.duration,
+      stop(fade = 0.6) {
+        if (stopped) return;
+        stopped = true;
+        const now = ctx.currentTime;
+        g.gain.cancelScheduledValues(now);
+        g.gain.setValueAtTime(g.gain.value, now);
+        g.gain.linearRampToValueAtTime(0, now + fade);
+        try {
+          src.stop(Math.max(now, t0) + fade + 0.05);
+        } catch (_) {}
+      },
+    };
   }
 
   /** 사용자 제스처(버튼 클릭) 안에서 호출해야 한다 */
@@ -24,6 +92,7 @@ export class Sfx {
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this._noise = buf;
+    for (const name of [...this._raw.keys()]) this._decode(name);
   }
 
   get ok() {

@@ -138,10 +138,13 @@ export class MalevolentShrine {
       this.shrine.traverse((o) => {
         if (o.isMesh) o.material.envMapIntensity = 0.5;
       });
-      this.depth = 20;
+      // 사당 바닥판(≈1m)이 땅에 닿고, 둘레의 뼈 무더기는 그만큼 땅에 파묻히도록 내린다
+      this.restY = -0.95;
+      this.depth = 13;
     } else {
       this.shrine = buildShrine(ctx.world.envMap);
-      this.depth = 10;
+      this.restY = -0.15;
+      this.depth = 8;
     }
     this.group.add(this.shrine);
     this.skyU = { uTime: { value: 0 }, uFade: { value: 0 } };
@@ -165,9 +168,10 @@ export class MalevolentShrine {
     this.t = 0;
     this.center.copy(center);
     const d = dir.clone().setY(0).normalize();
-    const pos = center.clone().addScaledVector(d, this.depth);
+    // 사당은 플레이어 뒤에 세우고, 정면(입)이 플레이어 쪽을 보게
+    const pos = center.clone().addScaledVector(d, -this.depth);
     this.shrine.position.set(pos.x, -16, pos.z);
-    this.shrine.rotation.y = Math.atan2(-d.x, -d.z);
+    this.shrine.rotation.y = Math.atan2(d.x, d.z);
     this.pool.position.set(center.x, 0.012, center.z);
     this.pool.scale.setScalar(0.01);
     this.group.visible = true;
@@ -189,7 +193,7 @@ export class MalevolentShrine {
     if (this.state === 'rise') {
       const k = Math.min(1, this.t / 1.6);
       const e = 1 - Math.pow(1 - k, 3);
-      this.shrine.position.y = -16 + e * 16;
+      this.shrine.position.y = -16 + e * (16 + this.restY);
       this.pool.scale.setScalar(0.01 + e * this.radius);
       // 하늘과 조명을 핏빛으로
       env.fog.color.lerp(new THREE.Color(0x200000), Math.min(1, dt * 3));
@@ -211,7 +215,7 @@ export class MalevolentShrine {
       }
     } else if (this.state === 'sink') {
       const k = Math.min(1, this.t / 1.2);
-      this.shrine.position.y = -k * k * 16;
+      this.shrine.position.y = this.restY - k * k * 16;
       this.pool.scale.setScalar(Math.max(0.01, this.radius * (1 - k)));
       this.skyU.uFade.value = 1 - k;
       if (k > 0.5 && this.sky.visible) {

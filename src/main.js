@@ -22,7 +22,7 @@ try {
 } catch (_) { /* 저장소 사용 불가 */ }
 const settings = { ...DEFAULTS, ...saved };
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -40,6 +40,11 @@ scene.add(rig);
 
 const ctx = { renderer, scene, camera, rig, settings };
 ctx.sfx = new Sfx();
+ctx.sfx.preloadClips({
+  gojoDomain: 'assets/audio/gojo_domain_voice.mp3',
+  sukunaDomain: 'assets/audio/sukuna_domain_voice.mp3',
+  shrineMusic: 'assets/audio/sukuna_domain_music.mp3',
+});
 ctx.fx = new Fx(scene, renderer);
 ctx.input = new Input(renderer, rig, camera, renderer.domElement);
 ctx.input.locomotion = settings.locomotion;

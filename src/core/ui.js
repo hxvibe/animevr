@@ -219,7 +219,7 @@ export class UI {
     g.font = `400 26px ${FONT}`;
     g.fillStyle = 'rgba(255,255,255,0.55)';
     g.fillText('손가락으로 직접 누르기 · 멀리서는 손으로 가리키고 엄지와 검지를 맞대기', 90, 900);
-    g.fillText('게임 중 메뉴: 왼손바닥을 얼굴 쪽으로 → ≡ 아이콘을 집기 · Y 버튼 · H 키', 90, 940);
+    g.fillText('게임 중 메뉴: 퀘스트 기본 메뉴(왼손바닥을 얼굴 쪽으로 → ≡ 집기) · Y 버튼 · H 키', 90, 940);
   }
 
   // ───────────────── 옵션 ─────────────────
@@ -692,6 +692,7 @@ export class UI {
     const icon = this.menuIcon.mesh;
     this._iconCd -= dt;
     let show = false;
+    void R;
     if (inp.mode === 'xr' && L.active && L.source === 'hand') {
       _v.subVectors(inp.head, L.palm);
       const d = _v.length();
@@ -702,14 +703,12 @@ export class UI {
         icon.lookAt(inp.head);
       }
     }
-    this._iconShow = show ? Math.min(1, this._iconShow + dt * 6) : Math.max(0, this._iconShow - dt * 6);
-    icon.visible = this._iconShow > 0.01;
-    this.menuIcon.mat.opacity = this._iconShow;
-    icon.scale.setScalar(0.7 + 0.3 * this._iconShow);
+    // 아이콘은 그리지 않는다 (퀘스트가 같은 자리에 기본 ≡ 아이콘을 띄움). 같은 손동작(왼손바닥을 얼굴로 + 집기)만 받는다
+    icon.visible = false;
     if (!show || this._iconCd > 0) return;
-    const poke = R.active && R.source === 'hand' && R.indexTip.distanceTo(icon.position) < 0.03;
-    if (L.pinchPressed || poke) {
+    if (L.pinchPressed) {
       this._iconCd = 0.6;
+      this.lastMenuToggle = performance.now();
       this.ctx.sfx.click();
       L.pulse(0.4, 30);
       if (this.mode === 'game') this.showOptions(!this.options.mesh.visible);

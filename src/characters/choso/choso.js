@@ -4,7 +4,8 @@
 //  · 超新星(초신성): 압축한 피를 공중에 띄워 두었다가 한꺼번에 사방으로 터뜨린다
 //  · 赫鱗躍動・載(혁린약동・재): 혈류를 조작해 신체 능력을 끌어올린다 (주먹 위력 증가)
 import * as THREE from 'three';
-import { BloodOrb, BloodBeam, Supernova } from './vfx.js';
+import { BloodOrb, BloodBeam, Supernova, FluidView } from './vfx.js';
+import { FluidSim, OWNER_FREE, OWNER_LEFT, OWNER_RIGHT, OWNER_CONV } from './fluid.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -30,6 +31,16 @@ export class Choso {
     this._together = 0;
     this._fireT = 0;
     this._detLock = false;
+    // 피: 물처럼 움직이는 입자 유체 (손으로 꺼내고, 끌고, 던지고, 모은다)
+    this.fluid = new FluidSim(260);
+    this.view = new FluidView(ctx.scene, ctx.world.envMap, 260);
+    this.hc = { left: this._handCtl(), right: this._handCtl() };
+    this._emitAcc = 0;
+    this._splatT = 0;
+  }
+
+  _handCtl() {
+    return { emitAcc: 0, recallT: 0, throwCd: 0 };
   }
 
   spend(x) {
@@ -60,6 +71,7 @@ export class Choso {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
+        { head: '피 다루기', color: '#ff6a7a', text: '한 손바닥을 위로 펴면 손끝에서 피가 흘러나와 손 위에 물처럼 모임 → 손을 움직이면 따라옴\n검지로 가리키면 물줄기처럼 뻗고, 휙 던지면 날아가 더미를 때림 · 주먹 쥐면 쏟아짐 · 편 손바닥을 흩어진 피로 향하면 다시 모임' },
         { head: '百斂(백렴) — 압축', color: '#ff4a5a', text: '편 두 손을 앞으로 뻗어 맞대고 유지 → 손끝 앞에 피가 모여 압축됨 (오래 모을수록 강함) · 두 주먹 쥐면 취소' },
         { head: '穿血(천혈) — 사출', color: '#ff2030', text: '백렴 중 맞댄 두 손을 앞으로 내지르기 → 초음속 피의 광선\n쏘는 동안 손을 움직이면 수압 커터처럼 벤다' },
         { head: '超新星(초신성)', color: '#ff7a8a', text: '백렴 중 두 손을 벌리기 → 압축한 피가 앞으로 날아가 떠 있음 (최대 6개)\n아무 손이나 검지로 가리키면 한꺼번에 터짐' },
@@ -70,12 +82,14 @@ export class Choso {
     if (mode === 'desktop') {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '피 다루기', color: '#ff6a7a', text: '좌클릭 유지: 조준점에 피를 모아 붙잡기 → 떼면 던지기' },
         { head: '百斂 / 穿血', color: '#ff2030', text: 'E 누르고 있기: 백렴(압축) → E를 떼면 천혈 발사 (발사 중 마우스로 베기)' },
         { head: '超新星', color: '#ff7a8a', text: 'E를 누른 채 Q: 압축한 피를 공중에 띄우기 · F: 모두 터뜨리기' },
         { head: '赫鱗躍動・載 / 흑섬', color: '#ffb0b0', text: 'G: 신체 강화 15초 · V: 주먹' },
       ];
     }
     return [
+      { head: '피 다루기', color: '#ff6a7a', text: '트리거 하나 유지: 피를 꺼내 붙잡기 (컨트롤러를 따라 출렁임) → 놓거나 휘두르면 던지기' },
       { head: '百斂 — 압축', color: '#ff4a5a', text: '두 컨트롤러를 맞대고 양쪽 트리거 유지' },
       { head: '穿血 — 사출', color: '#ff2030', text: '맞댄 채 트리거를 놓기 → 광선, 쏘는 동안 움직여 베기' },
       { head: '超新星', color: '#ff7a8a', text: '트리거를 쥔 채 두 손을 벌리면 피가 떠 있음 · A/X: 모두 터뜨리기' },
@@ -106,6 +120,7 @@ export class Choso {
       this._updateDetonate(dt);
       this._updateBuffSign(dt);
     }
+    this._updateFluid(dt, blocked);
     this._updateBeams(dt);
     this._updateOrbs(dt);
     this._updateNovas(dt);
@@ -144,7 +159,7 @@ export class Choso {
     return { src: 'hand', together, release: push > 0.9 && d < 0.22, apart: d > 0.32, cancel, lost: false };
   }
 
-  /** 겨눔: 머리에서 손 쪽으로, 시선과 섞어서 */
+  /** 겨눔: 손만 기준 (두 손끝의 가운데 + 손가락 방향) — 고개를 움직여도 따라가지 않는다 */
   _aim(out, originOut) {
     const inp = this.ctx.input;
     if (inp.mode === 'desktop') {
@@ -153,12 +168,230 @@ export class Choso {
     }
     const L = inp.left;
     const R = inp.right;
-    const a = L.source === 'controller' ? L.pos : L.palm;
-    const b = R.source === 'controller' ? R.pos : R.palm;
-    originOut.addVectors(a, b).multiplyScalar(0.5);
-    out.subVectors(originOut, inp.head).normalize().multiplyScalar(0.6).addScaledVector(inp.headDir, 0.4).normalize();
-    originOut.addScaledVector(out, L.source === 'controller' ? 0.07 : 0.13); // 손끝 앞
+    if (L.source === 'controller' || R.source === 'controller') {
+      originOut.addVectors(L.pos, R.pos).multiplyScalar(0.5);
+      out.addVectors(L.dir, R.dir);
+    } else {
+      originOut.addVectors(L.indexTip, R.indexTip).multiplyScalar(0.5);
+      out.addVectors(L.fingersDir, R.fingersDir);
+    }
+    if (out.lengthSq() < 1e-4) out.copy(inp.headDir);
+    out.normalize();
+    originOut.addScaledVector(out, 0.05);
     return out;
+  }
+
+  /** 손끝(검지·중지) 월드 위치 */
+  _tips(h) {
+    const out = [];
+    if (h.source === 'hand' && h.joints) {
+      const m = this.ctx.input.rig.matrixWorld;
+      for (const n of ['index-finger-tip', 'middle-finger-tip', 'ring-finger-tip']) out.push(h.joints[n].clone().applyMatrix4(m));
+    } else out.push(h.pos.clone().addScaledVector(h.dir, 0.03));
+    return out;
+  }
+
+  /** 손끝에서 피를 흘려 내보낸다 */
+  _emit(h, owner, rate, dt, toward = null) {
+    const F = this.fluid;
+    const c = this.hc[h.side] ?? this.hc.right;
+    c.emitAcc += rate * dt;
+    if (c.emitAcc < 1) return 0;
+    const tips = h.source === 'desktop' ? [this.ctx.input.head.clone().addScaledVector(this.ctx.input.headDir, 0.6)] : this._tips(h);
+    let made = 0;
+    while (c.emitAcc >= 1) {
+      c.emitAcc -= 1;
+      if (F.n >= F.max || this.energy < 0.12) break;
+      const t = tips[Math.floor(Math.random() * tips.length)];
+      const v = toward ? _v.subVectors(toward, t).normalize().multiplyScalar(0.8) : _v.copy(h.source === 'hand' ? h.fingersDir : h.dir).multiplyScalar(0.4);
+      v.add(h.vel ?? _v2.set(0, 0, 0));
+      const j = 0.004;
+      F.add(t.x + (Math.random() - 0.5) * j, t.y + (Math.random() - 0.5) * j, t.z + (Math.random() - 0.5) * j, v.x, v.y, v.z, owner);
+      this.energy -= 0.12;
+      made++;
+    }
+    return made;
+  }
+
+  // ── 피 조종 (유체) ──
+  _updateFluid(dt, blocked) {
+    const { input: inp, world, fx, sfx } = this.ctx;
+    const F = this.fluid;
+    F.bounds = this.ctx.env.bounds ?? null;
+    if (!blocked && !this.conv) {
+      if (inp.mode === 'desktop') this._deskBlood(dt);
+      else for (const h of inp.hands) this._handBlood(h, dt);
+    }
+    // 물리 (프레임이 길면 나눠서)
+    const steps = dt > 1 / 55 ? 2 : 1;
+    this._absorbed = this._absorbed ?? 0;
+    for (let k = 0; k < steps; k++) {
+      F.step(Math.min(dt / steps, 1 / 45));
+      this._absorbed += F.absorbed;
+    }
+    // 오래 고인 피는 서서히 스며든다
+    for (let i = F.n - 1; i >= 0; i--) {
+      if (F.rest[i] > 6) {
+        F.life[i] -= dt * 0.5;
+        if (F.life[i] <= 0) F.remove(i);
+      }
+    }
+    // 빠르게 날아가는 피가 더미에 맞으면 피해
+    this._splatT -= dt;
+    for (const t of world.targets()) {
+      const c = t.center ? t.center(_v2) : t.pos;
+      let dmg = 0;
+      const imp = _v3.set(0, 0, 0);
+      for (let i = 0; i < F.n; i++) {
+        if (F.owner[i] !== OWNER_FREE) continue;
+        const i3 = i * 3;
+        const vx = F.v[i3];
+        const vy = F.v[i3 + 1];
+        const vz = F.v[i3 + 2];
+        const sp2 = vx * vx + vy * vy + vz * vz;
+        if (sp2 < 9) continue;
+        const dx = F.p[i3] - c.x;
+        const dy = F.p[i3 + 1] - c.y;
+        const dz = F.p[i3 + 2] - c.z;
+        if (dx * dx + dy * dy + dz * dz > 1.2) continue;
+        _v.set(F.p[i3], F.p[i3 + 1], F.p[i3 + 2]);
+        if (t.distanceTo(_v) > 0.03) continue;
+        const sp = Math.sqrt(sp2);
+        dmg += sp * 0.9;
+        imp.x += vx * 0.03;
+        imp.y += vy * 0.03;
+        imp.z += vz * 0.03;
+        // 몸에 부딪혀 튀고 흘러내린다
+        F.v[i3] *= -0.15;
+        F.v[i3 + 1] *= -0.15;
+        F.v[i3 + 2] *= -0.15;
+      }
+      if (dmg > 0) {
+        t.damage(dmg, { type: 'blast', dir: imp.clone().normalize(), color: '#ff2030' });
+        t.impulse?.(imp.clampLength(0, 6), 3);
+        if (this._splatT <= 0) {
+          this._splatT = 0.12;
+          sfx.play('blood_splat', { at: c, vol: Math.min(0.8, 0.3 + dmg * 0.01) });
+        }
+      }
+    }
+    this.view.update(F);
+    void fx;
+  }
+
+  /** 핸드트래킹/컨트롤러: 손바닥을 위로 펴면 손끝에서 피가 나오고, 손을 따라 물처럼 움직인다 */
+  _handBlood(h, dt) {
+    const F = this.fluid;
+    const owner = h.side === 'left' ? OWNER_LEFT : OWNER_RIGHT;
+    const C = F.ctrl[owner];
+    const hc = this.hc[h.side];
+    hc.throwCd -= dt;
+    const owned = () => F.count(owner);
+    const drop = (vel = null) => {
+      for (let i = 0; i < F.n; i++) {
+        if (F.owner[i] !== owner) continue;
+        F.owner[i] = OWNER_FREE;
+        if (vel) {
+          F.v[i * 3] += vel.x;
+          F.v[i * 3 + 1] += vel.y;
+          F.v[i * 3 + 2] += vel.z;
+        }
+      }
+      C.active = false;
+    };
+    if (!h.active || h.uiBlock || this.ctx.grab?.isHolding(h.side)) {
+      drop();
+      return;
+    }
+    const hand = h.source === 'hand';
+    const g = h.gesture;
+    // 목표점: 편 손은 손바닥 위, 검지로 가리키면 손끝 앞으로 뻗은 물줄기
+    if (hand) {
+      if (g === 'point') C.x = h.pos.x + h.dir.x * 0.2, C.y = h.pos.y + h.dir.y * 0.2, C.z = h.pos.z + h.dir.z * 0.2;
+      else {
+        C.x = h.palm.x + h.palmNormal.x * 0.1;
+        C.y = h.palm.y + h.palmNormal.y * 0.1;
+        C.z = h.palm.z + h.palmNormal.z * 0.1;
+      }
+    } else {
+      C.x = h.pos.x + h.dir.x * 0.15;
+      C.y = h.pos.y + h.dir.y * 0.15;
+      C.z = h.pos.z + h.dir.z * 0.15;
+    }
+    C.vx = h.vel.x;
+    C.vy = h.vel.y;
+    C.vz = h.vel.z;
+    Object.assign(C, { kp: 200, kd: 12, amax: 80, r0: g === 'point' ? 0.1 : 0.15, sag: 0.15 });
+    const n = owned();
+    // 놓기 / 던지기
+    const letGo = hand ? g === 'fist' : !h.btn.trigger;
+    const flick = h.speed > 2.4 && hc.throwCd <= 0 && (hand ? g === 'open' || g === 'point' || g === 'none' : true);
+    if (n > 0 && (letGo || flick)) {
+      if (flick) {
+        hc.throwCd = 0.5;
+        drop(_v.copy(h.vel).multiplyScalar(0.6));
+        this.ctx.sfx.play('whoosh', { at: h.palm, vol: 0.5, rate: 0.8 });
+        h.pulse(0.6, 50);
+      } else drop();
+      return;
+    }
+    C.active = n > 0;
+    // 꺼내기: 손바닥을 위로 펴기 (컨트롤러: 트리거 하나만)
+    const other = this.ctx.input[h.side === 'left' ? 'right' : 'left'];
+    const draw = hand ? g === 'open' && h.palmNormal.y > 0.55 && h.gestureTime > 0.25 && h.speed < 1 : h.btn.trigger && !other.btn?.trigger;
+    if (draw && F.n < F.max) {
+      const made = this._emit(h, owner, 45, dt);
+      if (made) {
+        C.active = true;
+        if (Math.random() < 0.3) h.pulse(0.15, 15);
+        if (!hc.drawSfx || hc.drawSfx < performance.now()) {
+          hc.drawSfx = performance.now() + 900;
+          this.ctx.sfx.play('blood_compress', { at: h.palm, vol: 0.35, rate: 1.2 });
+        }
+      }
+    }
+    // 되부르기: 편 손바닥을 바닥에 흩어진 피 쪽으로 향하고 잠시 유지
+    if (hand && g === 'open' && h.speed < 0.8 && !draw) {
+      hc.recallT += dt;
+      if (hc.recallT > 0.35) {
+        let k = 0;
+        for (let i = 0; i < F.n && k < 6; i++) {
+          if (F.owner[i] !== OWNER_FREE) continue;
+          _v.set(F.p[i * 3], F.p[i * 3 + 1], F.p[i * 3 + 2]).sub(h.palm);
+          const d = _v.length();
+          if (d > 4 || d < 0.05) continue;
+          if (_v.dot(h.palmNormal) / d < 0.8) continue;
+          F.owner[i] = owner;
+          F.life[i] = 1;
+          F.rest[i] = 0;
+          k++;
+        }
+        if (k) C.active = true;
+      }
+    } else hc.recallT = 0;
+  }
+
+  /** 데스크톱: 좌클릭 유지 → 조준점에 피를 꺼내 붙잡고, 떼면 던진다 */
+  _deskBlood(dt) {
+    const inp = this.ctx.input;
+    const F = this.fluid;
+    const C = F.ctrl[OWNER_RIGHT];
+    const T = _v.copy(inp.head).addScaledVector(inp.headDir, 0.8);
+    Object.assign(C, { x: T.x, y: T.y, z: T.z, vx: 0, vy: 0, vz: 0, kp: 200, kd: 12, amax: 80, r0: 0.15, sag: 0.15 });
+    if (inp.mouse.left && !inp.keyDown('KeyE')) {
+      C.active = true;
+      this._emit({ side: 'right', source: 'desktop', vel: null, dir: inp.headDir }, OWNER_RIGHT, 45, dt);
+    } else if (C.active) {
+      C.active = false;
+      const v = _v2.copy(inp.headDir).multiplyScalar(9).add(_v3.set(0, 1, 0));
+      for (let i = 0; i < F.n; i++) {
+        if (F.owner[i] !== OWNER_RIGHT) continue;
+        F.owner[i] = OWNER_FREE;
+        F.v[i * 3] += v.x;
+        F.v[i * 3 + 1] += v.y;
+        F.v[i * 3 + 2] += v.z;
+      }
+    }
   }
 
   // ── 百斂 ──
@@ -191,23 +424,25 @@ export class Choso {
     const pos = _v.set(0, 0, 0);
     this._aim(c.aim, pos);
     c.orb.pos.lerp(pos, 1 - Math.exp(-dt * 20));
-    if (P.together && this.energy > 0) {
-      const add = Math.min(dt / 1.3, 1 - c.charge);
-      c.charge += add;
-      this.energy = Math.max(0, this.energy - add * 30);
-    }
+    if (P.together && this.energy > 0) c.charge = Math.min(1, c.charge + dt * 0.12);
     c.orb.setRadius(0.022 + 0.045 * c.charge);
     c.orb.update(dt, 0.4 + c.charge);
     c.loop.set(0.6 + c.charge * 0.8, 0.8 + c.charge * 0.7);
     c.loop.pos(c.orb.pos);
-    // 사방에서 피가 빨려 들어온다
-    for (let i = 0; i < 3; i++) {
-      _v3.randomDirection();
-      if (_v3.dot(inp.headDir) < 0) _v3.addScaledVector(inp.headDir, -2 * _v3.dot(inp.headDir)); // 얼굴 쪽에서는 생기지 않게
-      const from = _v2.copy(c.orb.pos).addScaledVector(_v3, 0.15 + Math.random() * 0.2);
-      const vel = _v3.subVectors(c.orb.pos, from).multiplyScalar(3.2);
-      fx.spawnDark(from, vel, Math.random() < 0.6 ? BLOOD : BLOOD_DARK, 0.012 + Math.random() * 0.01, 0.3, 0, 0, -0.5);
+    // 손끝에서 피가 흘러나와 압축점으로 빨려 들어간다 (손에 들고 있던 피도 모두 모인다)
+    const F = this.fluid;
+    const K = F.ctrl[OWNER_CONV];
+    Object.assign(K, { x: c.orb.pos.x, y: c.orb.pos.y, z: c.orb.pos.z, vx: 0, vy: 0, vz: 0, kp: 420, kd: 22, amax: 160, r0: 0.06, sag: 0, active: true, absorb: 0.02 + c.orb.radius * 0.6 });
+    for (let i = 0; i < F.n; i++) if (F.owner[i] === OWNER_LEFT || F.owner[i] === OWNER_RIGHT) F.owner[i] = OWNER_CONV;
+    if (P.together && c.charge < 1) {
+      if (inp.mode === 'desktop') this._emit({ side: 'right', source: 'desktop', vel: null, dir: inp.headDir }, OWNER_CONV, 60, dt, c.orb.pos);
+      else {
+        this._emit(inp.left, OWNER_CONV, 40, dt, c.orb.pos);
+        this._emit(inp.right, OWNER_CONV, 40, dt, c.orb.pos);
+      }
     }
+    c.charge = Math.min(1, c.charge + this._absorbed / 120);
+    this._absorbed = 0;
     if (Math.random() < 0.5) {
       inp.left.pulse(0.15 + c.charge * 0.4, 20);
       inp.right.pulse(0.15 + c.charge * 0.4, 20);
@@ -241,20 +476,37 @@ export class Choso {
     }
   }
 
-  _endConv() {
+  _endConv(spill = false) {
     const c = this.conv;
     if (!c) return;
     c.loop.stop(0.2);
     this.conv = null;
+    const F = this.fluid;
+    F.ctrl[OWNER_CONV].active = false;
+    // 모이던 피: 쏘거나 띄우면 압축에 흡수, 취소하면 그대로 쏟아진다
+    for (let i = F.n - 1; i >= 0; i--) {
+      if (F.owner[i] !== OWNER_CONV) continue;
+      if (spill) F.owner[i] = OWNER_FREE;
+      else F.remove(i);
+    }
+  }
+
+  /** 압축된 피를 액체로 쏟는다 */
+  _spill(pos, amount, speed = 1.2) {
+    const F = this.fluid;
+    for (let k = 0; k < amount && F.n < F.max; k++) {
+      const d = _v.randomDirection();
+      F.add(pos.x + d.x * 0.02, pos.y + d.y * 0.02, pos.z + d.z * 0.02, d.x * speed, d.y * speed + 0.5, d.z * speed, OWNER_FREE);
+    }
   }
 
   _splashCancel() {
     const c = this.conv;
     if (!c) return;
-    this.ctx.fx.burst(c.orb.pos, 24, BLOOD, 1.5, 0.02, 0.5, { dark: true });
     this.ctx.sfx.play('blood_splat', { at: c.orb.pos, vol: 0.5 });
+    this._spill(c.orb.pos, Math.round(20 + c.charge * 100), 0.8);
     c.orb.dispose();
-    this._endConv();
+    this._endConv(true);
   }
 
   _placeOrb() {
@@ -337,6 +589,7 @@ export class Choso {
       // 착탄 지점: 피 튀김
       const end = _v3.copy(b.origin).addScaledVector(b.dir, len);
       if (Math.random() < 0.8) fx.spawnDark(end, _v.randomDirection().multiplyScalar(2).add(_v2.set(0, 1.5, 0)), BLOOD, 0.02 + Math.random() * 0.02, 0.5, 1, -6);
+      if (Math.random() < 0.5) this._spill(end.clone().addScaledVector(b.dir, -0.05), 1, 2);
       if (Math.random() < 0.3) fx.spawn(end, _v.randomDirection().multiplyScalar(1.5), BLOOD_HI, 0.02, 0.2, 2, 0);
       // 광선이 닿은 대상
       const sweep = new THREE.Vector3().subVectors(b.dir, b.prevDir);
@@ -436,6 +689,7 @@ export class Choso {
     fx.burst(pos, 70, BLOOD, 5 + 4 * o.charge, 0.03, 0.7, { dark: true, drag: 1.5 });
     fx.burst(pos, 30, BLOOD_DARK, 3, 0.04, 0.9, { dark: true });
     sfx.play('blood_burst', { at: pos, vol: 0.8 + 0.4 * o.charge });
+    this._spill(pos, Math.round(15 + 25 * o.charge), 3.5); // 터진 피가 흩뿌려져 떨어진다
     inp.left.pulse(0.6, 80);
     inp.right.pulse(0.6, 80);
   }
@@ -527,5 +781,6 @@ export class Choso {
     this.beams = [];
     this.novas = [];
     this.pendingNova = [];
+    this.view.dispose();
   }
 }

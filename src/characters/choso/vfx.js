@@ -1,5 +1,6 @@
 // 쵸소우 — 적혈조술 이펙트
 import * as THREE from 'three';
+import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
 
 const NOISE = /* glsl */ `
 float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -223,5 +224,126 @@ export class Supernova {
     this.scene.remove(this.mesh);
     this.mesh.geometry.dispose();
     this.mesh.material.dispose();
+  }
+}
+
+/**
+ * 피 유체 그리기
+ *  · 손에 들린 덩어리·모이는 피(주인이 있는 입자)는 메타볼(마칭 큐브)로 이어진 매끈한 액체 표면
+ *  · 흩날리는 방울과 바닥에 고인 피는 개별 방울(인스턴스)로, 빠르면 늘어나고 바닥에선 납작해진다
+ */
+export class FluidView {
+  constructor(scene, envMap, max = 320, radius = 0.017) {
+    this.scene = scene;
+    this.radius = radius;
+    const mat = new THREE.MeshStandardMaterial({ color: 0x420006, roughness: 0.08, metalness: 0.05, envMap: envMap ?? null, envMapIntensity: 1.3, emissive: 0x140002 });
+    this.mat = mat;
+    const geo = new THREE.IcosahedronGeometry(1, 2);
+    this.mesh = new THREE.InstancedMesh(geo, mat, max);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.frustumCulled = false;
+    this.mesh.count = 0;
+    scene.add(this.mesh);
+    // 주인별(왼손·오른손·압축) 액체 표면
+    this.mcs = [];
+    for (let k = 0; k < 3; k++) {
+      const mc = new MarchingCubes(24, mat, false, false, 20000);
+      mc.isolation = 28;
+      mc.visible = false;
+      mc.frustumCulled = false;
+      scene.add(mc);
+      this.mcs.push(mc);
+    }
+    this.ballR = 0.026; // 메타볼 영향 반경 (m)
+    this.subtract = 12;
+    this._m = new THREE.Matrix4();
+    this._q = new THREE.Quaternion();
+    this._s = new THREE.Vector3();
+    this._p = new THREE.Vector3();
+    this._d = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this._lo = new THREE.Vector3();
+    this._hi = new THREE.Vector3();
+  }
+
+  update(sim) {
+    const n = sim.n;
+    const r = this.radius;
+    // 1) 주인 있는 입자 → 메타볼
+    for (let k = 0; k < 3; k++) {
+      const owner = k + 1;
+      const mc = this.mcs[k];
+      const lo = this._lo.set(Infinity, Infinity, Infinity);
+      const hi = this._hi.set(-Infinity, -Infinity, -Infinity);
+      let cnt = 0;
+      for (let i = 0; i < n; i++) {
+        if (sim.owner[i] !== owner) continue;
+        const i3 = i * 3;
+        lo.x = Math.min(lo.x, sim.p[i3]); lo.y = Math.min(lo.y, sim.p[i3 + 1]); lo.z = Math.min(lo.z, sim.p[i3 + 2]);
+        hi.x = Math.max(hi.x, sim.p[i3]); hi.y = Math.max(hi.y, sim.p[i3 + 1]); hi.z = Math.max(hi.z, sim.p[i3 + 2]);
+        cnt++;
+      }
+      if (cnt < 3) {
+        mc.visible = false;
+        continue;
+      }
+      // 너무 넓게 퍼진 경우는 칸이 커져 거칠어지므로 최대 0.9m
+      const S = Math.min(0.9, Math.max(0.16, hi.x - lo.x, hi.y - lo.y, hi.z - lo.z) + this.ballR * 3);
+      const cx = (lo.x + hi.x) / 2;
+      const cy = (lo.y + hi.y) / 2;
+      const cz = (lo.z + hi.z) / 2;
+      mc.position.set(cx, cy, cz);
+      mc.scale.setScalar(S / 2);
+      mc.reset();
+      const rn = this.ballR / S;
+      const strength = this.subtract * rn * rn;
+      for (let i = 0; i < n; i++) {
+        if (sim.owner[i] !== owner) continue;
+        const i3 = i * 3;
+        const x = (sim.p[i3] - cx) / S + 0.5;
+        const y = (sim.p[i3 + 1] - cy) / S + 0.5;
+        const z = (sim.p[i3 + 2] - cz) / S + 0.5;
+        if (x < 0.02 || x > 0.98 || y < 0.02 || y > 0.98 || z < 0.02 || z > 0.98) continue;
+        mc.addBall(x, y, z, strength, this.subtract);
+      }
+      mc.update();
+      mc.visible = true;
+    }
+    // 2) 자유 입자 → 방울
+    for (let i = 0; i < n; i++) {
+      if (sim.owner[i] !== 0) {
+        this.mesh.setMatrixAt(i, this._zero);
+        continue;
+      }
+      const i3 = i * 3;
+      this._p.set(sim.p[i3], sim.p[i3 + 1], sim.p[i3 + 2]);
+      this._d.set(sim.v[i3], sim.v[i3 + 1], sim.v[i3 + 2]);
+      const sp = this._d.length();
+      const life = sim.life[i];
+      if (sp > 0.05) this._q.setFromUnitVectors(this._up, this._d.multiplyScalar(1 / sp));
+      else this._q.identity();
+      const st = 1 + Math.min(1.8, sp * 0.12);
+      // 바닥에 고인 피는 납작하게 퍼진다
+      const flat = sim.p[i3 + 1] <= sim.floor + 0.003 && sp < 0.6;
+      if (flat) {
+        this._q.identity();
+        this._s.set(r * 1.6 * life, r * 0.4 * life, r * 1.6 * life);
+      } else this._s.set((r * life) / Math.sqrt(st), r * st * life, (r * life) / Math.sqrt(st));
+      this._m.compose(this._p, this._q, this._s);
+      this.mesh.setMatrixAt(i, this._m);
+    }
+    this.mesh.count = n;
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  dispose() {
+    this.scene.remove(this.mesh);
+    for (const mc of this.mcs) {
+      this.scene.remove(mc);
+      mc.geometry.dispose();
+    }
+    this.mesh.geometry.dispose();
+    this.mat.dispose();
   }
 }

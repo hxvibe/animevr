@@ -180,6 +180,20 @@ btnVR.addEventListener('click', async () => {
       overlay.classList.remove('hidden');
       ctx.input.mode = 'none';
     });
+    // 메타 퀘스트 기본 메뉴(왼손 ≡ 집기 / 메뉴 버튼)를 누르면 시스템 메뉴가 뜨며 세션이 잠시 가려진다
+    // → 돌아오면 게임 옵션을 연다 (손동작으로 방금 직접 연/닫은 경우는 제외)
+    let wasBlurred = false;
+    session.addEventListener('visibilitychange', () => {
+      const v = session.visibilityState;
+      if (v !== 'visible') {
+        wasBlurred = true;
+        return;
+      }
+      if (!wasBlurred) return;
+      wasBlurred = false;
+      if (performance.now() - (ctx.ui.lastMenuToggle ?? -1e9) < 3000) return;
+      if (ctx.ui.mode === 'game' && ctx.character) ctx.ui.showOptions(true);
+    });
     setTimeout(enterTitle, 400);
   } catch (e) {
     status.textContent = 'VR 세션 시작 실패: ' + e.message;

@@ -60,9 +60,9 @@ export class Choso {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '百斂(백렴) — 압축', color: '#ff4a5a', text: '두 주먹을 앞으로 뻗어 맞대고 유지 → 주먹 앞에 피가 모여 압축됨 (오래 모을수록 강함)' },
-        { head: '穿血(천혈) — 사출', color: '#ff2030', text: '백렴 중 맞댄 두 손을 펴기 → 초음속 피의 광선\n쏘는 동안 손을 움직이면 수압 커터처럼 벤다' },
-        { head: '超新星(초신성)', color: '#ff7a8a', text: '백렴 중 두 주먹을 벌리기 → 압축한 피가 그 자리에 떠 있음 (최대 6개)\n아무 손이나 검지로 가리키면 한꺼번에 터짐' },
+        { head: '百斂(백렴) — 압축', color: '#ff4a5a', text: '편 두 손을 앞으로 뻗어 맞대고 유지 → 손끝 앞에 피가 모여 압축됨 (오래 모을수록 강함) · 두 주먹 쥐면 취소' },
+        { head: '穿血(천혈) — 사출', color: '#ff2030', text: '백렴 중 맞댄 두 손을 앞으로 내지르기 → 초음속 피의 광선\n쏘는 동안 손을 움직이면 수압 커터처럼 벤다' },
+        { head: '超新星(초신성)', color: '#ff7a8a', text: '백렴 중 두 손을 벌리기 → 압축한 피가 앞으로 날아가 떠 있음 (최대 6개)\n아무 손이나 검지로 가리키면 한꺼번에 터짐' },
         { head: '赫鱗躍動・載', color: '#ffb0b0', text: '양 손바닥을 얼굴 쪽으로 향해 얼굴 가까이 1초 → 15초 동안 주먹 위력 대폭 증가' },
         { head: '잡기 · 흑섬', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
       ];
@@ -130,16 +130,18 @@ export class Choso {
       const dd = L.pos.distanceTo(R.pos);
       return { src: 'ctrl', together: both && dd < 0.2, release: !L.btn.trigger && !R.btn.trigger && dd < 0.3, apart: both && dd > 0.35, lost: false };
     }
-    const fistL = L.gesture === 'fist';
-    const fistR = R.gesture === 'fist';
-    // 두 주먹을 앞으로 뻗어 맞댄 자세 (몸 앞, 얼굴에서 너무 가깝지 않게)
+    // 百斂: 편 두 손을 앞으로 뻗어 맞댄 자세 (몸 앞, 손가락이 앞쪽)
+    const flat = (h) => h.gesture === 'open' || h.gesture === 'none' || h.gesture === 'pinch';
     _v.addVectors(L.palm, R.palm).multiplyScalar(0.5);
     const fromHead = _v.distanceTo(inp.head);
-    const inFront = _v2.subVectors(_v, inp.head).normalize().dot(inp.headDir) > 0.35;
-    const together = fistL && fistR && d < 0.17 && fromHead > 0.2 && fromHead < 0.85 && inFront;
-    const openL = L.gesture !== 'fist' && L.gestureTime > 0.06;
-    const openR = R.gesture !== 'fist' && R.gestureTime > 0.06;
-    return { src: 'hand', together, release: openL && openR && d < 0.3, apart: d > 0.32, lost: false };
+    _v2.subVectors(_v, inp.head).normalize();
+    const inFront = _v2.dot(inp.headDir) > 0.35;
+    const fingersFwd = L.fingersDir.dot(_v2) > 0.25 && R.fingersDir.dot(_v2) > 0.25;
+    const together = flat(L) && flat(R) && d < 0.15 && fromHead > 0.3 && fromHead < 0.9 && inFront && fingersFwd;
+    // 穿血: 맞댄 손을 앞으로 내지르기
+    const push = (L.vel.dot(_v2) + R.vel.dot(_v2)) * 0.5;
+    const cancel = L.gesture === 'fist' && R.gesture === 'fist' && L.gestureTime > 0.1 && R.gestureTime > 0.1;
+    return { src: 'hand', together, release: push > 0.9 && d < 0.22, apart: d > 0.32, cancel, lost: false };
   }
 
   /** 겨눔: 머리에서 손 쪽으로, 시선과 섞어서 */
@@ -155,7 +157,7 @@ export class Choso {
     const b = R.source === 'controller' ? R.pos : R.palm;
     originOut.addVectors(a, b).multiplyScalar(0.5);
     out.subVectors(originOut, inp.head).normalize().multiplyScalar(0.6).addScaledVector(inp.headDir, 0.4).normalize();
-    originOut.addScaledVector(out, 0.07);
+    originOut.addScaledVector(out, L.source === 'controller' ? 0.07 : 0.13); // 손끝 앞
     return out;
   }
 
@@ -228,9 +230,13 @@ export class Choso {
       this._needRelease = true;
       return;
     }
+    if (P.cancel) {
+      this._splashCancel();
+      return;
+    }
     if (P.release) {
       if (c.charge >= 0.2) this._fireBeam();
-      else this._splashCancel();
+      else if (P.src !== 'hand') this._splashCancel();
       return;
     }
   }
@@ -460,7 +466,7 @@ export class Choso {
             if (h.gesture !== 'open') return false;
             _v.subVectors(inp.head, h.palm);
             const d = _v.length();
-            return d < 0.4 && h.palmNormal.dot(_v.normalize()) > 0.45;
+            return d < 0.32 && h.palmNormal.dot(_v.normalize()) > 0.5;
           };
           sign = ok(L) && ok(R) && !this.conv;
         }

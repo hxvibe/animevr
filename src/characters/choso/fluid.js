@@ -7,6 +7,9 @@ export const OWNER_FREE = 0;
 export const OWNER_LEFT = 1;
 export const OWNER_RIGHT = 2;
 export const OWNER_CONV = 3;
+export const OWNER_WRAP_L = 4; // 왼손이 피로 감싼 대상
+export const OWNER_WRAP_R = 5; // 오른손이 피로 감싼 대상
+export const OWNERS = 6;
 
 const TABLE = 4096;
 
@@ -20,6 +23,7 @@ export class FluidSim {
     this.owner = new Uint8Array(max);
     this.rest = new Float32Array(max); // 바닥에 멈춰 있던 시간
     this.life = new Float32Array(max); // 사라지는 중이면 0~1
+    this.off = new Float32Array(max * 3); // 감싸기용 개별 목표 방향 (단위 벡터)
     this.h = 0.045; // 상호작용 반경
     this.rho0 = 3.5; // 목표 밀도 (이보다 성기면 서로 당겨 한 덩어리가 된다)
     this.k = 10; // 압력 강성
@@ -30,8 +34,8 @@ export class FluidSim {
     this.floor = 0.012;
     this.bounds = null; // { minX, maxX, minZ, maxZ }
     // 손 목표 { x,y,z, vx,vy,vz, kp, kd, active }
-    this.ctrl = [null, null, null, null];
-    for (let i = 0; i < 4; i++) this.ctrl[i] = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, kp: 200, kd: 12, amax: 80, r0: 0.15, sag: 0.15, active: false, absorb: 0 };
+    this.ctrl = [];
+    for (let i = 0; i < OWNERS; i++) this.ctrl[i] = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, kp: 200, kd: 12, amax: 80, r0: 0.15, sag: 0.15, active: false, absorb: 0 };
     // 공간 해시
     this.cellStart = new Int32Array(TABLE + 1);
     this.cellIdx = new Int32Array(max);
@@ -48,7 +52,26 @@ export class FluidSim {
     this.owner[i] = owner;
     this.rest[i] = 0;
     this.life[i] = 1;
+    this.setOffset(i);
     return i;
+  }
+
+  /** 감싸기용 무작위 방향 */
+  setOffset(i) {
+    let x;
+    let y;
+    let z;
+    let l;
+    do {
+      x = Math.random() * 2 - 1;
+      y = Math.random() * 2 - 1;
+      z = Math.random() * 2 - 1;
+      l = x * x + y * y + z * z;
+    } while (l > 1 || l < 0.01);
+    l = Math.sqrt(l);
+    this.off[i * 3] = x / l;
+    this.off[i * 3 + 1] = y / l;
+    this.off[i * 3 + 2] = z / l;
   }
 
   remove(i) {
@@ -64,6 +87,7 @@ export class FluidSim {
       this.owner[i] = this.owner[last];
       this.rest[i] = this.rest[last];
       this.life[i] = this.life[last];
+      for (let k = 0; k < 3; k++) this.off[i3 + k] = this.off[l3 + k];
     }
   }
 
@@ -146,18 +170,44 @@ export class FluidSim {
       const o = owner[i];
       const C = o ? this.ctrl[o] : null;
       if (C && C.active) {
-        // 손에 가까운 입자일수록 강하게 끌리고, 먼 입자는 약하게 끌려 응집력으로 따라온다 → 물처럼 늘어지고 출렁임
-        const dx = C.x - p[i3];
-        const dy = C.y - p[i3 + 1];
-        const dz = C.z - p[i3 + 2];
+        let tx = C.x;
+        let ty = C.y;
+        let tz = C.z;
+        if (C.shell) {
+          // 감싸기: 입자마다 대상 둘레의 다른 지점을 목표로
+          tx += this.off[i3] * C.shell;
+          ty += this.off[i3 + 1] * C.shell * (C.shellY ?? 1);
+          tz += this.off[i3 + 2] * C.shell;
+        }
+        const dx = tx - p[i3];
+        const dy = ty - p[i3 + 1];
+        const dz = tz - p[i3 + 2];
         const d = Math.hypot(dx, dy, dz);
-        const r0 = C.r0 ?? 0.07;
-        const w = 1 / (1 + (d / r0) * (d / r0));
-        let ax = C.kp * dx * w + C.kd * (C.vx - v[i3]) * w;
-        let ay = C.kp * dy * w + C.kd * (C.vy - v[i3 + 1]) * w + this.g * (C.sag ?? 0.25);
-        let az = C.kp * dz * w + C.kd * (C.vz - v[i3 + 2]) * w;
+        let ax;
+        let ay;
+        let az;
+        const seekR = C.seekR ?? 0.3;
+        if (d > seekR) {
+          // 멀리 떨어진 피는 일정한 속도로 손(목표)을 향해 흘러온다 → 흩어지지 않고 다시 모인다
+          const sp = Math.min(C.vmax ?? 5, d * 5) / d;
+          const ks = C.ks ?? 7;
+          ax = (dx * sp + C.vx - v[i3]) * ks;
+          ay = (dy * sp + C.vy - v[i3 + 1]) * ks;
+          az = (dz * sp + C.vz - v[i3 + 2]) * ks;
+        } else if (C.shell) {
+          ax = C.kp * dx + C.kd * (C.vx - v[i3]);
+          ay = C.kp * dy + C.kd * (C.vy - v[i3 + 1]);
+          az = C.kp * dz + C.kd * (C.vz - v[i3 + 2]);
+        } else {
+          // 손에 가까운 입자일수록 강하게 끌리고, 먼 입자는 약하게 끌려 응집력으로 따라온다 → 물처럼 출렁임
+          const r0 = C.r0 ?? 0.15;
+          const w = 1 / (1 + (d / r0) * (d / r0));
+          ax = C.kp * dx * w + C.kd * (C.vx - v[i3]) * w;
+          ay = C.kp * dy * w + C.kd * (C.vy - v[i3 + 1]) * w + this.g * (C.sag ?? 0.15);
+          az = C.kp * dz * w + C.kd * (C.vz - v[i3 + 2]) * w;
+        }
         const a = Math.hypot(ax, ay, az);
-        const amax = C.amax ?? 70;
+        const amax = C.amax ?? 80;
         if (a > amax) {
           ax *= amax / a;
           ay *= amax / a;

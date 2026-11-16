@@ -1,6 +1,5 @@
 // VR UI: 타이틀(메인 메뉴) · 옵션 패널 · 손목 HUD · 만화풍 기술명 · 데미지 숫자 · 피격 효과
 import * as THREE from 'three';
-import { behindHands } from './handmask.js';
 import { CHARACTERS } from '../characters/index.js';
 import { BACKGROUNDS } from './env/backgrounds.js';
 import { DUMMY_TYPES } from './dummy.js';
@@ -31,7 +30,6 @@ function canvasPlane(cw, ch, mw, mh, opts = {}) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, depthTest: opts.depthTest ?? true, fog: false });
-  if (opts.depthTest === false) behindHands(mat);
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(mw, mh), mat);
   mesh.renderOrder = opts.renderOrder ?? 30;
   return { canvas: c, g: c.getContext('2d'), tex, mat, mesh, mw, mh };
@@ -153,7 +151,7 @@ export class UI {
       c.height = 80;
       const t = new THREE.CanvasTexture(c);
       t.colorSpace = THREE.SRGBColorSpace;
-      const s = new THREE.Sprite(behindHands(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false, fog: false })));
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false, fog: false }));
       s.renderOrder = 50;
       s.scale.set(0.3, 0.125, 1);
       s.visible = false;
@@ -266,7 +264,6 @@ export class UI {
       ];
       const cid = this.ctx.character?.id;
       if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건']);
-      if (cid === 'light') toggles.push(['shinigamiEyes', '사신의 눈'], ['deathDelay40', '사망까지 40초(원작)']);
       g.fillText('옵션', 50, 345);
       toggles.forEach(([k, l], i) => p.button(50 + (i % 3) * 430, 365 + Math.floor(i / 3) * 105, 410, 88, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 28, accent: '#2e6a9a' }));
       if (this.ctx.character?.castDomain) p.button(910, 640 - 75, 440, 90, '영역전개 발동', 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });

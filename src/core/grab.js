@@ -98,7 +98,7 @@ export class Grab {
     }
     this.held[side] = { t, offset };
     h.pulse(0.6, 60);
-    this.ctx.sfx.tone({ type: 'sine', f0: 300, f1: 200, dur: 0.08, vol: 0.12 });
+    this.ctx.sfx.play('grab', { at: h.palm, vol: 0.8 });
   }
 
   _release(side, vel) {

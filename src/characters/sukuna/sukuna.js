@@ -141,6 +141,13 @@ export class Sukuna {
     s.swipeCd -= dt;
     s.cleaveCd -= dt;
     if (s.armed > 0) s.armed -= dt;
+    if (!h.active && h.source === 'hand') {
+      // 추적이 끊기면 준비 중이던 영창·장전은 모두 풀린다
+      s.chant = 0;
+      s.chantStage = 0;
+      s.armed = 0;
+      return;
+    }
     if (!h.active || h.uiBlock || h.source === 'desktop') return;
 
     // ── 세계를 가르는 해: 영창 ──
@@ -156,7 +163,7 @@ export class Sukuna {
       if (s.chantStage < 3 && s.chant >= stages[s.chantStage][0]) {
         const [, w, r] = stages[s.chantStage];
         this.ctx.ui.manga({ main: w, ruby: r, color: '#e0e0e0', dur: 0.8, side });
-        this.ctx.sfx.tone({ type: 'sine', f0: 220 + s.chantStage * 80, f1: 180 + s.chantStage * 80, dur: 0.4, vol: 0.12 });
+        this.ctx.sfx.play('chant', { vol: 0.7, rate: 0.9 + s.chantStage * 0.12 });
         s.chantStage++;
       }
       if (Math.random() < 0.5) fx.spawn(h.palm, _v2.randomDirection().multiplyScalar(0.2), new THREE.Color(0xffffff), 0.015, 0.4, 2, 0);
@@ -419,7 +426,9 @@ export class Sukuna {
         }
         this.bow = { ...start, draw: 0, t: 0, arrow: new FireArrow(this.ctx), light: fx.borrowLight(FIRE, 3, 6) };
         ui.manga({ top: '■', main: '開', ruby: 'フーガ', color: '#ff6a10' });
-        sfx.tone({ type: 'sawtooth', f0: 80, f1: 160, dur: 0.6, vol: 0.2 });
+        sfx.playClip('sukunaFuga', { vol: 1.2 });
+        sfx.play('fire_ignite', { vol: 0.8 });
+        this.bow.loop = sfx.loop({ sample: 'fire', base: 70, noiseF: 600, vol: 0.35 });
       }
       return;
     }
@@ -437,7 +446,14 @@ export class Sukuna {
       tail = new THREE.Vector3().copy(tip).addScaledVector(inp.headDir, -(0.25 + b.draw));
     } else {
       holding = D.source === 'hand' ? D.pinchDist < 0.045 || D.pinch : D.btn.trigger;
-      if (!B.active || !D.active) holding = false;
+      // 손 추적이 끊기면 발사하지 않고 취소
+      if (!B.active || !D.active) {
+        b.arrow.dispose();
+        fx.releaseLight(b.light);
+        b.loop?.stop(0.2);
+        this.bow = null;
+        return;
+      }
       tip = B.palm.clone();
       tail = D.pos.clone();
       b.draw = THREE.MathUtils.clamp(tip.distanceTo(tail) - 0.08, 0, 0.55);
@@ -447,8 +463,10 @@ export class Sukuna {
     const len = tip.distanceTo(tail) + 0.25;
     A.group.position.copy(tail);
     A.group.lookAt(_v.copy(tail).sub(dir)); // -Z 가 진행 방향이 되도록
-    A.setLength(len, 0.45 + b.draw * 0.6);
+    A.setLength(len, 0.3 + b.draw * 0.5);
     A.update(dt);
+    b.loop?.set(0.6 + b.draw * 1.2, 0.9 + b.draw * 0.6);
+    b.loop?.pos(tip);
     if (b.light) b.light.position.copy(tip);
     if (Math.random() < 0.9) fx.spawn(tip, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.3), Math.random() < 0.5 ? FIRE : FIRE_HI, 0.04 + b.draw * 0.06, 0.4, 1, -1, 0.5);
     if (Math.random() < 0.15) fx.spawnDark(_v3.copy(tip).addScaledVector(dir, 0.1), new THREE.Vector3(0, 0.6, 0), SMOKE, 0.03, 0.6, 1, -0.5, 1.2);
@@ -461,6 +479,7 @@ export class Sukuna {
       else fx.burst(tip, 20, FIRE, 1, 0.03, 0.4);
       A.dispose();
       fx.releaseLight(b.light);
+      b.loop?.stop(0.3);
       this.bow = null;
     }
   }
@@ -474,7 +493,7 @@ export class Sukuna {
     arrow.group.rotateY(Math.PI); // -Z 가 진행 방향
     const light = fx.borrowLight(FIRE, 6, 10);
     this.arrows.push({ arrow, pos: arrow.group.position, vel: dir.multiplyScalar(18 + draw * 24), life: 3, draw, light });
-    sfx.fire(pos, 0.5);
+    if (!sfx.play('fire_whoosh', { at: pos, vol: 1.1 })) sfx.fire(pos, 0.5);
     fx.burst(pos, 40, FIRE, 2.5, 0.05, 0.4);
     this.used.kai = this.used.hachi = false;
     const inp = this.ctx.input;
@@ -633,7 +652,7 @@ export class Sukuna {
       }
     }
     fx.flash(o, 0xffffff, 12, 0.3, 30);
-    sfx.slash(o, 0.5);
+    sfx.slash(o, 0.65);
     sfx.rumble(1.2, 0.5);
     ui.manga({ top: '世界を断つ', main: '解', ruby: 'カイ', color: '#ffffff', sub: '세계를 가르는 참격' });
     h.pulse?.(1, 250);
@@ -718,7 +737,7 @@ export class Sukuna {
     world.domain = { center, radius: this.shrine.radius, freeze: false };
     ui.manga({ top: '領域展開', main: '伏魔御廚子', ruby: 'ふくまみづし', color: '#ff2020', big: true });
     sfx.rumble(2.5, 0.6);
-    sfx.tone({ type: 'sawtooth', f0: 55, f1: 40, dur: 3, vol: 0.3, attack: 0.4 });
+    sfx.play('domain_open', { vol: 0.9 });
     // 영창 음성 → 끝나기 0.5초 전부터 영역 음악
     this._stopMusic(0.1);
     const voice = sfx.playClip('sukunaDomain', { vol: 1.1 });
@@ -808,6 +827,7 @@ export class Sukuna {
     if (this.bow) {
       this.bow.arrow.dispose();
       fx.releaseLight(this.bow.light);
+      this.bow.loop?.stop(0.2);
     }
     for (const s of this.scars) scene.remove(s.m);
     scene.remove(this.lines.mesh);

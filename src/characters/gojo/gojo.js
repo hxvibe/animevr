@@ -401,24 +401,19 @@ export class Gojo {
     // 공통: 주먹을 쥐면 사라진다
     if (handMode && I.fist) {
       fx.implode(s.orb.pos, 16, s.mode === 'blue' ? C.blueHi : C.redHi, 0.25, 0.2, 0.02);
-      this.ctx.sfx.tone({ type: 'sine', f0: 500, f1: 120, dur: 0.15, vol: 0.12 });
+      this.ctx.sfx.play('whoosh', { at: s.orb.pos, vol: 0.35, rate: 1.6 });
       if (s.mode === 'blue') this._disposeBlue(s);
       else this._disposeRed(s);
       h.pulse(0.3, 30);
       return;
     }
-    // 손이 사라지면(추적 끊김) 0.6초 뒤 정리
+    // 손이 사라지면(추적 끊김) 즉시 해제 — 다시 잡혀도 이어지지 않는다
     if (!h.active) {
-      s.lost = (s.lost ?? 0) + dt;
-      if (s.lost > 0.6) {
-        if (s.mode === 'blue') {
-          this.lingering.push({ s: { ...s }, t: 0 });
-          Object.assign(s, this._handState());
-        } else this._disposeRed(s);
-      }
+      fx.implode(s.orb.pos, 12, s.mode === 'blue' ? C.blueHi : C.redHi, 0.2, 0.2, 0.02);
+      if (s.mode === 'blue') this._disposeBlue(s);
+      else this._disposeRed(s);
       return;
     }
-    s.lost = 0;
 
     if (s.mode === 'blue') {
       // 창 → 혁 전환 (검지만)
@@ -514,7 +509,7 @@ export class Gojo {
     const orb = new EnergyOrb(this.ctx, 'blue', 0.03);
     orb.light = fx.borrowLight(C.blue, 0, 7);
     orb.pos.copy(h.pos).addScaledVector(h.dir, 0.06);
-    Object.assign(s, { mode: 'blue', sub, orb, power: 0, dist: this._blueDistance(h), loop: sfx.loop({ base: 50, noiseF: 260, vol: 0.3 }), t: 0 });
+    Object.assign(s, { mode: 'blue', sub, orb, power: 0, dist: this._blueDistance(h), loop: sfx.loop({ sample: 'blue', base: 50, noiseF: 260, vol: 0.45 }), t: 0 });
     ui.manga({ top: '術式順転', main: '「蒼」', ruby: 'あお', color: '#2f8cff', side });
     h.pulse(0.4, 60);
   }
@@ -525,7 +520,7 @@ export class Gojo {
     const orb = new EnergyOrb(this.ctx, 'red', 0.03);
     orb.light = fx.borrowLight(C.red, 0, 5);
     orb.pos.copy(h.pos);
-    Object.assign(s, { mode: 'red', orb, charge: 0, loop: sfx.loop({ base: 180, type: 'triangle', noiseF: 1500, vol: 0.12 }), t: 0 });
+    Object.assign(s, { mode: 'red', orb, charge: 0, loop: sfx.loop({ sample: 'red', base: 180, type: 'triangle', noiseF: 1500, vol: 0.3 }), t: 0 });
     h.pulse(0.3, 40);
     void ui;
   }
@@ -583,6 +578,7 @@ export class Gojo {
         fx.starFlare(c, 0xffffff, 1.2, 0.35);
         fx.flash(c, C.blue, 8, 0.4);
         sfx.explosion(c, 0.5);
+        sfx.play('whoosh', { at: c, vol: 0.6, rate: 0.6 });
         this._disposeBlue(s);
         this.lingering.splice(i, 1);
       }
@@ -619,6 +615,7 @@ export class Gojo {
     if (orb.light) orb.light.intensity = 5;
     this.redShots.push({ orb, pos: orb.pos, vel: dir.multiplyScalar(26 + 8 * charge), charge, life: 2.2 });
     ui.manga({ top: '術式反転', main: '「赫」', ruby: 'あか', color: '#ff2030', side });
+    if (!sfx.play('red_fire', { at: h.pos, vol: 0.6 + 0.4 * charge, rate: 1.15 - 0.2 * charge })) sfx.zap(h.pos);
     sfx.zap(h.pos);
     h.pulse(0.9, 90);
     fx.burst(h.pos, 30, C.red, 2.5, 0.03, 0.3);
@@ -756,7 +753,7 @@ export class Gojo {
     const p = {
       stage: 'merge', mode, side, t: 0, ang: Math.random() * 6.28, blue, red, bolts, orb: null, charge: 0, hold: 0, away: 0,
       aim: new THREE.Vector3().copy(inp.headDir), anchor: new THREE.Vector3(),
-      loop: sfx.loop({ base: 44, noiseF: 420, vol: 0.32 }),
+      loop: sfx.loop({ sample: 'purple', base: 44, noiseF: 420, vol: 0.45 }),
     };
     this._purpleAnchor(p, p.anchor);
     this.purple = p;
@@ -764,7 +761,7 @@ export class Gojo {
     setTimeout(() => {
       if (this.purple === p && p.stage === 'merge') this.ctx.ui.manga({ top: '術式反転', main: '「赫」', ruby: 'あか', color: '#ff2a3a', side: 'right', dur: 0.9 });
     }, 380);
-    sfx.tone({ type: 'sine', f0: 120, f1: 520, dur: 1.4, vol: 0.18 });
+    sfx.play('charge_rise', { vol: 0.7 });
     inp.left.pulse(0.4, 60);
     inp.right.pulse(0.4, 60);
   }
@@ -797,8 +794,9 @@ export class Gojo {
     this._purpleAnchor(p, _v);
     p.anchor.lerp(_v, 1 - Math.exp(-dt * 10));
 
-    // 취소: 수인을 맺은 손(두 손 모드면 양손)으로 주먹
-    const cancel = p.mode === 'one' ? Is.fist : p.mode === 'two' ? IL.fist && IR.fist : false;
+    // 취소: 수인을 맺은 손(두 손 모드면 양손)으로 주먹, 또는 그 손의 추적이 끊김
+    const lost = p.mode === 'one' ? !H.active : p.mode === 'two' ? !L.active || !R.active : false;
+    const cancel = lost || (p.mode === 'one' ? Is.fist : p.mode === 'two' ? IL.fist && IR.fist : false);
     if (cancel) {
       this._cancelPurple(true);
       return;
@@ -900,13 +898,13 @@ export class Gojo {
       const push = H.vel.dot(p.aim) > 1.3;
       if (Is.gesture !== 'purple' && Is.gesture !== 'fist') p.away += dt;
       else p.away = 0;
-      fire = push || Is.open || p.away > 0.15 || !H.active;
+      fire = push || Is.open || p.away > 0.15;
     } else if (p.mode === 'desk') {
       fire = !inp.keyDown('KeyE') || inp.keyDown('KeyF');
     } else if (p.mode === 'two') {
       const pushL = L.vel.dot(p.aim);
       const pushR = R.vel.dot(p.aim);
-      fire = (pushL + pushR) * 0.5 > 1.1 || Math.max(pushL, pushR) > 2.0 || (IL.open && IR.open) || L.pos.distanceTo(R.pos) > 0.55 || (!L.active && !R.active);
+      fire = (pushL + pushR) * 0.5 > 1.1 || Math.max(pushL, pushR) > 2.0 || (IL.open && IR.open) || L.pos.distanceTo(R.pos) > 0.55;
     } else {
       const pushL = L.vel.dot(p.aim);
       const pushR = R.vel.dot(p.aim);
@@ -930,8 +928,7 @@ export class Gojo {
     }
     this.purpleShots.push(shot);
     this._needRelease.left = this._needRelease.right = true;
-    sfx.explosion(shot.pos, 2.2);
-    sfx.tone({ type: 'sawtooth', f0: 90, f1: 30, dur: 2.5, vol: 0.35, at: shot.pos });
+    if (!sfx.play('purple_launch', { at: shot.pos, vol: 1.3 })) sfx.explosion(shot.pos, 2.2);
     fx.flash(shot.pos, C.purpleHi, 12, 0.5, 20);
     fx.burst(shot.pos, 80, C.purpleHi, 4, 0.04, 0.5);
     fx.shockwave(shot.pos, C.purpleHi, 1.2, 0.45, { faceDir: dir });
@@ -1102,7 +1099,7 @@ export class Gojo {
     d.t = 0;
     this.void.stop();
     this.ctx.world.domain = null;
-    this.ctx.sfx.tone({ type: 'sine', f0: 600, f1: 120, dur: 1.2, vol: 0.2 });
+    this.ctx.sfx.play('charge_rise', { vol: 0.5, rate: 0.6 });
   }
 
   /** 배경 전환 등으로 영역을 즉시 해제 */

@@ -4,7 +4,7 @@
 //   name / helpLines(mode) / hudRows()
 import { Gojo } from './gojo/gojo.js';
 import { Sukuna } from './sukuna/sukuna.js';
-import { Light } from './light/light.js';
+import { Choso } from './choso/choso.js';
 
 export const CHARACTERS = [
   {
@@ -26,12 +26,12 @@ export const CHARACTERS = [
     create: (ctx) => new Sukuna(ctx),
   },
   {
-    id: 'light',
-    name: '야가미 라이토',
-    work: '데스노트',
-    technique: '데스노트',
-    kanji: 'DEATH NOTE · 心臓麻痺',
-    color: '#d0d0d0',
-    create: (ctx) => new Light(ctx),
+    id: 'choso',
+    name: '쵸소우',
+    work: '주술회전',
+    technique: '적혈조술(赤血操術)',
+    kanji: '百斂 · 穿血 · 超新星',
+    color: '#ff2a3a',
+    create: (ctx) => new Choso(ctx),
   },
 ];

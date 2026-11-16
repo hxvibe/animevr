@@ -329,11 +329,13 @@ export class UnlimitedVoid {
     this.floorGlow.rotation.x = -Math.PI / 2;
     this.floorGlow.position.y = 0.01;
     // 먹물 얼룩
+    const inkGeo = new THREE.PlaneGeometry(1, 1);
     this.inkTex = [];
     for (let i = 0; i < 10; i++) this.inkTex.push(inkTexture(17 + i * 7919));
     this.inks = [];
     for (let i = 0; i < 18; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.inkTex[i % 10], color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+      // 스프라이트는 머리를 기울이면 같이 돌아가므로, 영역 중심을 바라보는 고정 평면을 쓴다
+      const s = new THREE.Mesh(inkGeo, new THREE.MeshBasicMaterial({ map: this.inkTex[i % 10], color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide }));
       s.renderOrder = 3;
       this.inks.push({ s, base: new THREE.Vector3(), drift: new THREE.Vector3(), spin: 0, t: 0, life: 0, size: 1 });
     }
@@ -388,7 +390,7 @@ export class UnlimitedVoid {
     const fade = k > 0.75 ? (1 - k) / 0.25 : 1;
     ink.s.scale.setScalar(ink.size * (0.4 + 0.6 * pop));
     ink.s.material.opacity = 0.95 * pop * fade;
-    ink.s.material.rotation += ink.spin * dt;
+    ink.s.rotateZ(ink.spin * dt);
   }
 
   stop() {
@@ -424,9 +426,10 @@ export class UnlimitedVoid {
     d.normalize();
     ink.base.set(this.center.x, 1.5, this.center.z).addScaledVector(d, R);
     ink.s.position.copy(ink.base);
+    ink.s.lookAt(this.center.x, 1.5, this.center.z);
+    ink.s.rotateZ(Math.random() * Math.PI * 2);
     ink.size = 3 + Math.random() * 6;
     ink.s.material.map = this.inkTex[Math.floor(Math.random() * this.inkTex.length)];
-    ink.s.material.rotation = Math.random() * Math.PI * 2;
     ink.spin = (Math.random() - 0.5) * 0.08;
     ink.drift.set(0, 0, 0);
     ink.t = 0;

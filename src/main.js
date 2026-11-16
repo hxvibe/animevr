@@ -14,7 +14,7 @@ import { CHARACTERS } from './characters/index.js';
 const DEFAULTS = {
   character: 'gojo', background: 'white', hud: false, skillNames: true, damageNumbers: true,
   invincible: false, dummyAI: true, locomotion: true, kaminoRule: false, heightOffset: 0, blackFlashChance: 0.2,
-  domainGesture: true, shinigamiEyes: true, deathDelay40: false,
+  domainGesture: true,
 };
 let saved = {};
 try {
@@ -22,7 +22,7 @@ try {
 } catch (_) { /* 저장소 사용 불가 */ }
 const settings = { ...DEFAULTS, ...saved };
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -40,7 +40,9 @@ scene.add(rig);
 
 const ctx = { renderer, scene, camera, rig, settings };
 ctx.sfx = new Sfx();
+ctx.sfx.preloadSfx();
 ctx.sfx.preloadClips({
+  sukunaFuga: 'assets/audio/sukuna_fuga_voice.mp3',
   gojoDomain: 'assets/audio/gojo_domain_voice.mp3',
   sukunaDomain: 'assets/audio/sukuna_domain_voice.mp3',
   shrineMusic: 'assets/audio/sukuna_domain_music.mp3',
@@ -102,13 +104,13 @@ const game = {
 };
 ctx.game = game;
 
-// 모델(더미·하얀 방·사당·데스노트·연필)을 먼저 받은 뒤 시작 버튼을 연다
+// 모델(더미·하얀 방·사당)을 먼저 받은 뒤 시작 버튼을 연다
 const btnVR0 = document.getElementById('btn-vr');
 const btnDesk0 = document.getElementById('btn-desktop');
 btnDesk0.disabled = true;
 btnVR0.disabled = true;
 document.getElementById('status').textContent = '모델 불러오는 중…';
-const loading = preload(['dummy', 'white_room', 'shrine', 'death_note', 'pencil']).then(() => {
+const loading = preload(['dummy', 'white_room', 'shrine']).then(() => {
   game.setBackground(settings.background);
   btnDesk0.disabled = false;
 });

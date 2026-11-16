@@ -8,6 +8,37 @@ export class Sfx {
     this._buf = new Map(); // name → AudioBuffer
   }
 
+  /** 효과음 묶음 (tools/gen_sfx.py로 렌더링한 파일 + 제공된 참격음) */
+  preloadSfx() {
+    const names = [
+      'whoosh', 'whoosh_2', 'whoosh_3', 'punch', 'punch_2', 'punch_3', 'explosion', 'explosion_2', 'explosion_small', 'black_flash',
+      'loop_blue', 'loop_red', 'loop_purple', 'loop_fire', 'loop_blood', 'charge_rise', 'zap', 'red_fire', 'purple_launch',
+      'shatter', 'shatter_2', 'click', 'toggle_on', 'toggle_off', 'denied', 'gunshot', 'rumble', 'shimmer', 'domain_open', 'void_open',
+      'fire_ignite', 'fire_whoosh', 'fire_explode', 'chant', 'grab', 'blood_beam', 'blood_burst', 'blood_splat', 'blood_splat_2',
+      'blood_compress', 'heartbeat', 'slash',
+    ];
+    this.preloadClips(Object.fromEntries(names.map((n) => [n, `assets/audio/sfx/${n}.mp3`])));
+  }
+
+  /**
+   * 효과음 재생. name_2, name_3 변형이 있으면 무작위로 고른다.
+   * @returns 재생했으면 true (파일이 아직 없으면 false → 호출 측에서 합성음으로 대체 가능)
+   */
+  play(name, { at = null, vol = 1, rate = 1, jitter = 0.05, delay = 0 } = {}) {
+    if (!this.ctx) return false;
+    const vars = [name, name + '_2', name + '_3'].map((n) => this._buf.get(n)).filter(Boolean);
+    if (!vars.length) return false;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = vars[Math.floor(Math.random() * vars.length)];
+    src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * jitter);
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g).connect(this._out(at));
+    src.start(ctx.currentTime + delay);
+    return true;
+  }
+
   /** 음성·음악 파일을 미리 받아 둔다 (디코딩은 오디오가 열린 뒤) */
   preloadClips(map) {
     for (const [name, url] of Object.entries(map)) {
@@ -173,9 +204,49 @@ export class Sfx {
   }
 
   /** 지속음 핸들 { set(level, pitch), pos(v), stop() } */
-  loop({ base = 60, type = 'sine', noiseF = 400, vol = 0.25 } = {}) {
+  loop({ sample = null, base = 60, type = 'sine', noiseF = 400, vol = 0.25 } = {}) {
     if (!this.ctx) return { set() {}, pos() {}, stop() {} };
     const ctx = this.ctx;
+    const buf = sample && this._buf.get('loop_' + sample);
+    if (buf) {
+      // 녹음(렌더링)된 지속음: 음량과 재생 속도로 세기·높이를 표현
+      const t = ctx.currentTime;
+      const panner = this._out({ x: 0, y: 0, z: 0 });
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.12);
+      g.connect(panner);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(g);
+      src.start(t, Math.random() * buf.duration);
+      let stopped = false;
+      return {
+        set(level = 1, pitch = 1) {
+          if (stopped) return;
+          const now = ctx.currentTime;
+          src.playbackRate.setTargetAtTime(Math.min(2.2, Math.max(0.5, Math.sqrt(pitch))), now, 0.08);
+          g.gain.setTargetAtTime(Math.max(0.0001, vol * level), now, 0.06);
+        },
+        pos(p) {
+          if (stopped || !panner.positionX) return;
+          const now = ctx.currentTime;
+          panner.positionX.setTargetAtTime(p.x, now, 0.03);
+          panner.positionY.setTargetAtTime(p.y, now, 0.03);
+          panner.positionZ.setTargetAtTime(p.z, now, 0.03);
+        },
+        stop(fade = 0.25) {
+          if (stopped) return;
+          stopped = true;
+          const now = ctx.currentTime;
+          g.gain.cancelScheduledValues(now);
+          g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), now);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+          src.stop(now + fade + 0.05);
+        },
+      };
+    }
     const t = ctx.currentTime;
     const panner = this._out({ x: 0, y: 0, z: 0 });
     const g = ctx.createGain();
@@ -230,75 +301,77 @@ export class Sfx {
     };
   }
 
-  // ── 프리셋 ──
+  // ── 프리셋 (파일이 없으면 합성음으로 대체) ──
   explosion(at, size = 1) {
+    if (this.play(size < 0.8 ? 'explosion_small' : 'explosion', { at, vol: Math.min(1.3, 0.6 + size * 0.35), rate: size > 1.6 ? 0.85 : 1 })) return;
     this.noise({ dur: 0.6 + size * 0.6, vol: 0.5 * Math.min(1.5, size), f0: 3000, f1: 80, at });
-    this.tone({ type: 'sine', f0: 120, f1: 30, dur: 0.5 + size * 0.4, vol: 0.5, at });
   }
   zap(at) {
-    this.tone({ type: 'sawtooth', f0: 1800, f1: 200, dur: 0.25, vol: 0.25, at });
+    if (this.play('zap', { at, vol: 0.8 })) return;
     this.noise({ dur: 0.2, vol: 0.25, f0: 6000, f1: 800, type: 'bandpass', q: 2, at });
   }
   ripple(at) {
-    this.tone({ type: 'sine', f0: 900, f1: 1400, dur: 0.35, vol: 0.12, at, attack: 0.02 });
+    this.play('shimmer', { at, vol: 0.35, rate: 1.2 });
   }
   hit() {
+    if (this.play('punch', { vol: 0.8, rate: 0.8 })) return;
     this.noise({ dur: 0.25, vol: 0.4, f0: 1500, f1: 100 });
-    this.tone({ type: 'square', f0: 200, f1: 60, dur: 0.2, vol: 0.2 });
   }
   enemyShoot(at) {
-    this.tone({ type: 'triangle', f0: 300, f1: 160, dur: 0.3, vol: 0.15, at });
+    this.play('gunshot', { at, vol: 0.45, rate: 1.15 });
   }
   enemyDie(at) {
+    if (this.play('shatter', { at, vol: 0.8 })) return;
     this.noise({ dur: 0.7, vol: 0.35, f0: 800, f1: 60, at });
-    this.tone({ type: 'sawtooth', f0: 220, f1: 40, dur: 0.6, vol: 0.18, at });
   }
   toggle(on) {
-    this.tone({ type: 'sine', f0: on ? 600 : 900, f1: on ? 1200 : 400, dur: 0.18, vol: 0.15 });
+    this.play(on ? 'toggle_on' : 'toggle_off', { vol: 0.8 });
   }
   denied() {
-    this.tone({ type: 'square', f0: 180, f1: 150, dur: 0.2, vol: 0.12 });
+    this.play('denied', { vol: 0.6 });
   }
   click() {
-    this.tone({ type: 'sine', f0: 1200, f1: 1500, dur: 0.07, vol: 0.12 });
+    this.play('click', { vol: 0.7 });
   }
   gunshot(at) {
-    this.noise({ dur: 0.18, vol: 0.35, f0: 5000, f1: 300, at });
-    this.tone({ type: 'square', f0: 160, f1: 60, dur: 0.12, vol: 0.15, at });
+    this.play('gunshot', { at, vol: 0.6 });
   }
   slash(at, pitch = 1) {
+    if (this.play('slash', { at, vol: 1, rate: pitch })) return;
     this.noise({ dur: 0.22, vol: 0.35, f0: 9000 * pitch, f1: 1200, type: 'bandpass', q: 1.5, at, attack: 0.002 });
-    this.tone({ type: 'sawtooth', f0: 2600 * pitch, f1: 700, dur: 0.12, vol: 0.06, at });
   }
   cut(at) {
+    if (this.play('slash', { at, vol: 0.45, rate: 1.35, jitter: 0.1 })) return;
     this.noise({ dur: 0.1, vol: 0.3, f0: 7000, f1: 2500, type: 'highpass', q: 0.7, at, attack: 0.001 });
   }
   shatter(at) {
-    this.noise({ dur: 0.5, vol: 0.35, f0: 8000, f1: 1500, type: 'highpass', q: 0.5, at });
-    for (let i = 0; i < 4; i++) this.tone({ type: 'sine', f0: 2500 + Math.random() * 3000, f1: 2000 + Math.random() * 2000, dur: 0.15 + Math.random() * 0.2, vol: 0.04, at });
+    this.play('shatter', { at, vol: 0.9 });
   }
   fire(at, size = 1) {
+    if (this.play('fire_explode', { at, vol: Math.min(1.3, 0.7 + size * 0.3), rate: size > 1.4 ? 0.85 : 1 })) return;
     this.noise({ dur: 1.2 * size, vol: 0.5, f0: 1200, f1: 120, at, attack: 0.02 });
-    this.tone({ type: 'sine', f0: 70, f1: 30, dur: 1.4 * size, vol: 0.55, at });
   }
   punch(at) {
+    if (this.play('punch', { at, vol: 0.9 })) return;
     this.noise({ dur: 0.12, vol: 0.4, f0: 1800, f1: 200, at });
-    this.tone({ type: 'sine', f0: 140, f1: 50, dur: 0.15, vol: 0.4, at });
   }
   blackFlash(at) {
+    if (this.play('black_flash', { at, vol: 1.1 })) return;
     this.noise({ dur: 0.5, vol: 0.6, f0: 4000, f1: 60, at, attack: 0.001 });
-    this.tone({ type: 'sawtooth', f0: 90, f1: 25, dur: 0.6, vol: 0.4, at });
-    this.tone({ type: 'square', f0: 2200, f1: 400, dur: 0.15, vol: 0.12, at });
+  }
+  whoosh(at, vol = 0.6, rate = 1) {
+    this.play('whoosh', { at, vol, rate, jitter: 0.12 });
   }
   rumble(dur = 2, vol = 0.4) {
+    if (this.play('rumble', { vol: vol * 1.6, rate: Math.max(0.7, Math.min(1.3, 3.5 / Math.max(1, dur * 1.4))) })) return;
     this.noise({ dur, vol, f0: 300, f1: 60, attack: 0.3 });
-    this.tone({ type: 'sine', f0: 45, f1: 30, dur, vol: vol * 0.8, attack: 0.3 });
   }
   domain() {
     if (!this.ctx) return;
-    this.tone({ type: 'sine', f0: 55, f1: 40, dur: 4, vol: 0.5, attack: 0.3 });
-    this.tone({ type: 'sine', f0: 880, f1: 1760, dur: 3, vol: 0.08, attack: 1 });
-    this.tone({ type: 'triangle', f0: 1320, f1: 2640, dur: 3.5, vol: 0.05, attack: 1.5 });
+    if (this.play('domain_open', { vol: 1 })) {
+      this.play('void_open', { vol: 0.5 });
+      return;
+    }
     this.noise({ dur: 2.5, vol: 0.3, f0: 200, f1: 8000, type: 'bandpass', q: 0.7, attack: 1.2 });
   }
 }

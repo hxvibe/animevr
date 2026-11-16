@@ -2,9 +2,8 @@
 // 기술 판정(의도)은 각 캐릭터가 이 상태를 읽어 직접 결정한다.
 import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
-import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+import { XRHandMeshModel } from 'three/addons/webxr/XRHandMeshModel.js';
 import { classifyHand, makeGestureResult, JOINT_NAMES } from './gestures.js';
-import { markHandTree } from './handmask.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -115,8 +114,6 @@ export class Input {
     const xr = this.renderer.xr;
     const cmf = new XRControllerModelFactory();
     cmf.setPath(PROFILES);
-    const hmf = new XRHandModelFactory();
-    hmf.setPath(PROFILES + 'generic-hand/');
     const rayGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
     for (let i = 0; i < 2; i++) {
       const controller = xr.getController(i);
@@ -125,12 +122,21 @@ export class Input {
       this.rig.add(controller, grip, hand);
       grip.add(cmf.createControllerModel(grip));
       // 메타 퀘스트 기본 손 모델 (WebXR generic-hand 프로필, 로컬 번들)
-      hand.add(hmf.createHandModel(hand, 'mesh'));
+      // three의 XRHandModelFactory는 처음 연결된 손(왼/오)의 메시를 그 슬롯에 고정한다.
+      // 추적이 끊겼다 다시 잡히면 슬롯의 왼손/오른손이 바뀌기도 하는데, 그러면 반대쪽 손 메시가
+      // 뒤집힌 채 움직여 면이 안쪽을 향하고 손이 뚫려 보인다 → 양손 메시를 모두 두고 현재 손에 맞는 것만 보인다
+      const models = {};
+      for (const hd of ['left', 'right']) {
+        const g = new THREE.Group();
+        g.visible = false;
+        hand.add(g);
+        models[hd] = { group: g, mesh: new XRHandMeshModel(g, hand, PROFILES + 'generic-hand/', hd) };
+      }
       const ray = new THREE.Line(rayGeom, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
       ray.scale.z = 2.5;
       ray.visible = false;
       controller.add(ray);
-      const slot = { controller, grip, hand, ray, inputSource: null };
+      const slot = { controller, grip, hand, ray, inputSource: null, models };
       this.slots.push(slot);
       controller.addEventListener('connected', (e) => {
         slot.inputSource = e.data;
@@ -218,15 +224,6 @@ export class Input {
     if (xr.isPresenting) {
       this.mode = 'xr';
       xr.updateCamera(this.camera);
-      // 손·컨트롤러 모델(비동기 로드)에 스텐실 표시 → 오버레이 글자가 손을 뚫고 보이지 않게
-      this._maskT = (this._maskT ?? 0) - dt;
-      if (this._maskT <= 0) {
-        this._maskT = 0.5;
-        for (const sl of this.slots) {
-          markHandTree(sl.hand);
-          markHandTree(sl.grip);
-        }
-      }
     }
     this.camera.getWorldPosition(this.head);
     this.camera.getWorldQuaternion(this.headQuat);
@@ -273,6 +270,13 @@ export class Input {
     const R = this.right;
     for (const slot of this.slots) {
       const src = slot.inputSource;
+      // 손 메시: 지금 이 슬롯에 잡힌 손의 방향에 맞는 메시만 보이고 갱신
+      for (const hd of ['left', 'right']) {
+        const m = slot.models[hd];
+        const on = !!src?.hand && src.handedness === hd;
+        m.group.visible = on;
+        if (on && slot.hand.joints?.wrist) m.mesh.updateMesh();
+      }
       if (!src) continue;
       const h = src.handedness === 'left' ? L : src.handedness === 'right' ? R : null;
       if (!h) continue;

@@ -66,7 +66,8 @@ export class Melee {
     this.combo = now - this.lastHit < 1.2 ? this.combo + 1 : 1;
     this.lastHit = now;
     const black = Math.random() < (settings.blackFlashChance ?? 0.2) + Math.min(0.15, this.combo * 0.03);
-    const base = 10 + speed * 3;
+    const mult = this.ctx.character?.meleeMult?.() ?? 1;
+    const base = (10 + speed * 3) * mult;
     if (black) {
       // 흑섬: 타격과 주력의 오차가 0.000001초 이내 → 위력 2.5승
       const dmg = Math.pow(base, 1.25) * 2.5;
@@ -86,7 +87,8 @@ export class Melee {
       hand?.pulse(1, 160);
     } else {
       target.damage(base, { type: 'punch', dir });
-      target.impulse?.(_v.copy(dir).multiplyScalar(2 + speed * 0.6).add(_v2.set(0, 0.8, 0)), 3);
+      target.impulse?.(_v.copy(dir).multiplyScalar((2 + speed * 0.6) * Math.sqrt(mult)).add(_v2.set(0, 0.8, 0)), 3);
+      if (mult > 1) fx.burst(pos, 20, new THREE.Color(0xff2030), 3, 0.03, 0.3);
       fx.burst(pos, 14, new THREE.Color(0xffffff), 2, 0.03, 0.25);
       sfx.punch(pos);
       hand?.pulse(0.7, 60);

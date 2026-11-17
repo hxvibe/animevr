@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { SlashLines, makeCrescent, FireArrow } from './vfx.js';
 import { spawnToonBlob, scorchTexture, emberTexture } from '../../core/toon.js';
-import { AuraFlames } from '../../core/aura.js';
+import { HandAura } from '../../core/handAura.js';
 import { MalevolentShrine } from './domainShrine.js';
 
 const _v = new THREE.Vector3();
@@ -28,7 +28,7 @@ export class Sukuna {
     this.energy = 100;
     this.maxEnergy = 100;
     this.lines = new SlashLines(ctx.scene, 160);
-    this.aura = new AuraFlames(ctx.scene, 'crimson', 220);
+    this.handAura = new HandAura(ctx, 'crimson'); // 영창·영역 수인 때 손을 감싸는 핏빛 오라
     this.slashes = [];
     this.arrows = [];
     this.pending = []; // 지연 폭발
@@ -130,7 +130,7 @@ export class Sukuna {
     this._updateScars(dt);
     this.lines.bright = this.ctx.fx.brightBg;
     this.lines.update(dt, this.ctx.input.head);
-    this.aura.update(dt, this.ctx.input.head);
+    this.handAura.update(dt);
     this.shrine.update(dt);
   }
 
@@ -170,14 +170,13 @@ export class Sukuna {
         this.ctx.sfx.play('chant', { vol: 0.7, rate: 0.9 + s.chantStage * 0.12 });
         s.chantStage++;
       }
-      // 영창이 진행될수록 손에서 핏빛 주력이 피어오른다
-      if (Math.random() < 0.3 + s.chant * 0.35) this._auraAtHand(h, 0.045 + s.chant * 0.03, 0.5 + s.chant * 0.4);
+      // 영창이 진행될수록 손을 감싼 핏빛 주력이 점점 선명해진다
+      this.handAura.set(side, 0.15 + (s.chant / 1.3) * 0.75);
       if (s.chant >= 1.3) {
         s.armed = 3;
         s.chant = 0;
         s.chantStage = 0;
         h.pulse(0.8, 120);
-        for (let i = 0; i < 10; i++) this._auraAtHand(h, 0.12, 1.4);
       }
     } else {
       s.broken += dt;
@@ -186,8 +185,8 @@ export class Sukuna {
         s.chantStage = 0;
       }
     }
-    // 장전 상태: 손과 팔뚝을 감싸고 타오른다
-    if (s.armed > 0 && Math.random() < 0.7) this._auraAtHand(h, 0.075, 1.0, true);
+    // 장전 상태: 오라가 완전히 선명하게 손을 감싼 채 일렁인다
+    if (s.armed > 0) this.handAura.set(side, 0.92 + Math.sin(this.ctx.world.time * 9) * 0.08);
 
     // ── 휘두르기: 解 또는 세계참 ──
     const swingOk = h.source === 'hand' ? h.gesture !== 'fist' && h.gesture !== 'pinch' : h.btn.trigger || s.armed > 0;
@@ -223,15 +222,6 @@ export class Sukuna {
         this._cleave(t, h);
       }
     }
-  }
-
-  /** 손(과 팔뚝)에서 피어오르는 오라 불꽃 */
-  _auraAtHand(h, size, speed, arm = false) {
-    const p = _v3.copy(h.palm);
-    if (arm && h.source === 'hand') p.addScaledVector(h.fingersDir, -Math.random() * 0.28);
-    p.add(_v.randomDirection().multiplyScalar(0.04 + size * 0.3));
-    const vel = _v2.randomDirection().multiplyScalar(0.25).add(_v.set(0, speed, 0));
-    this.aura.spawn(p, vel, size * (0.7 + Math.random() * 0.6), 0.45 + Math.random() * 0.35, 1.5);
   }
 
   _nearOther(h, d) {
@@ -472,10 +462,12 @@ export class Sukuna {
     }
     const dir = new THREE.Vector3().subVectors(tip, tail).normalize();
     const A = b.arrow;
-    const len = tip.distanceTo(tail) + 0.25;
-    A.group.position.copy(tail);
-    A.group.lookAt(_v.copy(tail).sub(dir)); // -Z 가 진행 방향이 되도록
-    A.setLength(len, 0.3 + b.draw * 0.5);
+    // 당길수록 꼬리가 뒤로 길게 뻗는다 (굵기는 그대로)
+    const extra = b.draw * 1.6;
+    const len = tip.distanceTo(tail) + 0.25 + extra;
+    A.group.position.copy(tail).addScaledVector(dir, -extra);
+    A.group.lookAt(_v.copy(A.group.position).sub(dir)); // -Z 가 진행 방향이 되도록
+    A.setLength(len, 1);
     A.update(dt);
     b.loop?.set(0.6 + b.draw * 1.2, 0.9 + b.draw * 0.6);
     b.loop?.pos(tip);
@@ -499,7 +491,7 @@ export class Sukuna {
   _fireArrow(pos, dir, draw) {
     const { fx, sfx } = this.ctx;
     const arrow = new FireArrow(this.ctx);
-    arrow.setLength(2.6, 1.25);
+    arrow.setLength(1.4 + draw * 4.4, 1); // 많이 당긴 화살일수록 길다
     arrow.group.position.copy(pos);
     arrow.group.lookAt(_v.copy(pos).add(dir));
     arrow.group.rotateY(Math.PI); // -Z 가 진행 방향
@@ -753,10 +745,6 @@ export class Sukuna {
         this._scar(p0.clone().addScaledVector(groundDir, 40), groundDir, 0.18, 80, 0x2a0000);
       }
     }
-    for (let i = 0; i < 26; i++) {
-      const p = _v3.copy(o).addScaledVector(along, (Math.random() - 0.5) * 0.9).addScaledVector(travel, Math.random() * 0.6);
-      this.aura.spawn(p, _v2.copy(along).multiplyScalar((Math.random() - 0.5) * 3).addScaledVector(travel, 1.5 + Math.random() * 2.5).add(_v.set(0, 0.6, 0)), 0.14 + Math.random() * 0.14, 0.5 + Math.random() * 0.3, 2.2);
-    }
     fx.flash(o, 0xffffff, 12, 0.3, 30);
     sfx.slash(o, 0.65);
     sfx.rumble(1.2, 0.5);
@@ -826,24 +814,9 @@ export class Sukuna {
         L.pulse(0.1 + d.sign * 0.4, 20);
         R.pulse(0.1 + d.sign * 0.4, 20);
       }
-      // 영역전개 준비: 두 손과 온몸에서 핏빛 주력이 치솟는다 (얼굴 앞은 비워 시야 확보)
-      const k = Math.min(1, d.sign / 1.5);
-      const n = 1 + Math.floor(k * 3);
-      for (let i = 0; i < n; i++) {
-        if (Math.random() < 0.5) {
-          const hh = Math.random() < 0.5 ? L : R;
-          if (hh.active) this._auraAtHand(hh, 0.08 + 0.06 * k, 0.8 + k);
-        } else {
-          const a = Math.random() * Math.PI * 2;
-          const r = 0.45 + Math.random() * 0.35;
-          const y = 0.15 + Math.random() * Math.max(0.3, inp.head.y - 0.55);
-          _v.set(inp.head.x + Math.cos(a) * r, y, inp.head.z + Math.sin(a) * r);
-          // 시선 정면 60° 안은 건너뛴다
-          _v2.set(Math.cos(a), 0, Math.sin(a));
-          if (_v2.dot(_v3.copy(inp.headDir).setY(0).normalize()) > 0.5) continue;
-          this.aura.spawn(_v, _v2.multiplyScalar(0.15).add(_v3.set(0, 1.2 + k * 1.2, 0)), 0.18 + 0.22 * k + Math.random() * 0.1, 0.7 + Math.random() * 0.3, 1.2);
-        }
-      }
+      // 영역전개 준비: 수인을 맺은 두 손을 감싼 핏빛 주력이 점점 선명해진다
+      this.handAura.set('left', 0.2 + (d.sign / 1.5) * 0.8);
+      this.handAura.set('right', 0.2 + (d.sign / 1.5) * 0.8);
       if (d.sign >= 1.5) {
         d.sign = 0;
         this._castDomain();
@@ -964,7 +937,7 @@ export class Sukuna {
     }
     for (const s of this.scars) scene.remove(s.m);
     scene.remove(this.lines.mesh);
-    this.aura.dispose();
+    this.handAura.dispose();
     for (const s of this.scars) if (s.ember) scene.remove(s.ember);
     this.shrine.dispose();
     this.ctx.world.domain = null;

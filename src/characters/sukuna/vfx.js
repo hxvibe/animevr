@@ -413,14 +413,15 @@ export class FireArrow {
     this.setLength(0.5);
   }
 
+  /** 길이만 바뀌고 굵기는 고정 (당길수록 길어진다) */
   setLength(len, thick = 1) {
     this.len = len;
-    const w = (0.12 + len * 0.42) * thick;
+    const w = 0.26 * thick;
     this.body.scale.set(w, w, len);
     this.glow.position.set(0, 0, -len * 0.6);
-    this.glow.scale.setScalar(0.25 + len * 0.6);
+    this.glow.scale.set(0.6 + len * 0.25, 0.6 + len * 0.25, 1);
     this.tip.position.set(0, 0, -len * 0.98);
-    this.tip.scale.setScalar(0.06 + len * 0.08);
+    this.tip.scale.setScalar(0.12);
   }
 
   update(dt) {

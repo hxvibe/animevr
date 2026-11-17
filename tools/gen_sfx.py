@@ -243,11 +243,6 @@ def energy_loop(kind):
         low = filt(noise(d), 'lp', 160) * 1.5
         pops = crackles(d, 45, 1200, 7000, 0.002) * 0.9
         x = mix(roar, low, pops)
-    elif kind == 'blood':
-        # 압축되는 피: 걸쭉한 저음 압력 + 물방울
-        press = filt(noise(d), 'lp', 220) * (0.6 + 0.4 * lfo_noise(d, 5)) * 2
-        squelch = sweep_noise(d, [500, 700, 450, 650], [0.35] * 4) * lfo_noise(d, 9, 0.9) * 0.6
-        x = mix(press, squelch, bubbles(d, 34, 180, 650) * 0.5)
     return loopify(x)
 
 
@@ -374,40 +369,6 @@ def grab():
     return mix(filt(noise(d) * env_exp(d, 0.025, 0.002), 'bp', (250, 1500)), thump(160, 90, d, 0.03) * 0.5)
 
 
-# 피 (쵸소우)
-def blood_beam():
-    d = 1.6
-    t = T(d)
-    crack = transient(0.002, 2500) * 2.0
-    hiss = sweep_noise(d, [6000, 4800, 3800], [0.5, 0.5, 0.5]) * np.minimum(1, t / 0.01) * np.exp(-t / 0.45)
-    whine = sweep_noise(d, [7500, 5000], [0.08, 0.08]) * np.exp(-t / 0.35) * 0.6
-    body = sat(thump(120, 45, d, 0.12, 0.03) * 1.5, 2)
-    wet = bubbles(0.4, 60, 300, 900) * 0.25
-    return reverb(mix(crack, hiss * 1.3, whine, body * 0.8, wet), 1.4, 0.3, 6000)
-
-
-def blood_burst():
-    d = 2.0
-    splash = sweep_noise(d, [2500, 900, 400], [0.8] * 3) * env_exp(d, 0.18, 0.002) * 1.2
-    return mix(explosion(0.7) * 0.8, splash, bubbles(0.6, 160, 200, 900) * 0.5, transient(0.004, 1500))
-
-
-def blood_splat(var=0):
-    d = 0.4
-    x = mix(thump(140 + var * 20, 60, d, 0.05) * 0.8, sweep_noise(d, [1600, 500], [0.6, 0.6]) * env_exp(d, 0.06, 0.002) * 1.2, bubbles(0.2, 120, 300, 1000) * 0.3)
-    return reverb(x, 0.5, 0.15)
-
-
-def blood_compress_start():
-    d = 0.9
-    return mix(sweep_noise(d, [2500, 600, 250], [0.7] * 3, [0, 1, 0.3]) * 1.0, bubbles(d, 50, 200, 700) * 0.5, thump(110, 60, d, 0.15) * 0.5)
-
-
-def heartbeat():
-    k = thump(70, 45, 0.25, 0.06, 0.03) + filt(noise(0.25) * env_exp(0.25, 0.03), 'lp', 200) * 0.6
-    return reverb(mix(at(k, 0, 0.9), at(k * 0.7, 0.28, 0.9)), 0.4, 0.1)
-
-
 if __name__ == '__main__':
     for i in range(3):
         write(f'whoosh{"_" + str(i + 1) if i else ""}', whoosh(0.28 + i * 0.08, 300 + i * 80, 2200 + i * 500))
@@ -416,7 +377,7 @@ if __name__ == '__main__':
     write('explosion_2', explosion(1.1))
     write('explosion_small', explosion(0.45))
     write('black_flash', black_flash())
-    for k in ['blue', 'red', 'purple', 'fire', 'blood']:
+    for k in ['blue', 'red', 'purple', 'fire']:
         write(f'loop_{k}', energy_loop(k), 0.8)
     write('charge_rise', charge_rise())
     write('zap', zap())
@@ -438,9 +399,3 @@ if __name__ == '__main__':
     write('fire_explode', fire_explode())
     write('chant', chant())
     write('grab', grab(), 0.6)
-    write('blood_beam', blood_beam())
-    write('blood_burst', blood_burst())
-    write('blood_splat', blood_splat(0))
-    write('blood_splat_2', blood_splat(1))
-    write('blood_compress', blood_compress_start())
-    write('heartbeat', heartbeat())

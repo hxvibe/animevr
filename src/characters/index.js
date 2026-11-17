@@ -4,7 +4,6 @@
 //   name / helpLines(mode) / hudRows()
 import { Gojo } from './gojo/gojo.js';
 import { Sukuna } from './sukuna/sukuna.js';
-import { Choso } from './choso/choso.js';
 
 export const CHARACTERS = [
   {
@@ -24,14 +23,5 @@ export const CHARACTERS = [
     kanji: '解 · 捌 · 開 · 伏魔御廚子',
     color: '#ff3a3a',
     create: (ctx) => new Sukuna(ctx),
-  },
-  {
-    id: 'choso',
-    name: '쵸소우',
-    work: '주술회전',
-    technique: '적혈조술(赤血操術)',
-    kanji: '百斂 · 穿血 · 超新星',
-    color: '#ff2a3a',
-    create: (ctx) => new Choso(ctx),
   },
 ];

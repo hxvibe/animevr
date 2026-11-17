@@ -12,10 +12,9 @@ export class Sfx {
   preloadSfx() {
     const names = [
       'whoosh', 'whoosh_2', 'whoosh_3', 'punch', 'punch_2', 'punch_3', 'explosion', 'explosion_2', 'explosion_small', 'black_flash',
-      'loop_blue', 'loop_red', 'loop_purple', 'loop_fire', 'loop_blood', 'charge_rise', 'zap', 'red_fire', 'purple_launch',
+      'loop_blue', 'loop_red', 'loop_purple', 'loop_fire', 'charge_rise', 'zap', 'red_fire', 'purple_launch',
       'shatter', 'shatter_2', 'click', 'toggle_on', 'toggle_off', 'denied', 'gunshot', 'rumble', 'shimmer', 'domain_open', 'void_open',
-      'fire_ignite', 'fire_whoosh', 'fire_explode', 'chant', 'grab', 'blood_beam', 'blood_burst', 'blood_splat', 'blood_splat_2',
-      'blood_compress', 'heartbeat', 'slash',
+      'fire_ignite', 'fire_whoosh', 'fire_explode', 'chant', 'grab', 'slash',
     ];
     this.preloadClips(Object.fromEntries(names.map((n) => [n, `assets/audio/sfx/${n}.mp3`])));
   }

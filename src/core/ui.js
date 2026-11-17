@@ -192,22 +192,52 @@ export class UI {
     g.fillStyle = '#ffffff';
     g.fillText('캐릭터', 90, 300);
     const n = CHARACTERS.length;
-    const cw = (W - 180 - (n - 1) * 40) / n;
-    CHARACTERS.forEach((c, i) => {
-      const x = 90 + i * (cw + 40);
-      const active = this.sel.character === c.id;
-      p.button(x, 325, cw, 250, '', 'char:' + c.id, { active, accent: c.color + 'aa', r: 24 });
-      g.textAlign = 'left';
-      g.fillStyle = '#ffffff';
-      g.font = `900 ${n > 2 ? 52 : 64}px ${FONT}`;
-      g.fillText(c.name, x + 30, 405);
-      g.font = `400 ${n > 2 ? 26 : 30}px ${FONT}`;
-      g.fillStyle = 'rgba(255,255,255,0.8)';
-      g.fillText(`${c.work} · ${c.technique}`, x + 32, 458);
-      g.font = `900 ${n > 2 ? 32 : 46}px ${JFONT}`;
-      g.fillStyle = c.color;
-      g.fillText(c.kanji, x + 30, 530);
-    });
+    if (n <= 2) {
+      const cw = (W - 180 - (n - 1) * 40) / n;
+      CHARACTERS.forEach((c, i) => {
+        const x = 90 + i * (cw + 40);
+        const active = this.sel.character === c.id;
+        p.button(x, 325, cw, 250, '', 'char:' + c.id, { active, accent: c.color + 'aa', r: 24 });
+        g.textAlign = 'left';
+        g.fillStyle = '#ffffff';
+        g.font = `900 64px ${FONT}`;
+        g.fillText(c.name, x + 30, 405);
+        g.font = `400 30px ${FONT}`;
+        g.fillStyle = 'rgba(255,255,255,0.8)';
+        g.fillText(`${c.work} · ${c.technique}`, x + 32, 458);
+        g.font = `900 46px ${JFONT}`;
+        g.fillStyle = c.color;
+        g.fillText(c.kanji, x + 30, 530);
+      });
+    } else {
+      // 3명 이상: 2열 격자 (이름 · 작품/술식 · 대표 기술)
+      const cols = 2;
+      const rows = Math.ceil(n / cols);
+      const gap = 24;
+      const cw = (W - 180 - gap) / cols;
+      const chh = (285 - (rows - 1) * gap) / rows;
+      CHARACTERS.forEach((c, i) => {
+        const x = 90 + (i % cols) * (cw + gap);
+        const y = 318 + Math.floor(i / cols) * (chh + gap);
+        const active = this.sel.character === c.id;
+        p.button(x, y, cw, chh, '', 'char:' + c.id, { active, accent: c.color + 'aa', r: 22 });
+        g.textAlign = 'left';
+        g.fillStyle = '#ffffff';
+        g.font = `900 46px ${FONT}`;
+        g.fillText(c.name, x + 26, y + 58);
+        const nameW = g.measureText(c.name).width;
+        g.font = `400 24px ${FONT}`;
+        g.fillStyle = 'rgba(255,255,255,0.78)';
+        g.fillText(`${c.work} · ${c.technique}`, x + 28, y + chh - 22);
+        g.textAlign = 'right';
+        let ks = 32;
+        g.font = `900 ${ks}px ${JFONT}`;
+        while (ks > 18 && g.measureText(c.kanji).width > cw - nameW - 90) g.font = `900 ${(ks -= 2)}px ${JFONT}`;
+        g.fillStyle = c.color;
+        g.fillText(c.kanji, x + cw - 24, y + 56);
+        g.textAlign = 'left';
+      });
+    }
 
     g.font = `700 34px ${FONT}`;
     g.fillStyle = '#ffffff';
@@ -260,13 +290,13 @@ export class UI {
       Object.entries(BACKGROUNDS).forEach(([id, b], i) => p.button(50 + i * 258, 200, 240, 90, b.label, 'bg:' + id, { active: this.ctx.env.id === id, size: 32 }));
       const toggles = [
         ['hud', '손목 HUD'], ['skillNames', '기술명 표시'], ['damageNumbers', '데미지 숫자'],
-        ['invincible', '플레이어 무적'], ['locomotion', '스틱 이동'], ['domainGesture', '영역전개 손동작'],
+        ['invincible', '플레이어 무적'], ['locomotion', '스틱 이동'], ['domainGesture', `${this.ctx.character?.domainLabel ?? '영역전개'} 손동작`],
       ];
       const cid = this.ctx.character?.id;
       if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건']);
       g.fillText('옵션', 50, 345);
       toggles.forEach(([k, l], i) => p.button(50 + (i % 3) * 430, 365 + Math.floor(i / 3) * 105, 410, 88, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 28, accent: '#2e6a9a' }));
-      if (this.ctx.character?.castDomain) p.button(910, 640 - 75, 440, 90, '영역전개 발동', 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
+      if (this.ctx.character?.castDomain) p.button(910, 640 - 75, 440, 90, `${this.ctx.character.domainLabel ?? '영역전개'} 발동`, 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
       g.fillStyle = '#ffffff';
       g.font = `700 32px ${FONT}`;
       g.fillText(`높이 보정  ${S.heightOffset >= 0 ? '+' : ''}${Math.round(S.heightOffset * 100)} cm`, 50, 640);

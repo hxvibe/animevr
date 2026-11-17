@@ -227,7 +227,7 @@ export class World {
     P.hp = Math.max(0, P.hp - amount);
     if (P.hp <= 0) {
       P.hp = P.maxHp;
-      this.ctx.ui.callout('쓰러졌다… 반전술식으로 회복', { color: '#ff8a8a' });
+      this.ctx.ui.callout(this.ctx.character?.reviveText ?? '쓰러졌다… 반전술식으로 회복', { color: '#ff8a8a' });
     }
   }
 

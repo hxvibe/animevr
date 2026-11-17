@@ -2,8 +2,9 @@
 기술 효과음 생성기 (오프라인 렌더링).
 순수 사인파 대신 필터링한 잡음·과도음·잔향을 겹쳐 실제 효과음에 가까운 소리를 만든다.
 실행: python3 tools/gen_sfx.py  → assets/audio/sfx/*.mp3
+      python3 tools/gen_sfx.py poof ki_blast  → 이름을 주면 그 파일만 다시 쓴다 (다른 소리는 그대로)
 """
-import os, subprocess, tempfile
+import os, sys, subprocess, tempfile
 import numpy as np
 from scipy import signal
 from scipy.io import wavfile
@@ -168,7 +169,13 @@ def fade_out(x, d=0.05):
     return x
 
 
+ONLY = set(sys.argv[1:])
+
+
 def write(name, x, peak=0.89, br='112k'):
+    # 이름을 지정했으면 그것만 쓴다. 소리 생성은 그대로 돌려 난수 순서를 유지한다
+    if ONLY and name not in ONLY:
+        return
     x = fade_out(norm(x, peak))
     os.makedirs(OUT, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
@@ -369,6 +376,104 @@ def grab():
     return mix(filt(noise(d) * env_exp(d, 0.025, 0.002), 'bp', (250, 1500)), thump(160, 90, d, 0.03) * 0.5)
 
 
+# ── 나루토 ──
+def loop_rasengan():
+    d = 4.5
+    t = T(d)
+    # 고속으로 회전하는 바람: 대역 잡음을 빠르게 진폭 변조
+    whirl = sweep_noise(d, [1400, 1800, 1500, 1700], [0.45] * 4) * (0.55 + 0.45 * np.sin(2 * np.pi * 38 * t) ** 2)
+    air = sweep_noise(d, [4200, 5200, 4600], [0.5] * 3) * lfo_noise(d, 3, 0.6) * 0.35
+    hum = np.sin(2 * np.pi * 150 * t + 2 * np.sin(2 * np.pi * 38 * t)) * 0.25
+    low = filt(noise(d), 'lp', 220) * (0.6 + 0.4 * np.sin(2 * np.pi * 19 * t)) * 0.8
+    return loopify(mix(whirl * 1.3, air, hum, low))
+
+
+def loop_shuriken():
+    d = 4.5
+    t = T(d)
+    whine = sum(np.sin(2 * np.pi * f * t + 0.8 * np.sin(2 * np.pi * 55 * t)) for f in [1850, 2770, 3700]) * 0.12
+    chop = sweep_noise(d, [2600, 3200, 2800], [0.4] * 3) * (0.35 + 0.65 * np.sin(2 * np.pi * 55 * t) ** 8)
+    roar = filt(noise(d), 'lp', 600) * (0.6 + 0.4 * lfo_noise(d, 6))
+    return loopify(mix(whine, chop * 1.2, roar * 0.7))
+
+
+def rasengan_hit():
+    d = 1.6
+    t = T(0.7)
+    grind = sweep_noise(0.7, [1600, 900, 500], [0.5, 0.6, 0.7]) * (0.5 + 0.5 * np.sin(2 * np.pi * 60 * t) ** 2) * env_exp(0.7, 0.3, 0.01)
+    return mix(at(whoosh(0.35, 700, 3200) * 0.8, 0, d), at(grind * 1.4, 0.02, d), at(explosion(0.7), 0.12, d))
+
+
+def wind_burst():
+    d = 4.0
+    t = T(d)
+    howl = sweep_noise(d, [700, 2600, 1400, 500], [0.5, 0.4, 0.5, 0.7], [0, 1, 0.6, 0]) * (0.5 + 0.5 * np.sin(2 * np.pi * 45 * t) ** 6)
+    hiss = sweep_noise(d, [5000, 7000, 3000], [0.6] * 3, [0.2, 1, 0.3, 0]) * 0.5
+    return mix(explosion(1.5), howl * 1.3, hiss)
+
+
+def poof():
+    d = 0.6
+    x = mix(filt(noise(d), 'lp', 900) * env_exp(d, 0.09, 0.006) * 1.3, thump(230, 90, 0.25, 0.04) * 0.6, filt(noise(d), 'bp', (1500, 4000)) * env_exp(d, 0.03, 0.002) * 0.4)
+    return reverb(x, 0.6, 0.2)
+
+
+# ── 손오공 ──
+def loop_ki():
+    d = 4.5
+    t = T(d)
+    hum = (np.sin(2 * np.pi * 68 * t) + 0.6 * np.sin(2 * np.pi * 102 * t) + 0.3 * np.sin(2 * np.pi * 204 * t)) * (0.7 + 0.3 * np.sin(2 * np.pi * 6 * t))
+    band = sweep_noise(d, [500, 800, 650, 750], [0.35] * 4) * lfo_noise(d, 8, 0.6)
+    return loopify(mix(sat(hum * 0.5, 1.8) * 0.7, band * 1.1, crackles(d, 50, 2500, 9000, 0.002) * 0.5))
+
+
+def loop_beam():
+    d = 4.5
+    t = T(d)
+    roar = sat(filt(noise(d), 'lp', 1300) * 3, 2.5) * (0.7 + 0.3 * lfo_noise(d, 15))
+    hi = sweep_noise(d, [2400, 3000, 2600], [0.5] * 3) * 0.5
+    sub = np.sin(2 * np.pi * 44 * t) * 0.7
+    return loopify(mix(roar * 0.8, hi, sub, crackles(d, 90, 2000, 9000, 0.002) * 0.4))
+
+
+def ki_blast():
+    d = 0.7
+    pew = sine_sweep(d, 1700, 260, 0.05) * env_exp(d, 0.08, 0.002) * 0.6
+    hiss = sweep_noise(d, [3200, 900], [0.8, 0.8]) * env_exp(d, 0.1, 0.002)
+    return reverb(mix(pew, hiss, transient(0.004, 2000) * 0.6, thump(140, 60, d, 0.06) * 0.6), 0.6, 0.2)
+
+
+def teleport():
+    d = 0.5
+    zip_ = sweep_noise(0.22, [900, 7000], [0.5, 0.4], [0, 1, 0])
+    ping = np.sin(2 * np.pi * np.cumsum(np.linspace(2600, 3400, int(d * SR))) / SR) * env_exp(d, 0.08, 0.002) * 0.25
+    return reverb(mix(at(zip_, 0, d), ping), 0.7, 0.3, 7000)
+
+
+def loop_aura():
+    d = 4.5
+    t = T(d)
+    roar = filt(noise(d), 'lp', 900) * (0.5 + 0.5 * lfo_noise(d, 9))
+    wind = sweep_noise(d, [320, 520, 380, 450], [0.4] * 4) * 1.2
+    rumble_ = np.sin(2 * np.pi * 52 * t) * (0.6 + 0.4 * np.sin(2 * np.pi * 3 * t)) * 0.5
+    return loopify(mix(roar, wind, rumble_, crackles(d, 60, 3000, 9000, 0.002) * 0.5))
+
+
+def powerup():
+    d = 3.6
+    roar = sat(filt(noise(d), 'lp', 1100) * 3, 2.5) * env_exp(d, 1.2, 0.02)
+    return mix(explosion(1.6), roar * 0.6, at(shimmer(1.2) * 0.4, 0.05, d))
+
+
+def loop_spirit():
+    d = 4.5
+    t = T(d)
+    chord = sum(np.sin(2 * np.pi * f * t) * a for f, a in [(220, 0.5), (277.2, 0.35), (329.6, 0.35), (440, 0.2)]) * (0.75 + 0.25 * np.sin(2 * np.pi * 0.7 * t))
+    air = sweep_noise(d, [3000, 4500, 3500], [0.6] * 3) * lfo_noise(d, 2, 0.7) * 0.4
+    low = filt(noise(d), 'lp', 180) * 1.2
+    return loopify(mix(chord * 0.5, air, low))
+
+
 if __name__ == '__main__':
     for i in range(3):
         write(f'whoosh{"_" + str(i + 1) if i else ""}', whoosh(0.28 + i * 0.08, 300 + i * 80, 2200 + i * 500))
@@ -399,3 +504,11 @@ if __name__ == '__main__':
     write('fire_explode', fire_explode())
     write('chant', chant())
     write('grab', grab(), 0.6)
+    for name, fn in [('loop_rasengan', loop_rasengan), ('loop_shuriken', loop_shuriken), ('loop_ki', loop_ki), ('loop_beam', loop_beam), ('loop_aura', loop_aura), ('loop_spirit', loop_spirit)]:
+        write(name, fn(), 0.8)
+    write('rasengan_hit', rasengan_hit())
+    write('wind_burst', wind_burst())
+    write('poof', poof())
+    write('ki_blast', ki_blast())
+    write('teleport', teleport())
+    write('powerup', powerup())

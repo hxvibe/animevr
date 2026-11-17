@@ -62,6 +62,8 @@ export class Melee {
 
   hit(target, pos, dir, speed, hand) {
     const { fx, sfx, ui, world, settings } = this.ctx;
+    // 캐릭터가 자기 방식의 타격을 쓰면 그쪽으로 (흑섬은 주술회전 캐릭터만)
+    if (this.ctx.character?.meleeHit?.(target, pos, dir, speed, hand)) return;
     const now = world.time;
     this.combo = now - this.lastHit < 1.2 ? this.combo + 1 : 1;
     this.lastHit = now;

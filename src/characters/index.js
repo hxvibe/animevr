@@ -4,6 +4,8 @@
 //   name / helpLines(mode) / hudRows()
 import { Gojo } from './gojo/gojo.js';
 import { Sukuna } from './sukuna/sukuna.js';
+import { Naruto } from './naruto/naruto.js';
+import { Goku } from './goku/goku.js';
 
 export const CHARACTERS = [
   {
@@ -23,5 +25,23 @@ export const CHARACTERS = [
     kanji: '解 · 捌 · 開 · 伏魔御廚子',
     color: '#ff3a3a',
     create: (ctx) => new Sukuna(ctx),
+  },
+  {
+    id: 'naruto',
+    name: '우즈마키 나루토',
+    work: '나루토',
+    technique: '차크라 · 풍둔',
+    kanji: '螺旋丸 · 影分身 · 九喇嘛',
+    color: '#ff8a1a',
+    create: (ctx) => new Naruto(ctx),
+  },
+  {
+    id: 'goku',
+    name: '손오공',
+    work: '드래곤볼',
+    technique: '기(気)',
+    kanji: 'かめはめ波 · 元気玉 · 超サイヤ人',
+    color: '#ffc21a',
+    create: (ctx) => new Goku(ctx),
   },
 ];

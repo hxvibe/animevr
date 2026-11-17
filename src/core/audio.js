@@ -15,6 +15,9 @@ export class Sfx {
       'loop_blue', 'loop_red', 'loop_purple', 'loop_fire', 'charge_rise', 'zap', 'red_fire', 'purple_launch',
       'shatter', 'shatter_2', 'click', 'toggle_on', 'toggle_off', 'denied', 'gunshot', 'rumble', 'shimmer', 'domain_open', 'void_open',
       'fire_ignite', 'fire_whoosh', 'fire_explode', 'chant', 'grab', 'slash',
+      // 나루토 · 손오공
+      'loop_rasengan', 'loop_shuriken', 'rasengan_hit', 'wind_burst', 'poof',
+      'loop_ki', 'loop_beam', 'loop_aura', 'loop_spirit', 'ki_blast', 'teleport', 'powerup',
     ];
     this.preloadClips(Object.fromEntries(names.map((n) => [n, `assets/audio/sfx/${n}.mp3`])));
   }

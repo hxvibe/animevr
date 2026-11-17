@@ -171,10 +171,10 @@ export class EnergyOrb {
     // 밝은 배경에서도 보이도록 일반 혼합 바탕층
     this.base = new THREE.Mesh(_sphere, new THREE.ShaderMaterial({
       vertexShader: orbVert,
-      fragmentShader: `varying vec3 vN; varying vec3 vV; uniform vec3 uMid; uniform vec3 uRim;
+      fragmentShader: `varying vec3 vN; varying vec3 vV; uniform vec3 uMid; uniform vec3 uRim; uniform float uBaseA;
         void main(){ float f = 1.0 - max(0.0, dot(normalize(vN), normalize(vV)));
-          vec3 c = mix(uMid * 0.85, uRim * 0.6, f); gl_FragColor = vec4(c, 0.55 + 0.4 * f); }`,
-      uniforms: { uMid: this.u.uMid, uRim: this.u.uRim },
+          vec3 c = mix(uMid * 0.85, uRim * 0.6, f); gl_FragColor = vec4(c, (0.55 + 0.4 * f) * uBaseA); }`,
+      uniforms: { uMid: this.u.uMid, uRim: this.u.uRim, uBaseA: { value: P.baseA ?? 1 } },
       transparent: true, depthWrite: false,
     }));
     this.base.scale.setScalar(0.98);
@@ -232,9 +232,10 @@ export class EnergyOrb {
     if (this.boltT <= 0) {
       this.boltT = 0.05 + Math.random() * 0.04;
       this.bolts.width = Math.max(0.004, r * 0.05);
-      this.bolts.regen(this.pos, r, cam, 1.1, Math.round(3 + 4 * intensity));
+      const nb = !!this.P.noBolts; // 번개 없는 구체 (원기옥 등)
+      this.bolts.regen(this.pos, r, cam, 1.1, nb ? 0 : Math.round(3 + 4 * intensity));
       this.darkBolts.width = Math.max(0.004, r * (this.P.dark ? 0.07 : 0.035));
-      this.darkBolts.regen(this.pos, r * 1.05, cam, 1.3, this.P.dark || this.ctx.fx.brightBg ? 3 : 0);
+      this.darkBolts.regen(this.pos, r * 1.05, cam, 1.3, !nb && (this.P.dark || this.ctx.fx.brightBg) ? 3 : 0);
     }
     this.starT -= dt;
     if (this.starT <= 0) {

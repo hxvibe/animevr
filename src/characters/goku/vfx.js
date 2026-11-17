@@ -8,6 +8,8 @@ const _z = new THREE.Vector3(0, 0, 1);
 
 // 기를 모은 구체 (에너지 구체를 기 색으로)
 ORB_PRESETS.ki = { core: 0xffffff, mid: 0x3aa8ff, rim: 0x8fdcff, bolt: 0xbfeaff, swirl: 0x5ab8ff, swirl2: 0xe8f8ff, dir: 1, spin: 0.9, flat: 0.1, swirlScale: 2.0 };
+ORB_PRESETS.kiGold = { core: 0xffffff, mid: 0xffb000, rim: 0xffe27a, bolt: 0xfff2b0, swirl: 0xffc21a, swirl2: 0xfff8e0, dir: 1, spin: 0.9, flat: 0.1, swirlScale: 2.0 };
+ORB_PRESETS.spiritGold = { core: 0xffffff, mid: 0xffd24a, rim: 0xfff6d0, bolt: 0xfff2c0, swirl: 0xffd860, swirl2: 0xffffff, dir: 1, spin: 0.35, flat: 0.0, swirlScale: 1.35, noBolts: true, baseA: 0.4 };
 ORB_PRESETS.spirit = { core: 0xffffff, mid: 0x9ad8ff, rim: 0xf0faff, bolt: 0xe6f8ff, swirl: 0x9fe0ff, swirl2: 0xffffff, dir: 1, spin: 0.35, flat: 0.0, swirlScale: 1.35, noBolts: true, baseA: 0.4 };
 
 // 길이는 미터 단위 그대로(uLen에서 잘림). 손 가까이는 가늘게 시작해 2m쯤에서 제 굵기

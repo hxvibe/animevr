@@ -6,7 +6,9 @@
 //  · 영역전개 「伏魔御廚子(복마어주자)」: 사찰을 세우고 범위 안 모든 것에 해·팔을 난사
 //  · 흑섬 / 반전술식: 공통 시스템
 import * as THREE from 'three';
-import { SlashLines, makeCrescent, FireArrow, spawnFirePillar } from './vfx.js';
+import { SlashLines, makeCrescent, FireArrow } from './vfx.js';
+import { spawnToonBlob, scorchTexture, emberTexture } from '../../core/toon.js';
+import { AuraFlames } from '../../core/aura.js';
 import { MalevolentShrine } from './domainShrine.js';
 
 const _v = new THREE.Vector3();
@@ -26,6 +28,7 @@ export class Sukuna {
     this.energy = 100;
     this.maxEnergy = 100;
     this.lines = new SlashLines(ctx.scene, 160);
+    this.aura = new AuraFlames(ctx.scene, 'crimson', 220);
     this.slashes = [];
     this.arrows = [];
     this.pending = []; // 지연 폭발
@@ -127,6 +130,7 @@ export class Sukuna {
     this._updateScars(dt);
     this.lines.bright = this.ctx.fx.brightBg;
     this.lines.update(dt, this.ctx.input.head);
+    this.aura.update(dt, this.ctx.input.head);
     this.shrine.update(dt);
   }
 
@@ -166,13 +170,14 @@ export class Sukuna {
         this.ctx.sfx.play('chant', { vol: 0.7, rate: 0.9 + s.chantStage * 0.12 });
         s.chantStage++;
       }
-      if (Math.random() < 0.5) fx.spawn(h.palm, _v2.randomDirection().multiplyScalar(0.2), new THREE.Color(0xffffff), 0.015, 0.4, 2, 0);
+      // 영창이 진행될수록 손에서 핏빛 주력이 피어오른다
+      if (Math.random() < 0.3 + s.chant * 0.35) this._auraAtHand(h, 0.045 + s.chant * 0.03, 0.5 + s.chant * 0.4);
       if (s.chant >= 1.3) {
         s.armed = 3;
         s.chant = 0;
         s.chantStage = 0;
         h.pulse(0.8, 120);
-        fx.burst(h.palm, 30, new THREE.Color(0xffffff), 1.2, 0.02, 0.5);
+        for (let i = 0; i < 10; i++) this._auraAtHand(h, 0.12, 1.4);
       }
     } else {
       s.broken += dt;
@@ -181,10 +186,8 @@ export class Sukuna {
         s.chantStage = 0;
       }
     }
-    if (s.armed > 0 && Math.random() < 0.6) {
-      fx.spawn(h.palm, _v2.randomDirection().multiplyScalar(0.15), new THREE.Color(0xffffff), 0.02, 0.3, 2, 0);
-      fx.spawnDark(h.palm, _v2.randomDirection().multiplyScalar(0.15), SMOKE, 0.03, 0.4, 2, 0);
-    }
+    // 장전 상태: 손과 팔뚝을 감싸고 타오른다
+    if (s.armed > 0 && Math.random() < 0.7) this._auraAtHand(h, 0.075, 1.0, true);
 
     // ── 휘두르기: 解 또는 세계참 ──
     const swingOk = h.source === 'hand' ? h.gesture !== 'fist' && h.gesture !== 'pinch' : h.btn.trigger || s.armed > 0;
@@ -220,6 +223,15 @@ export class Sukuna {
         this._cleave(t, h);
       }
     }
+  }
+
+  /** 손(과 팔뚝)에서 피어오르는 오라 불꽃 */
+  _auraAtHand(h, size, speed, arm = false) {
+    const p = _v3.copy(h.palm);
+    if (arm && h.source === 'hand') p.addScaledVector(h.fingersDir, -Math.random() * 0.28);
+    p.add(_v.randomDirection().multiplyScalar(0.04 + size * 0.3));
+    const vel = _v2.randomDirection().multiplyScalar(0.25).add(_v.set(0, speed, 0));
+    this.aura.spawn(p, vel, size * (0.7 + Math.random() * 0.6), 0.45 + Math.random() * 0.35, 1.5);
   }
 
   _nearOther(h, d) {
@@ -352,7 +364,7 @@ export class Sukuna {
       const k = Math.max(0, s.life / 0.55);
       const fade = Math.min(1, k * 3);
       s.g.children.forEach((m, j) => (m.material.opacity = [1, 0.75][j] * fade));
-      s.g.scale.setScalar(1 + (1 - k) * 0.6);
+      s.g.scale.set(1 + (1 - k) * 0.6, 1, 1); // 길이만 늘고 굵기는 그대로
       if (s.pos.y < 0.05 || s.life <= 0) {
         if (s.pos.y < 0.3) this._scar(s.pos, s.along, 1.2, 0.04);
         this.ctx.scene.remove(s.g);
@@ -537,27 +549,117 @@ export class Sukuna {
 
   _kamino(pos, draw, primary) {
     const { world, fx, sfx, ui } = this.ctx;
-    const R = 3.5 + draw * 5;
+    const R = 4 + draw * 5.5;
     world.forEachTarget(pos, R, (t, d, c) => {
       const k = Math.max(0, 1 - d / R);
       const n = new THREE.Vector3().subVectors(c, pos).add(_v2.set(0, 0.8, 0)).normalize();
-      t.impulse(n.clone().multiplyScalar(6 + 12 * k), 8);
-      t.damage(40 + 200 * k, { type: 'burn', burn: true, dir: n, dirAmt: 3 });
+      t.impulse(n.clone().multiplyScalar(8 + 15 * k), 10);
+      t.damage(70 + 280 * k, { type: 'burn', burn: true, dir: n, dirAmt: 3.5 });
     });
-    fx.sphereBlast(pos, FIRE, R * 0.7, 0.45);
-    fx.sphereBlast(pos, 0xfff0c0, R * 0.3, 0.2);
-    fx.burst(pos, 160, FIRE, 6, 0.12, 1.1, { up: 1.2, grav: -2, drag: 1.5, grow: 1.5 });
-    fx.burst(pos, 80, FIRE_HI, 4, 0.08, 0.6, { grav: -1 });
-    fx.burst(pos, 60, SMOKE, 3, 0.25, 2.2, { dark: true, up: 1, grav: -1.5, drag: 1, grow: 2 });
-    fx.shockwave(_v.copy(pos).setY(0.06), FIRE, R * 1.3, 0.7);
-    spawnFirePillar(fx, pos, 6 + draw * 10, 1 + draw * 2, 2.4);
-    fx.flash(pos, FIRE, 14, 0.8, 25);
+    this._toonFireBlast(pos, R, draw, primary);
+    fx.shockwave(_v.copy(pos).setY(0.06), FIRE, R * 1.5, 0.6);
+    fx.burst(pos, primary ? 90 : 40, FIRE_HI, 7, 0.05, 0.9, { up: 1.6, grav: 4, drag: 0.6 }); // 튀는 불티
+    fx.flash(pos, FIRE, 16, 0.9, 28);
     sfx.fire(pos, 1 + draw);
-    this._scar(pos, new THREE.Vector3(1, 0, 0), R * 1.2, R * 1.2, 0x120806);
+    sfx.explosion(pos, 0.8 + draw * 0.8);
+    sfx.rumble(0.6 + draw * 0.6, 0.3 + draw * 0.2);
+    this._scorch(pos, R * 1.5);
     if (primary) {
       ui.manga({ main: '竈', ruby: 'カミノ', color: '#ff6a10' });
       // 영역 안이라면: 갈려나간 분진이 일제히 점화
       if (this.shrine.state === 'active') this._igniteDomain();
+    }
+  }
+
+  /** 개(開) 착탄: 불새 화살과 같은 셀 셰이딩 화염 (화구 → 사방의 불덩이 → 불기둥 → 검은 연기) */
+  _toonFireBlast(pos, R, draw, primary) {
+    const fx = this.ctx.fx;
+    const lite = !primary;
+    const base = new THREE.Vector3(pos.x, Math.max(0.25, pos.y), pos.z);
+    // 가까이서 터져도 불덩이가 얼굴을 덮지 않게: 머리에서 1.3m 밖까지만 부푼다
+    const head = this.ctx.input.head;
+    const fit = (to, r) => Math.min(r, Math.max(0.15, to.distanceTo(head) - 1.3));
+    const blob = (pal, o) => {
+      const to = o.to ?? o.from;
+      o.r1 = fit(to, o.r1);
+      if (o.r1 <= 0.15) return;
+      spawnToonBlob(fx, pal, o);
+    };
+    const H = 5 + draw * 9;
+    const colR = 0.8 + draw * 1.6;
+    // 하얗게 타오르는 중심 화구
+    blob('fireHot', { from: base, r0: 0.2, r1: R * 0.42, dur: 1.5, growK: 0.18, erodeAt: 0.45, outline: 0.09, disp: 0.5 });
+    // 사방으로 부풀어 오르는 불덩이
+    const nPuff = lite ? 5 : 9;
+    for (let i = 0; i < nPuff; i++) {
+      const d = _v.randomDirection();
+      d.y = Math.abs(d.y) * 0.8 + 0.1;
+      d.normalize();
+      blob(i % 3 ? 'fire' : 'fireHot', {
+        from: base, to: base.clone().addScaledVector(d, R * (0.35 + Math.random() * 0.3)),
+        r0: 0.15, r1: R * (0.17 + Math.random() * 0.13), delay: Math.random() * 0.12, dur: 1.7 + Math.random() * 0.6,
+        rise: 0.6, erodeAt: 0.5, outline: 0.07, disp: 0.45,
+      });
+    }
+    // 불기둥: 덩어리가 겹겹이 솟구친다
+    const nCol = lite ? 3 : 6;
+    for (let j = 0; j < nCol; j++) {
+      const f = (j + 1) / nCol;
+      blob(j < 2 ? 'fireHot' : 'fire', {
+        from: base, to: base.clone().add(_v.set((Math.random() - 0.5) * 0.4, H * f, (Math.random() - 0.5) * 0.4)),
+        r0: 0.2, r1: colR * (1.15 - f * 0.35), delay: j * 0.05, dur: 2.2 + f * 0.5, growK: 0.25,
+        erodeAt: 0.55, outline: 0.07, disp: 0.4, stretch: 1.35,
+      });
+    }
+    // 꼭대기의 검은 연기 (버섯구름) + 바닥을 쓸고 퍼지는 연기
+    const nSmoke = lite ? 3 : 6;
+    for (let i = 0; i < nSmoke; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = colR * (0.4 + Math.random() * 0.9);
+      blob('smoke', {
+        from: base.clone().add(_v.set(0, H * 0.75, 0)), to: base.clone().add(_v.set(Math.cos(a) * sp, H * (0.95 + Math.random() * 0.25), Math.sin(a) * sp)),
+        r0: 0.3, r1: colR * (1.1 + Math.random() * 0.6), delay: 0.45 + Math.random() * 0.3, dur: 3.4, rise: 0.7,
+        growK: 0.4, erodeAt: 0.5, outline: 0.06, disp: 0.5,
+      });
+    }
+    for (let i = 0; i < (lite ? 3 : 7); i++) {
+      const a = (i / (lite ? 3 : 7)) * Math.PI * 2 + Math.random() * 0.5;
+      blob('smoke', {
+        from: base.clone().setY(0.3), to: base.clone().add(_v.set(Math.cos(a) * R * 0.6, 0.4, Math.sin(a) * R * 0.6)).setY(0.45),
+        r0: 0.2, r1: R * (0.08 + Math.random() * 0.05), delay: 0.15 + Math.random() * 0.2, dur: 2.8, rise: 0.25,
+        growK: 0.4, erodeAt: 0.45, outline: 0.05, disp: 0.45,
+      });
+    }
+  }
+
+  /** 진짜 같은 그을음: 숯처럼 까만 중심 · 갈색 외곽 · 폭발 줄무늬 · 식어 가는 잔불 */
+  _scorch(pos, size) {
+    const scene = this.ctx.scene;
+    const m = new THREE.Mesh(this.scarGeo, new THREE.MeshBasicMaterial({ map: scorchTexture(Math.floor(Math.random() * 3)), transparent: true, opacity: 0.95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    m.position.set(pos.x, 0.012, pos.z);
+    m.rotation.y = Math.random() * Math.PI * 2;
+    m.scale.set(size, 1, size);
+    m.renderOrder = 1;
+    scene.add(m);
+    const ember = new THREE.Mesh(this.scarGeo, new THREE.MeshBasicMaterial({ map: emberTexture(), transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, fog: false }));
+    ember.position.set(pos.x, 0.014, pos.z);
+    ember.rotation.y = Math.random() * Math.PI * 2;
+    ember.scale.set(size * 0.4, 1, size * 0.4);
+    ember.renderOrder = 2;
+    scene.add(ember);
+    this.scars.push({ m, t: 0, life: 25, op: 0.95, ember, emberLife: 5 });
+    this._trimScars();
+  }
+
+  _trimScars() {
+    while (this.scars.length > 60) {
+      const old = this.scars.shift();
+      this.ctx.scene.remove(old.m);
+      old.m.material.dispose();
+      if (old.ember) {
+        this.ctx.scene.remove(old.ember);
+        old.ember.material.dispose();
+      }
     }
   }
 
@@ -617,7 +719,7 @@ export class Sukuna {
     // 연출: 휘두른 방향(along)으로 화면을 가로지르는 거대한 칼날이 앞으로 뻗어 나가며 공간을 가른다
     for (let i = 0; i < 7; i++) {
       const d = 2.5 + i * i * 1.6;
-      this.lines.add(_v.copy(o).addScaledVector(travel, d), along, n, 3 + d * 1.25, 0.05 + d * 0.012, 0.45 + i * 0.07, 0xffffff);
+      this.lines.add(_v.copy(o).addScaledVector(travel, d), along, n, 3 + d * 1.25, 0.012 + d * 0.004, 0.45 + i * 0.07, 0xffffff, 0.03);
     }
     const big = makeCrescent(1);
     big.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(along, n, travel));
@@ -625,7 +727,7 @@ export class Sukuna {
     fx.addTransient(big, 0.6, (k) => {
       const d = 1.5 + k * 60;
       big.position.copy(o).addScaledVector(travel, d);
-      big.scale.set(1 + d * 0.9, 1 + d * 0.25, 1 + d * 0.2);
+      big.scale.set(1 + d * 0.9, 1 + d * 0.07, 1 + d * 0.2);
       big.children.forEach((m, j) => (m.material.opacity = (j ? 0.6 : 1) * (k < 0.7 ? 1 : (1 - k) / 0.3)));
     }, () => big.children.forEach((m) => m.material.dispose()));
     const sheet = new THREE.Mesh(this.sheetGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
@@ -651,6 +753,10 @@ export class Sukuna {
         this._scar(p0.clone().addScaledVector(groundDir, 40), groundDir, 0.18, 80, 0x2a0000);
       }
     }
+    for (let i = 0; i < 26; i++) {
+      const p = _v3.copy(o).addScaledVector(along, (Math.random() - 0.5) * 0.9).addScaledVector(travel, Math.random() * 0.6);
+      this.aura.spawn(p, _v2.copy(along).multiplyScalar((Math.random() - 0.5) * 3).addScaledVector(travel, 1.5 + Math.random() * 2.5).add(_v.set(0, 0.6, 0)), 0.14 + Math.random() * 0.14, 0.5 + Math.random() * 0.3, 2.2);
+    }
     fx.flash(o, 0xffffff, 12, 0.3, 30);
     sfx.slash(o, 0.65);
     sfx.rumble(1.2, 0.5);
@@ -664,22 +770,32 @@ export class Sukuna {
     m.rotation.y = Math.atan2(dir.x, dir.z);
     m.scale.set(width, 1, length);
     this.ctx.scene.add(m);
-    this.scars.push({ m, t: 0 });
-    if (this.scars.length > 60) {
-      const old = this.scars.shift();
-      this.ctx.scene.remove(old.m);
-      old.m.material.dispose();
-    }
+    this.scars.push({ m, t: 0, life: 10, op: 0.8 });
+    this._trimScars();
   }
 
   _updateScars(dt) {
     for (let i = this.scars.length - 1; i >= 0; i--) {
       const s = this.scars[i];
       s.t += dt;
-      s.m.material.opacity = 0.8 * Math.max(0, 1 - s.t / 10);
-      if (s.t > 10) {
+      // 그을음은 마지막 몇 초 동안만 옅어진다
+      s.m.material.opacity = s.op * Math.min(1, Math.max(0, (s.life - s.t) / Math.min(5, s.life)));
+      if (s.ember) {
+        const e = Math.max(0, 1 - s.t / s.emberLife);
+        s.ember.material.opacity = e * e * (0.75 + Math.random() * 0.25);
+        if (e <= 0) {
+          this.ctx.scene.remove(s.ember);
+          s.ember.material.dispose();
+          s.ember = null;
+        }
+      }
+      if (s.t > s.life) {
         this.ctx.scene.remove(s.m);
         s.m.material.dispose();
+        if (s.ember) {
+          this.ctx.scene.remove(s.ember);
+          s.ember.material.dispose();
+        }
         this.scars.splice(i, 1);
       }
     }
@@ -709,7 +825,24 @@ export class Sukuna {
       if (Math.random() < 0.6) {
         L.pulse(0.1 + d.sign * 0.4, 20);
         R.pulse(0.1 + d.sign * 0.4, 20);
-        fx.spawnDark(_v.copy(inp.head).addScaledVector(inp.headDir, 0.35), _v2.randomDirection().multiplyScalar(0.3), SMOKE, 0.05, 0.6, 1, 0, 1);
+      }
+      // 영역전개 준비: 두 손과 온몸에서 핏빛 주력이 치솟는다 (얼굴 앞은 비워 시야 확보)
+      const k = Math.min(1, d.sign / 1.5);
+      const n = 1 + Math.floor(k * 3);
+      for (let i = 0; i < n; i++) {
+        if (Math.random() < 0.5) {
+          const hh = Math.random() < 0.5 ? L : R;
+          if (hh.active) this._auraAtHand(hh, 0.08 + 0.06 * k, 0.8 + k);
+        } else {
+          const a = Math.random() * Math.PI * 2;
+          const r = 0.45 + Math.random() * 0.35;
+          const y = 0.15 + Math.random() * Math.max(0.3, inp.head.y - 0.55);
+          _v.set(inp.head.x + Math.cos(a) * r, y, inp.head.z + Math.sin(a) * r);
+          // 시선 정면 60° 안은 건너뛴다
+          _v2.set(Math.cos(a), 0, Math.sin(a));
+          if (_v2.dot(_v3.copy(inp.headDir).setY(0).normalize()) > 0.5) continue;
+          this.aura.spawn(_v, _v2.multiplyScalar(0.15).add(_v3.set(0, 1.2 + k * 1.2, 0)), 0.18 + 0.22 * k + Math.random() * 0.1, 0.7 + Math.random() * 0.3, 1.2);
+        }
       }
       if (d.sign >= 1.5) {
         d.sign = 0;
@@ -831,6 +964,8 @@ export class Sukuna {
     }
     for (const s of this.scars) scene.remove(s.m);
     scene.remove(this.lines.mesh);
+    this.aura.dispose();
+    for (const s of this.scars) if (s.ember) scene.remove(s.ember);
     this.shrine.dispose();
     this.ctx.world.domain = null;
   }

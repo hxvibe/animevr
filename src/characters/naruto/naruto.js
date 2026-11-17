@@ -4,7 +4,8 @@
 //  · 影分身の術(그림자 분신술): 실체가 있는 분신을 만들어 함께 싸운다 (오래 유지하면 다중 그림자 분신)
 //  · 九喇嘛モード(구미 차크라 모드): 금빛 차크라를 둘러 모든 기술이 강해진다
 import * as THREE from 'three';
-import { RasenganOrb, WindSphere, WindNeedles, poofSmoke } from './vfx.js';
+import { RasenganOrb, ToonWindSphere, WindNeedles, poofSmoke } from './vfx.js';
+import { spawnToonBlob } from '../../core/toon.js';
 import { ShadowClone } from './clones.js';
 
 const _v = new THREE.Vector3();
@@ -140,7 +141,7 @@ export class Naruto {
     for (const c of this.clones) c.update(dt);
     if (this.clones.some((c) => !c.alive)) this.clones = this.clones.filter((c) => c.alive);
     this._updateKurama(dt);
-    this.needles.update(dt, inp.head, !!this.ctx.fx.brightBg);
+    this.needles.update(dt, inp.head);
   }
 
   // ── 손 하나: 나선환 → 나선수리검 ──
@@ -392,12 +393,21 @@ export class Naruto {
     const { fx, sfx, ui } = this.ctx;
     if (pos.y < 0.4) pos.y = 0.4;
     const R = gold ? 4.5 : 3.2;
-    const w = new WindSphere(this.ctx, pos, R, !!fx.brightBg);
-    this.winds.push({ w, pos, R, t: 0, dur: 1.9, tick: 0, gold });
+    const w = new ToonWindSphere(this.ctx, pos);
+    this.winds.push({ w, pos, R, t: 0, dur: 2.0, tick: 0, gold });
+    // 적도를 따라 사방으로 내뿜는 바람 덩어리
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const d = _v.set(Math.cos(a), (Math.random() - 0.5) * 0.5, Math.sin(a)).normalize();
+      spawnToonBlob(fx, 'wind', {
+        from: pos.clone().addScaledVector(d, R * 0.6), to: pos.clone().addScaledVector(d, R * (1.5 + Math.random() * 0.5)),
+        r0: 0.2, r1: R * (0.16 + Math.random() * 0.1), delay: 0.05 + Math.random() * 0.1, dur: 1.0 + Math.random() * 0.4,
+        growK: 0.5, erodeAt: 0.35, outline: 0.05, disp: 0.4, swirl: 0.6,
+      });
+    }
     fx.flash(pos, gold ? C.gold : C.blueHi, 14, 0.6, 25);
     fx.shockwave(_v.copy(pos).setY(0.05), C.blueHi, R * 1.6, 0.6);
-    fx.sphereBlast(pos, 0xffffff, R * 0.5, 0.2);
-    fx.burst(pos, 90, C.white, 7, 0.04, 0.6, { drag: 2 });
+    fx.burst(pos, 60, C.white, 7, 0.04, 0.6, { drag: 2 });
     if (!sfx.play('wind_burst', { at: pos, vol: 1.3 })) sfx.explosion(pos, 1.6);
     sfx.rumble(1.4, 0.4);
     ui.manga({ top: '風遁', main: '螺旋手裏剣', ruby: 'らせんしゅりけん', color: '#4ab0ff', dur: 1 });
@@ -412,13 +422,19 @@ export class Naruto {
       W.t += dt;
       const k = W.t / W.dur;
       const grow = Math.min(1, W.t / 0.25);
-      const shrink = k > 0.82 ? 1 - (k - 0.82) / 0.18 : 1;
-      const r = W.R * (1 - Math.pow(1 - grow, 3)) * Math.max(0.05, shrink);
-      W.w.set(r, 0.9 * Math.min(1, shrink * 1.5), dt);
-      // 안쪽에서 번뜩이는 무수한 바람 칼날
-      for (let n = 0; n < 10; n++) {
-        _v.randomDirection().multiplyScalar(Math.cbrt(Math.random()) * r).add(W.pos);
-        this.needles.add(_v, _v2.randomDirection(), 0.3 + Math.random() * 0.9, 0.02 + Math.random() * 0.02, 0.1 + Math.random() * 0.08);
+      // 끝 무렵엔 줄어들지 않고 조각조각 부서지며 흩어진다
+      const erode = k > 0.68 ? -0.1 + ((k - 0.68) / 0.32) * 1.05 : -0.1;
+      const shrink = 1 - Math.max(0, erode) * 1.4;
+      const r = W.R * (1 - Math.pow(1 - grow, 3)) * (1 + Math.max(0, k - 0.68) * 0.25);
+      // 보이는 구는 플레이어 머리 1.2m 밖까지만 (가까이 던져도 화면을 덮지 않게)
+      W.w.set(Math.min(r, Math.max(0.6, W.pos.distanceTo(inp.head) - 1.2)), erode, dt);
+      // 표면에서 사방으로 튀어나오는 바람 가시
+      if (erode < 0.4) {
+        for (let n = 0; n < 8; n++) {
+          const d = _v2.randomDirection();
+          _v.copy(d).multiplyScalar(r * (1.0 + Math.random() * 0.25)).add(W.pos);
+          this.needles.add(_v, d, 0.4 + Math.random() * 1.0, 0.035 + Math.random() * 0.03, 0.1 + Math.random() * 0.08);
+        }
       }
       if (Math.random() < 0.5) fx.spawn(_v.randomDirection().multiplyScalar(r * 0.9).add(W.pos), _v2.randomDirection().multiplyScalar(2), C.blueHi, 0.03, 0.3, 2, 0);
       // 범위 안 대상: 끌어당겨 붙잡은 채 세포 단위로 잘게 썬다

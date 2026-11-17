@@ -134,17 +134,18 @@ export class MalevolentShrine {
     // 첨부 GLB 사당 (없으면 코드로 만든 사당)
     const glb = getModel('shrine');
     if (glb) {
-      this.shrine = fitModel(glb, { width: 17 });
+      this.shrine = fitModel(glb, { width: 12 });
       this.shrine.traverse((o) => {
         if (o.isMesh) o.material.envMapIntensity = 0.5;
       });
       // 사당 바닥판(≈1m)이 땅에 닿고, 둘레의 뼈 무더기는 그만큼 땅에 파묻히도록 내린다
-      this.restY = -0.95;
-      this.depth = 13;
+      this.restY = -0.67;
+      this.depth = 9.5;
     } else {
       this.shrine = buildShrine(ctx.world.envMap);
-      this.restY = -0.15;
-      this.depth = 8;
+      this.shrine.scale.setScalar(0.72);
+      this.restY = -0.11;
+      this.depth = 6;
     }
     this.group.add(this.shrine);
     this.skyU = { uTime: { value: 0 }, uFade: { value: 0 } };

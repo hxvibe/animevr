@@ -22,7 +22,13 @@ const C = {
   spirit: new THREE.Color(0x8fd8ff),
   dust: new THREE.Color(0x8a8578),
 };
+const GOLD = {
+  ki: new THREE.Color(0xffc21a),
+  kiHi: new THREE.Color(0xfff2a0),
+  spirit: new THREE.Color(0xffd84a),
+};
 const KAME = [[0.05, 'か'], [0.45, 'め'], [0.9, 'は'], [1.35, 'め']];
+const KAME_MIN = 1.4; // か·め·は·め 네 번을 다 모아야 발사할 수 있다
 
 export class Goku {
   constructor(ctx) {
@@ -59,6 +65,11 @@ export class Goku {
     return this.ssjT > 0;
   }
 
+  /** 초사이어인이면 금빛 */
+  col(name) {
+    return this.ssj ? GOLD[name] : C[name];
+  }
+
   get power() {
     return this.ssj ? 1.5 : 1;
   }
@@ -84,7 +95,7 @@ export class Goku {
     if (mode === 'hand') {
       return [
         { head: '気弾(기탄)', color: '#ffe07a', text: '손을 펴고 손바닥을 앞으로 빠르게 내밀기 → 기탄 (양손 번갈아 연사)' },
-        { head: 'かめはめ波(에네르기파)', color: '#7fc8ff', text: '두 손을 모아 허리 옆으로 → 기를 모으는 동안 か·め·は·め\n모은 손을 앞으로 내지르면 발사 · 손을 모은 채 움직이면 빔이 따라감 · 손을 떼면 끝' },
+        { head: 'かめはめ波(에네르기파)', color: '#7fc8ff', text: '두 손을 모아 허리 옆으로 → か·め·は·め 네 번을 다 모은 뒤\n모은 손을 앞으로 내지르면 발사 · 손을 모은 채 움직이면 빔이 따라감 · 손을 떼면 끝' },
         { head: '元気玉(원기옥)', color: '#bfeaff', text: '두 손을 머리 위로 높이 들고 기다리기 → 머리 위에서 점점 커짐\n앞으로 크게 내던지기 · 양손 주먹은 취소' },
         { head: '瞬間移動(순간이동)', color: '#ffffff', text: '검지·중지를 펴서 이마에 대고 0.5초 → 바라본 더미의 등 뒤로 (없으면 앞으로 6m)' },
         { head: '超サイヤ人(초사이어인)', color: '#ffd23a', text: '양 주먹을 쥐고 허리 옆에서 힘주며 1.5초 → 30초 동안 강화\n켜진 상태에서 같은 자세 1.5초 → 해제 · 설정에서 손동작 끄기 / 메뉴에서 발동' },
@@ -247,7 +258,7 @@ export class Goku {
     const inp = this.ctx.input;
     const L = inp.left;
     const R = inp.right;
-    const out = { charge: false, together: false, fire: false, mid: this._mid, aim: this._aim, lost: false, cancel: false };
+    const out = { charge: false, together: false, fire: false, mid: this._mid, aim: this._aim, lost: false, cancel: false, push: 0, reach: 0 };
     out.aim.set(0, 0, -1);
     if (inp.mode === 'desktop') {
       out.charge = out.together = inp.keyDown('KeyK');
@@ -268,7 +279,7 @@ export class Goku {
     if (L.source === 'controller' && R.source === 'controller') {
       out.together = L.btn.grip && R.btn.grip && L.pos.distanceTo(R.pos) < 0.3;
       out.charge = out.together && L.pos.distanceTo(R.pos) < 0.22;
-      out.fire = out.together && (ext > 0.4 || (L.btn.trigger && R.btn.trigger));
+      out.fire = out.together && L.btn.trigger && R.btn.trigger;
       out.aim.copy(L.dir).add(R.dir).normalize();
       return out;
     }
@@ -278,8 +289,13 @@ export class Goku {
     out.together = d < 0.3 && notFist;
     // 모으기: 두 손바닥을 가까이(마주 보게) 붙여 허리 높이로
     out.charge = d < 0.17 && notFist && out.mid.y < inp.head.y - 0.25 && L.speed < 1.6 && R.speed < 1.6;
-    // 내지르기: 모은 손이 얼굴 앞쪽으로 충분히 뻗어 나감
-    out.fire = out.together && ext > 0.38 && out.mid.y > inp.head.y - 0.7;
+    // 내지르기 판정 재료: 수평 앞쪽(시선이 아래를 봐도 영향 없음)으로 뻗은 거리와 속도
+    const fwd = _v3.copy(inp.headDir).setY(0);
+    if (fwd.lengthSq() < 1e-3) fwd.set(0, 0, -1);
+    fwd.normalize();
+    out.reach = _v2.subVectors(out.mid, inp.head).setY(0).dot(fwd);
+    out.push = _v2.addVectors(L.vel, R.vel).multiplyScalar(0.5).dot(fwd);
+    out.fire = out.together && out.mid.y > inp.head.y - 0.75;
     // 조준: 손바닥이 향한 쪽 위주 + 시선 (손목을 돌리면 빔이 휜다)
     _v2.copy(L.palmNormal).add(R.palmNormal);
     if (_v2.lengthSq() < 0.2) _v2.copy(inp.headDir);
@@ -300,10 +316,10 @@ export class Goku {
           this.denied();
           return;
         }
-        const orb = new EnergyOrb(this.ctx, 'ki', 0.02);
-        orb.light = fx.borrowLight(C.ki, 2, 5);
+        const orb = new EnergyOrb(this.ctx, this.ssj ? 'kiGold' : 'ki', 0.02);
+        orb.light = fx.borrowLight(this.col('ki'), 2, 5);
         orb.pos.copy(I.mid);
-        K = this.kame = { stage: 'charge', charge: 0, t: 0, orb, chant: 0, apart: 0, loop: sfx.loop({ sample: 'ki', base: 68, noiseF: 700, vol: 0.4 }), aim: I.aim.clone(), beam: null, len: 0, fireT: 0, maxT: 0, tick: 0 };
+        K = this.kame = { stage: 'charge', charge: 0, t: 0, orb, chant: 0, apart: 0, minReach: I.reach, gold: this.ssj, loop: sfx.loop({ sample: 'ki', base: 68, noiseF: 700, vol: 0.4 }), aim: I.aim.clone(), beam: null, len: 0, fireT: 0, maxT: 0, tick: 0 };
       }
       return;
     }
@@ -330,9 +346,9 @@ export class Goku {
       K.orb.update(dt, 0.5 + 0.2 * K.charge);
       K.loop.set(0.4 + 0.3 * K.charge, 0.8 + 0.25 * K.charge);
       K.loop.pos(K.orb.pos);
-      if (Math.random() < 0.8) fx.implode(K.orb.pos, 2, C.kiHi, 0.25 + 0.1 * K.charge, 0.25, 0.012);
+      if (Math.random() < 0.8) fx.implode(K.orb.pos, 2, K.gold ? GOLD.kiHi : C.kiHi, 0.25 + 0.1 * K.charge, 0.25, 0.012);
       if (K.chant < KAME.length && K.charge >= KAME[K.chant][0]) {
-        ui.manga({ main: KAME[K.chant][1], color: '#3aa8ff', dur: 0.7, side: K.chant % 2 ? 'right' : 'left' });
+        ui.manga({ main: KAME[K.chant][1], color: K.gold ? '#ffb000' : '#3aa8ff', dur: 0.7, side: K.chant % 2 ? 'right' : 'left' });
         sfx.play('chant', { vol: 0.5, rate: 1.1 + K.chant * 0.1 });
         K.chant++;
       }
@@ -340,7 +356,13 @@ export class Goku {
         inp.left.pulse(0.1 + 0.15 * K.charge, 15);
         inp.right.pulse(0.1 + 0.15 * K.charge, 15);
       }
-      if (I.fire && K.charge >= 0.6) this._fireKame(I);
+      // 모으는 동안 손이 가장 몸 쪽으로 당겨졌던 위치를 기억 → 거기서 앞으로 20cm 이상 내질러야 발사
+      // (네 번째 영창 전엔 기준점이 손을 따라다니므로 미리 뻗어 둔 손으로는 발사되지 않는다)
+      K.minReach = K.charge < KAME[3][0] ? I.reach : Math.min(K.minReach, I.reach);
+      const shoved = I.reach - K.minReach;
+      const thrust = shoved > 0.2 || (I.push > 0.8 && I.reach > 0.4);
+      const handFire = inp.mode !== 'desktop' && (inp.left.source === 'controller' ? I.fire : I.fire && I.reach > 0.3 && thrust);
+      if (K.charge >= KAME_MIN && (handFire || (inp.mode === 'desktop' && I.fire))) this._fireKame(I);
       else if (inp.mode === 'desktop' && I.fire) this._endKame(true);
       return;
     }
@@ -375,15 +397,16 @@ export class Goku {
     K.len = 0.2;
     K.aim.copy(I.aim);
     K.r = (0.12 + 0.16 * Math.min(1, K.charge / 2)) * (this.ssj ? 1.35 : 1);
-    K.beam = new KiBeam(this.ctx);
+    K.gold = this.ssj;
+    K.beam = new KiBeam(this.ctx, K.gold ? { color: 0xffc21a, core: 0xfffbe6, outer: 0xe09a00 } : undefined);
     K.orb.dispose();
     K.orb = null;
     K.loop.stop(0.1);
     K.loop = sfx.loop({ sample: 'beam', base: 50, noiseF: 900, vol: 0.6 });
-    ui.manga({ main: 'かめはめ波', ruby: 'かめはめは', color: '#2a90ff', sub: '에네르기파' });
+    ui.manga({ main: 'かめはめ波', ruby: 'かめはめは', color: K.gold ? '#ffaa00' : '#2a90ff', sub: '에네르기파' });
     if (!sfx.play('purple_launch', { at: I.mid, vol: 0.8, rate: 1.2 })) sfx.explosion(I.mid, 1.2);
-    fx.flash(I.mid, C.ki, 12, 0.5, 15);
-    fx.burst(I.mid, 50, C.kiHi, 3, 0.03, 0.4);
+    fx.flash(I.mid, this.col('ki'), 12, 0.5, 15);
+    fx.burst(I.mid, 50, this.col('kiHi'), 3, 0.03, 0.4);
     inp.left.pulse(1, 200);
     inp.right.pulse(1, 200);
   }
@@ -421,18 +444,18 @@ export class Goku {
     const end = _v2.copy(origin).addScaledVector(dir, K.len);
     const reached = K.len >= firstAlong - 0.05;
     if (reached) {
-      if (Math.random() < 0.7) fx.burst(end, 8, Math.random() < 0.5 ? C.kiHi : C.white, 4, 0.05, 0.3, { dir: dir.clone().negate(), dirAmt: 0.5 });
+      if (Math.random() < 0.7) fx.burst(end, 8, Math.random() < 0.5 ? (K.gold ? GOLD.kiHi : C.kiHi) : C.white, 4, 0.05, 0.3, { dir: dir.clone().negate(), dirAmt: 0.5 });
       K.tick -= dt;
       if (K.tick <= 0) {
         K.tick = 0.09;
-        fx.shockwave(end, C.kiHi, r * 4, 0.25, { faceDir: dir.clone() });
+        fx.shockwave(end, K.gold ? GOLD.kiHi : C.kiHi, r * 4, 0.25, { faceDir: dir.clone() });
         if (Math.random() < 0.35) sfx.explosion(end, 0.5);
         const mul = this.power * (0.7 + 0.3 * Math.min(1, K.charge / 2));
         world.forEachTarget(end, r + 0.9, (t, d, c) => {
           t.damage(22 * mul, { type: 'blast', dir: dir.clone(), dirAmt: 6, silent: true });
           if (t.alive) t.impulse(_v.copy(dir).multiplyScalar(4.5 / Math.sqrt(t.mass ?? 3)).add(_v3.set(0, 0.6, 0)), 2);
         });
-        if (!first && end.y < 0.3) fx.shockwave(_v.copy(end).setY(0.05), C.kiHi, 2.5, 0.4);
+        if (!first && end.y < 0.3) fx.shockwave(_v.copy(end).setY(0.05), K.gold ? GOLD.kiHi : C.kiHi, 2.5, 0.4);
       }
     }
   }
@@ -443,7 +466,7 @@ export class Goku {
     this.kame = null;
     K.loop?.stop(0.3);
     if (K.orb) {
-      this.ctx.fx.implode(K.orb.pos, 16, C.kiHi, 0.2, 0.2, 0.015);
+      this.ctx.fx.implode(K.orb.pos, 16, K.gold ? GOLD.kiHi : C.kiHi, 0.2, 0.2, 0.015);
       K.orb.dispose();
       if (refund) this.energy = Math.min(this.maxEnergy, this.energy + K.charge * 3);
     }
@@ -507,11 +530,12 @@ export class Goku {
       if (this._kp.genki > (inp.mode === 'desktop' ? 0 : 0.4)) {
         this._kp.genki = 0;
         if (!this.spend(20)) return;
-        const orb = new EnergyOrb(this.ctx, 'spirit', 0.2);
-        orb.light = fx.borrowLight(C.spirit, 3, 12);
-        G = this.genki = { charge: 0, t: 0, orb, r: 0.2, down: 0, loop: sfx.loop({ sample: 'spirit', base: 110, noiseF: 900, vol: 0.45 }) };
+        const gold = this.ssj;
+        const orb = new EnergyOrb(this.ctx, gold ? 'spiritGold' : 'spirit', 0.2);
+        orb.light = fx.borrowLight(this.col('spirit'), 3, 12);
+        G = this.genki = { gold, charge: 0, t: 0, orb, r: 0.2, down: 0, loop: sfx.loop({ sample: 'spirit', base: 110, noiseF: 900, vol: 0.45 }) };
         orb.pos.copy(inp.head).add(_v.set(0, 1.4, 0));
-        ui.manga({ main: '元気玉', ruby: 'げんきだま', color: '#4ab8ff', sub: '모두, 기를 나눠 줘!' });
+        ui.manga({ main: '元気玉', ruby: 'げんきだま', color: gold ? '#ffb000' : '#4ab8ff', sub: '모두, 기를 나눠 줘!' });
         sfx.play('charge_rise', { vol: 0.6, rate: 0.7 });
       }
       return;
@@ -546,7 +570,7 @@ export class Goku {
         far.multiplyScalar(10 + Math.random() * 14).add(G.orb.pos);
         const life = 0.7 + Math.random() * 0.4;
         const vel = _v.subVectors(G.orb.pos, far).divideScalar(life);
-        fx.spawn(far, vel, Math.random() < 0.6 ? C.spirit : C.white, 0.05 + Math.random() * 0.05, life, 0, 0);
+        fx.spawn(far, vel, Math.random() < 0.6 ? (G.gold ? GOLD.spirit : C.spirit) : C.white, 0.05 + Math.random() * 0.05, life, 0, 0);
       }
     }
     if (G.charge >= 1.2 && I.throwIt && (inp.mode === 'desktop' || G.down < 2.5)) this._throwGenki();
@@ -558,7 +582,7 @@ export class Goku {
     const G = this.genki;
     if (!G) return;
     this.genki = null;
-    this.ctx.fx.implode(G.orb.pos, 40, C.spirit, G.r * 1.2, 0.4, 0.04);
+    this.ctx.fx.implode(G.orb.pos, 40, G.gold ? GOLD.spirit : C.spirit, G.r * 1.2, 0.4, 0.04);
     G.orb.dispose();
     G.loop.stop(0.5);
   }
@@ -589,7 +613,7 @@ export class Goku {
       else aim = _v.copy(hd).setY(0).normalize().multiplyScalar(12).add(head).setY(0).clone();
     }
     const dir = aim.sub(G.orb.pos).normalize();
-    this.bombs.push({ orb: G.orb, pos: G.orb.pos, vel: dir.multiplyScalar(this.ssj ? 11 : 8), r: G.r, life: 8, loop: G.loop, gold: this.ssj });
+    this.bombs.push({ orb: G.orb, pos: G.orb.pos, vel: dir.multiplyScalar(this.ssj ? 11 : 8), r: G.r, life: 8, loop: G.loop, gold: G.gold || this.ssj });
     sfx.play('whoosh', { vol: 1, rate: 0.5 });
     inp.left.pulse(1, 200);
     inp.right.pulse(1, 200);
@@ -611,7 +635,7 @@ export class Goku {
         const B = this.ctx.env.bounds;
         if (B && (S.pos.x < B.minX - 1 || S.pos.x > B.maxX + 1 || S.pos.z < B.minZ - 1 || S.pos.z > B.maxZ + 1)) hit = true;
       }
-      if (Math.random() < 0.6) fx.spawn(_v.randomDirection().multiplyScalar(S.r).add(S.pos), _v2.copy(S.vel).multiplyScalar(-0.3), C.spirit, 0.06, 0.4, 1, 0);
+      if (Math.random() < 0.6) fx.spawn(_v.randomDirection().multiplyScalar(S.r).add(S.pos), _v2.copy(S.vel).multiplyScalar(-0.3), S.gold ? GOLD.spirit : C.spirit, 0.06, 0.4, 1, 0);
       if (hit) {
         this._detonateGenki(S);
         S.orb.dispose();
@@ -635,14 +659,16 @@ export class Goku {
     });
     for (const b of world.bullets) if (b.alive && b.pos.distanceTo(pos) < R) world.removeBullet(b);
     // 빛의 돔이 부풀었다 사라진다
-    fx.sphereBlast(pos, C.spirit, R, 1.2, { opacity: 0.7 });
+    const SP = S.gold ? GOLD.spirit : C.spirit;
+    const SH = S.gold ? GOLD.kiHi : C.kiHi;
+    fx.sphereBlast(pos, SP, R, 1.2, { opacity: 0.7 });
     fx.sphereBlast(pos, 0xffffff, R * 0.6, 0.5);
-    fx.shockwave(_v.copy(pos).setY(0.05), C.kiHi, R * 2.2, 1.0);
-    fx.shockwave(_v.copy(pos).setY(0.08), C.spirit, R * 1.4, 0.7);
-    fx.burst(pos, 220, C.spirit, 9, 0.08, 1.1, { drag: 1.6 });
+    fx.shockwave(_v.copy(pos).setY(0.05), SH, R * 2.2, 1.0);
+    fx.shockwave(_v.copy(pos).setY(0.08), SP, R * 1.4, 0.7);
+    fx.burst(pos, 220, SP, 9, 0.08, 1.1, { drag: 1.6 });
     fx.burst(pos, 120, C.white, 6, 0.06, 0.7, { drag: 2 });
     fx.burst(_v.copy(pos).setY(0.2), 80, C.dust, 5, 0.12, 1.6, { dark: true, up: 1, grav: 3, drag: 1.2, grow: 1.2 });
-    fx.flash(pos, C.spirit, 18, 1.2, 40);
+    fx.flash(pos, SP, 18, 1.2, 40);
     for (let i = 0; i < 5; i++) fx.starFlare(_v.copy(pos).add(_v2.randomDirection().multiplyScalar(S.r * 0.5)), 0xffffff, 1.5 + S.r, 0.4);
     sfx.explosion(pos, 2.2);
     sfx.play('wind_burst', { at: pos, vol: 0.9, rate: 0.8 });
@@ -667,28 +693,36 @@ export class Goku {
       return;
     }
     if (this.kame || this.genki) return;
-    // 이마 = 눈(카메라)보다 조금 위·앞
+    // 이마 = 눈(카메라)보다 조금 위·앞. 손을 얼굴에 바짝 대면 추적이 거의 반드시 끊기므로
+    // ① 이마 근처(16cm)에서 검지·중지 자세가 보이면 대고 있는 것
+    // ② 이마 쪽으로 다가오던 손(30cm 안)이 사라지면 1.2초 동안 대고 있는 것으로 본다
     const brow = _v.copy(inp.head).addScaledVector(UP, 0.07).addScaledVector(inp.headDir, 0.05);
     for (const h of inp.hands) {
       if (h.source !== 'hand') continue;
       if (h.active) {
         const g = h.gesture;
-        const fingers = g === 'two' || g === 'crossed' || g === 'point';
-        h._onBrow = fingers && (h.pos.distanceTo(brow) < 0.1 || h.indexTip.distanceTo(brow) < 0.09);
+        const fingers = g === 'two' || g === 'crossed' || g === 'point' || g === 'none';
+        const d = Math.min(h.pos.distanceTo(brow), h.indexTip.distanceTo(brow), h.palm.distanceTo(brow) - 0.05);
+        const high = h.pos.y > inp.head.y - 0.12;
+        h._onBrow = fingers && high && d < 0.16;
+        h._browNear = fingers && high && d < 0.3;
         h._browLost = 0;
         if (h._onBrow) pose = true;
-      } else if (h._onBrow) {
-        // 얼굴에 바짝 대면 추적이 끊기기 쉬우므로 잠깐은 대고 있는 것으로 본다
+      } else if (h._onBrow || h._browNear) {
         h._browLost = (h._browLost ?? 0) + dt;
-        if (h._browLost < 0.8) pose = true;
-        else h._onBrow = false;
+        if (h._browLost < 1.2) pose = true;
+        else h._onBrow = h._browNear = false;
       }
     }
-    if (pose && T.cd <= 0) {
+    // 한 번 이동하면 손을 이마에서 뗄 때까지 다시 발동하지 않는다
+    if (!pose) T.armed = true;
+    if (pose && T.cd <= 0 && T.armed !== false) {
       T.hold += dt;
-      if (Math.random() < 0.5) this.ctx.fx.spawn(_v2.copy(brow).addScaledVector(inp.headDir, 0.05), _v3.randomDirection().multiplyScalar(0.1), C.white, 0.01, 0.3, 2, 0);
-      if (T.hold > 0.5) {
+      if (Math.random() < 0.5) this.ctx.fx.spawn(_v2.copy(brow).addScaledVector(inp.headDir, 0.05), _v3.randomDirection().multiplyScalar(0.1), this.ssj ? GOLD.kiHi : C.white, 0.01, 0.3, 2, 0);
+      if (T.hold > 0.35) {
         T.hold = 0;
+        T.armed = false;
+        for (const h of inp.hands) h._onBrow = h._browNear = false;
         this._teleport();
       }
     } else T.hold = 0;

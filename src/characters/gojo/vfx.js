@@ -43,12 +43,55 @@ void main() {
   float swirl = sin(ang * 3.0 + p.y * 5.0 - uTime * 4.0 * uSpin + n * 6.0);
   float arcs = pow(1.0 - abs(swirl), 10.0);
   float veins = pow(1.0 - abs(n * 2.0 - 1.0), 12.0);
-  float center = pow(1.0 - fres, 3.0);
-  vec3 col = uCore * center * 1.6;
-  col += uMid * (0.35 + n * 0.9) * (1.0 - fres * 0.6);
+  // 중심만 하얗게 빛나고 바깥 40%는 고유색이 살아 있게
+  float center = pow(1.0 - fres, 6.0);
+  vec3 col = uCore * center * 1.1 + uCore * pow(1.0 - fres, 14.0) * 0.8;
+  col += uMid * (0.25 + n * 0.7) * (1.0 - fres * 0.6);
   col += mix(uMid, uCore, 0.6) * (arcs * 0.9 + veins * 1.4) * (0.4 + fres);
   col += uRim * pow(fres, 2.2) * 3.0;
   col *= 0.6 + 0.6 * uPower;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+// 3D 에너지 껍질: 구를 감싼 반투명 막 위로 빛줄기가 소용돌이친다 (안쪽 면은 흐리게 비쳐 깊이감)
+const shellFrag = /* glsl */ `
+varying vec3 vN;
+varying vec3 vV;
+varying vec3 vP;
+uniform vec3 uMid;
+uniform vec3 uRim;
+uniform vec3 uCore;
+uniform float uTime;
+uniform float uSpin;
+uniform float uPower;
+float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+void main() {
+  vec3 N = normalize(vN);
+  float facing = abs(dot(N, normalize(vV)));
+  float fres = 1.0 - facing;
+  float t = uTime * uSpin * 0.8;
+  float c = cos(t), s = sin(t);
+  vec3 p = vec3(c * vP.x - s * vP.z, vP.y, s * vP.x + c * vP.z);
+  float n = fbm(p * 1.7 + vec3(0.0, uTime * 0.35, uTime * 0.2));
+  float ang = atan(p.z, p.x);
+  // 흐르는 막의 결 (가는 빛줄기 두 겹)
+  float b1 = sin(ang * 2.0 + p.y * 4.5 + n * 7.0 - uTime * 2.6 * uSpin);
+  float b2 = sin(ang * 3.0 - p.y * 3.0 + n * 9.0 + uTime * 1.9 * uSpin + 1.3);
+  float streak = pow(1.0 - abs(b1), 7.0) + 0.6 * pow(1.0 - abs(b2), 10.0);
+  // 막의 가장자리는 진하게, 정면은 거의 투명
+  float film = 0.12 + 0.88 * pow(fres, 1.6);
+  vec3 col = uMid * film * (0.55 + n * 0.7);
+  col += mix(uRim, uCore, 0.35) * streak * (0.35 + 0.9 * fres);
+  col += uRim * pow(fres, 3.5) * 1.4;
+  // 바깥 테두리에서 사라지는 부드러운 끝
+  col *= smoothstep(0.0, 0.18, facing + 0.05);
+  col *= (gl_FrontFacing ? 1.0 : 0.45) * (0.55 + 0.45 * uPower);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -125,9 +168,9 @@ const _sphere = new THREE.SphereGeometry(1, 48, 32);
 const _v = new THREE.Vector3();
 
 export const ORB_PRESETS = {
-  blue: { core: 0xeaf8ff, mid: 0x2f86ff, rim: 0x5ab8ff, bolt: 0x7fd0ff, swirl: 0x4aa8ff, swirl2: 0xd0f0ff, dir: 1, spin: 1.2, flat: 0.55, swirlScale: 3.2 },
-  red: { core: 0xfff4e8, mid: 0xff1a2a, rim: 0xff4a3a, bolt: 0xff6a40, swirl: 0xff3a2a, swirl2: 0xffc080, dir: -1, spin: -1.6, flat: 0.15, swirlScale: 2.2 },
-  purple: { core: 0xfff0ff, mid: 0x8a2cff, rim: 0xb45cff, bolt: 0xd08aff, swirl: 0x9a4cff, swirl2: 0xf0c0ff, dir: 1, spin: 1.0, flat: 0.3, swirlScale: 1.9, dark: true },
+  blue: { core: 0xf0faff, mid: 0x2f86ff, rim: 0x6cc4ff, bolt: 0xe8f6ff, swirl: 0x4aa8ff, swirl2: 0xd0f0ff, dir: 1, spin: 1.2, flat: 0.55, swirlScale: 3.2, shell: true },
+  red: { core: 0xfff4ee, mid: 0xff1a2a, rim: 0xff5a48, bolt: 0xfff0e8, swirl: 0xff3a2a, swirl2: 0xffc080, dir: -1, spin: -1.6, flat: 0.15, swirlScale: 2.2, shell: true },
+  purple: { core: 0xfff2ff, mid: 0x8a2cff, rim: 0xc070ff, bolt: 0xf6eaff, swirl: 0x9a4cff, swirl2: 0xf0c0ff, dir: 1, spin: 1.0, flat: 0.3, swirlScale: 1.9, dark: true, shell: true },
 };
 
 export class EnergyOrb {
@@ -184,7 +227,19 @@ export class EnergyOrb {
     this.tint.material.blending = THREE.NormalBlending;
     this.tint.material.opacity = 0.35;
     this.tint.visible = !!ctx.fx.brightBg;
+    // 3D 껍질 (창·혁·자): 2D 고리/호 스프라이트 대신 입체 막
+    this.shell = null;
+    if (P.shell) {
+      this.shell = new THREE.Mesh(_sphere, new THREE.ShaderMaterial({ vertexShader: orbVert, fragmentShader: shellFrag, uniforms: this.u, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, side: THREE.DoubleSide }));
+      this.shell.renderOrder = 9;
+      this.ring.visible = false;
+      for (const a of this.arcs) a.visible = false;
+      // 바깥 안개는 고유색(mid)으로: 가운데가 하얗게 바래지 않도록
+      this.halo.material.color.set(P.mid);
+      this.halo.material.opacity = 0.6;
+    }
     this.group.add(this.tint, this.halo, this.ring, ...this.arcs, this.base, this.core, this.hot, this.swirl);
+    if (this.shell) this.group.add(this.shell);
     this.scene.add(this.group);
     this.bolts = new Bolts(this.scene, { count: 7, segs: 9, color: P.bolt, width: 0.006 });
     this.darkBolts = new Bolts(this.scene, { count: P.dark ? 4 : 3, segs: 9, color: P.dark ? 0x08000f : P.mid, width: 0.008, dark: true });
@@ -198,14 +253,15 @@ export class EnergyOrb {
   setRadius(r) {
     this.radius = r;
     this.core.scale.setScalar(r);
-    this.halo.scale.setScalar(r * 4.2);
+    this.halo.scale.setScalar(r * (this.shell ? 5.2 : 4.2));
+    if (this.shell) this.shell.scale.setScalar(r * 1.42);
     this.ring.scale.setScalar(r * 2.9);
-    this.hot.scale.setScalar(r * 1.6);
+    this.hot.scale.setScalar(r * (this.shell ? 0.9 : 1.6));
     this.base.scale.setScalar(r * 0.98);
     this.tint.scale.setScalar(r * 3.5);
     for (const a of this.arcs) a.scale.setScalar(r * 3.3);
     this.su.uRadius.value = r * this.P.swirlScale;
-    this.su.uScale.value = Math.max(0.01, r * 0.12);
+    this.su.uScale.value = Math.max(0.01, r * (this.shell ? 0.07 : 0.12));
   }
 
   update(dt, intensity = 1) {
@@ -220,7 +276,8 @@ export class EnergyOrb {
     this.arcs[0].material.opacity = 0.5 + Math.random() * 0.5;
     this.arcs[1].material.opacity = 0.3 + Math.random() * 0.5;
     this.ring.material.opacity = 0.75 + Math.sin(this.time * 20) * 0.15;
-    this.hot.material.opacity = 0.7 + Math.random() * 0.3;
+    if (this.shell) this.shell.rotation.x += dt * 0.7 * this.P.spin;
+    this.hot.material.opacity = (this.shell ? 0.3 : 0.7) + Math.random() * (this.shell ? 0.15 : 0.3);
     const r = this.radius;
     const cam = this.ctx.input.head;
     // 빛 번짐 스프라이트를 카메라 쪽으로 살짝 당겨, 손가락과 교차하며 손이 잘려 보이는 현상을 막는다
@@ -239,7 +296,7 @@ export class EnergyOrb {
     }
     this.starT -= dt;
     if (this.starT <= 0) {
-      this.starT = 0.18 + Math.random() * 0.3;
+      this.starT = (this.shell ? 0.5 : 0.18) + Math.random() * 0.3;
       _v.randomDirection().multiplyScalar(r * (0.8 + Math.random() * 0.6)).add(this.pos);
       fx.starFlare(_v, 0xffffff, r * (1.5 + Math.random() * 1.5), 0.3);
     }
@@ -260,6 +317,7 @@ export class EnergyOrb {
   dispose() {
     this.scene.remove(this.group);
     this.core.material.dispose();
+    this.shell?.material.dispose();
     this.swirl.material.dispose();
     this.swirl.geometry.dispose();
     for (const s of [this.halo, this.ring, this.hot, this.tint, ...this.arcs]) s.material.dispose();

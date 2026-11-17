@@ -1,6 +1,7 @@
-// 나루토 VFX: 나선환(회전하는 차크라 구) · 나선수리검 날개 · 바람 칼날 구 · 분신 연기
+// 나루토 VFX: 나선환(회전하는 차크라 구) · 나선수리검 날개 · 만화풍 바람 칼날 구 · 분신 연기
 import * as THREE from 'three';
 import { makeGlowSprite, glowTexture } from '../../core/fx.js';
+import { ToonBlob } from '../../core/toon.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -250,53 +251,38 @@ export class RasenganOrb {
 }
 
 // ── 풍둔·나선수리검이 터진 뒤의 바람 칼날 구 ──
-const windFrag = /* glsl */ `
-  uniform float uTime; uniform float uOpacity; uniform vec3 uColor;
-  varying vec3 vN; varying vec3 vV; varying vec3 vP;
-  void main(){
-    float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-    float ang = atan(vP.z, vP.x);
-    float s = 0.5 + 0.5 * sin(ang * 14.0 + vP.y * 20.0 + uTime * 32.0);
-    float s2 = 0.5 + 0.5 * sin(ang * 9.0 - vP.y * 13.0 - uTime * 24.0);
-    float s3 = 0.5 + 0.5 * sin(ang * 23.0 + vP.y * 5.0 + uTime * 41.0);
-    float streak = pow(s * s2, 3.0) + pow(s3, 12.0) * 0.6;
-    float a = (0.08 + 0.55 * pow(f, 2.2) + 0.55 * streak) * uOpacity;
-    gl_FragColor = vec4(uColor, a);
-  }`;
-
-export class WindSphere {
-  constructor(ctx, pos, radius, bright) {
+/** 만화풍 바람 칼날 구: 셀 셰이딩 + 먹선 테두리 + 소용돌이 결. 끝날 땐 조각조각 부서진다 */
+export class ToonWindSphere {
+  constructor(ctx, pos) {
     this.ctx = ctx;
-    this.u = { uTime: { value: 0 }, uOpacity: { value: 0 }, uColor: { value: new THREE.Color(bright ? 0x4a9ee8 : 0xdff4ff) } };
-    const mat = new THREE.ShaderMaterial({ vertexShader: shellVert, fragmentShader: windFrag, uniforms: this.u, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
-    this.mesh = new THREE.Mesh(_sphere, mat);
-    this.mesh.renderOrder = 6;
-    this.mesh.position.copy(pos);
-    this.mesh.scale.setScalar(0.01);
-    this.inner = new THREE.Mesh(_sphere, mat.clone());
-    this.inner.material.uniforms = { uTime: this.u.uTime, uOpacity: { value: 0 }, uColor: this.u.uColor };
-    this.inner.scale.setScalar(0.6);
-    this.inner.rotation.set(1.1, 0.4, 0.7);
-    this.mesh.add(this.inner);
-    ctx.scene.add(this.mesh);
-    this.radius = radius;
-    this.r = 0.01;
+    this.blob = new ToonBlob('wind', { disp: 0.22, swirl: 1, outline: 0.03 });
+    this.inner = new ToonBlob('wind', { disp: 0.35, swirl: 1, outline: 0.03 });
+    this.group = new THREE.Group();
+    this.group.position.copy(pos);
+    this.group.add(this.blob.group);
+    // 안쪽 덩어리는 구멍이 뚫릴 때 비쳐 보이는 소용돌이 심
+    this.inner.group.scale.setScalar(0.6);
+    this.group.add(this.inner.group);
+    ctx.scene.add(this.group);
+    this.time = Math.random() * 10;
   }
 
-  set(r, opacity, dt) {
-    this.r = r;
-    this.u.uTime.value += dt;
-    this.mesh.scale.setScalar(Math.max(0.01, r));
-    this.mesh.rotation.y += dt * 2.5;
-    this.inner.rotation.x -= dt * 3.1;
-    this.u.uOpacity.value = opacity;
-    this.inner.material.uniforms.uOpacity.value = opacity * 0.7;
+  set(r, erode, dt) {
+    this.time += dt;
+    this.blob.group.scale.setScalar(Math.max(0.01, r));
+    this.blob.group.rotation.y += dt * 3.2;
+    this.inner.group.scale.setScalar(Math.max(0.01, r * 0.62));
+    this.inner.group.rotation.x -= dt * 4.1;
+    this.blob.setOutlineMeters(0.07, r);
+    this.inner.setOutlineMeters(0.05, r * 0.62);
+    this.blob.set(this.time, erode);
+    this.inner.set(this.time * 1.3, erode - 0.15);
   }
 
   dispose() {
-    this.ctx.scene.remove(this.mesh);
-    this.mesh.material.dispose();
-    this.inner.material.dispose();
+    this.ctx.scene.remove(this.group);
+    this.blob.dispose();
+    this.inner.dispose();
   }
 }
 
@@ -304,23 +290,31 @@ export class WindSphere {
 let _needleTex = null;
 function needleTex() {
   if (_needleTex) return _needleTex;
+  // 만화풍 가시: 먹선 테두리 + 흰 심
   const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 16;
+  c.width = 256;
+  c.height = 32;
   const g = c.getContext('2d');
-  const grd = g.createLinearGradient(0, 0, 128, 0);
-  grd.addColorStop(0, 'rgba(255,255,255,0)');
-  grd.addColorStop(0.5, 'rgba(255,255,255,1)');
-  grd.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grd;
-  g.fillRect(0, 5, 128, 6);
+  const spike = (pad) => {
+    g.beginPath();
+    g.moveTo(4 + pad, 16);
+    g.quadraticCurveTo(128, 2 + pad, 252 - pad, 16);
+    g.quadraticCurveTo(128, 30 - pad, 4 + pad, 16);
+    g.closePath();
+    g.fill();
+  };
+  g.fillStyle = '#0a2248';
+  spike(0);
+  g.fillStyle = '#ffffff';
+  spike(5);
   _needleTex = new THREE.CanvasTexture(c);
+  _needleTex.colorSpace = THREE.SRGBColorSpace;
   return _needleTex;
 }
 
 export class WindNeedles {
   constructor(scene, max = 200) {
-    this.mat = new THREE.MeshBasicMaterial({ map: needleTex(), color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    this.mat = new THREE.MeshBasicMaterial({ map: needleTex(), color: 0xffffff, transparent: true, alphaTest: 0.05, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false });
     this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), this.mat, max);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -347,13 +341,7 @@ export class WindNeedles {
     it.life = it.max = life;
   }
 
-  update(dt, camPos, bright) {
-    if (bright !== this._bright) {
-      this._bright = bright;
-      this.mat.blending = bright ? THREE.NormalBlending : THREE.AdditiveBlending;
-      this.mat.color.set(bright ? 0x3a86d8 : 0xffffff);
-      this.mat.needsUpdate = true;
-    }
+  update(dt, camPos) {
     let any = false;
     for (let i = 0; i < this.items.length; i++) {
       const it = this.items[i];

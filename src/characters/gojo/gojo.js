@@ -96,7 +96,7 @@ export class Gojo {
         { head: '술식순전 「蒼」 — 인력', color: '#7fc4ff', text: '검지+중지로 앞을 가리키면 손가락 끝에 생성\n그 상태로 손을 펴면 창이 손을 따라 멀리 이동(팔을 뻗을수록 멀리)' },
         { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '검지만 펴서 충전 → 앞으로 찌르거나 손을 펴면 발사' },
         { head: '창 ↔ 혁 전환 · 취소', color: '#ffffff', text: '창 상태에서 검지만 → 혁 / 혁 상태에서 검지+중지 → 창 · 주먹을 쥐면 사라짐' },
-        { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 펴기\n→ 창과 혁이 돌며 섞여 茈 완성 → 손을 펴거나 앞으로 밀면 발사 · 주먹은 취소' },
+        { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 펴기\n→ 왼쪽의 창과 오른쪽의 혁이 다가와 합쳐져 茈 완성 → 손을 펴거나 앞으로 밀면 발사 · 주먹은 취소' },
         { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '검지·중지만 펴서 얼굴 앞에 세우고 6초 유지 (1초째부터 영창)\n전개 중 같은 자세 1.5초 → 해제 · 설정에서 손동작 끄기 / 메뉴에서 발동' },
         { head: '무하한 · 육안 · 잡기 · 흑섬', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 0.5초 가리기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률' },
       ];
@@ -803,21 +803,20 @@ export class Gojo {
     }
 
     if (p.stage === 'merge') {
-      // 창(파랑)과 혁(빨강)이 서로를 돌며 점점 가까워지다 충돌
+      // 창(파랑)은 왼쪽, 혁(빨강)은 오른쪽에서 서로를 향해 곧게 다가와 한가운데서 충돌
       const DUR = 1.8;
       const k = Math.min(1, p.t / DUR);
-      const e = k * k * (3 - 2 * k);
-      p.ang += dt * (2.5 + 16 * k * k);
+      const e = k * k * k; // 처음엔 천천히, 끝에 급가속
       const rad = 0.42 * (1 - e) + 0.012;
       const u = _v2.crossVectors(p.aim, UP);
       if (u.lengthSq() < 1e-4) u.set(1, 0, 0);
-      u.normalize();
+      u.normalize(); // 화면 기준 오른쪽
       const w = _v3.crossVectors(u, p.aim).normalize();
-      const c = Math.cos(p.ang);
-      const sn = Math.sin(p.ang);
+      // 서로 끌어당기며 미세하게 떨린다
+      const shake = 0.006 * k;
       const follow = 1 - Math.exp(-dt * (k < 0.25 ? 7 : 22));
-      const tb = new THREE.Vector3().copy(p.anchor).addScaledVector(u, c * rad).addScaledVector(w, sn * rad);
-      const tr = new THREE.Vector3().copy(p.anchor).addScaledVector(u, -c * rad).addScaledVector(w, -sn * rad);
+      const tb = new THREE.Vector3().copy(p.anchor).addScaledVector(u, -rad).addScaledVector(w, (Math.random() - 0.5) * shake);
+      const tr = new THREE.Vector3().copy(p.anchor).addScaledVector(u, rad).addScaledVector(w, (Math.random() - 0.5) * shake);
       p.blue.pos.lerp(tb, follow);
       p.red.pos.lerp(tr, follow);
       const r = 0.05 + 0.05 * e;

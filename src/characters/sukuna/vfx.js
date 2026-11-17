@@ -89,13 +89,13 @@ export class SlashLines {
    * @param along 선 방향 (절단면 위)
    * @param normal 절단면 법선 (호환용)
    */
-  add(pos, along, normal, len = 1, w = 0.02, life = 0.15, color = 0xffffff) {
+  add(pos, along, normal, len = 1, w = 0.02, life = 0.15, color = 0xffffff, ratio = 0.075) {
     const it = this.items[this.cursor];
     this.cursor = (this.cursor + 1) % this.items.length;
     it.pos.copy(pos);
     it.along.copy(along).normalize();
     it.len = len;
-    it.w = Math.max(w * 4, len * 0.075);
+    it.w = Math.max(w * 4, len * ratio);
     it.life = it.max = life;
     // 칼날은 검정 고정, 빛 테두리만 살짝 물들인다
     it.color.set(color === 0xffffff ? 0xffffff : 0xffd0d0);
@@ -146,7 +146,8 @@ export function makeCrescent(radius = 0.7) {
     P.setZ(i, (1 - 4 * x * x) * 0.12);
   }
   const front = new THREE.Mesh(geo, bladeMaterial(0xffffff, 1));
-  front.scale.set(len, len * 0.15, len);
+  // 굵기: 더미에 맞았을 때 남는 절단선(SlashLines)과 같은 비율 (길이의 7.5% · 검은 칼날은 그 절반 남짓)
+  front.scale.set(len, len * 0.058, len);
   const tilt = new THREE.Mesh(geo, bladeMaterial(0xffffff, 0.75));
   tilt.scale.copy(front.scale);
   tilt.rotation.x = Math.PI / 2;

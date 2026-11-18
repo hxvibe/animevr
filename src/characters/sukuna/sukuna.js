@@ -7,7 +7,7 @@
 //  · 흑섬 / 반전술식: 공통 시스템
 import * as THREE from 'three';
 import { SlashLines, makeCrescent, FireArrow } from './vfx.js';
-import { spawnToonBlob, scorchTexture, emberTexture } from '../../core/toon.js';
+import { scorchTexture, emberTexture } from '../../core/toon.js';
 import { HandAura } from '../../core/handAura.js';
 import { MalevolentShrine } from './domainShrine.js';
 
@@ -18,7 +18,6 @@ const UP = new THREE.Vector3(0, 1, 0);
 const RED = new THREE.Color(0xff2a30);
 const FIRE = new THREE.Color(0xff6a10);
 const FIRE_HI = new THREE.Color(0xffd070);
-const SMOKE = new THREE.Color(0x1a1010);
 
 export class Sukuna {
   constructor(ctx) {
@@ -472,15 +471,13 @@ export class Sukuna {
     b.loop?.set(0.6 + b.draw * 1.2, 0.9 + b.draw * 0.6);
     b.loop?.pos(tip);
     if (b.light) b.light.position.copy(tip);
-    if (Math.random() < 0.9) fx.spawn(tip, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.3), Math.random() < 0.5 ? FIRE : FIRE_HI, 0.04 + b.draw * 0.06, 0.4, 1, -1, 0.5);
-    if (Math.random() < 0.15) fx.spawnDark(_v3.copy(tip).addScaledVector(dir, 0.1), new THREE.Vector3(0, 0.6, 0), SMOKE, 0.03, 0.6, 1, -0.5, 1.2);
     if (Math.random() < 0.4) {
       B.pulse?.(0.1 + b.draw * 0.5, 15);
       D.pulse?.(0.1 + b.draw * 0.5, 15);
     }
     if (!holding) {
       if (b.draw >= 0.15 && this.spend(30)) this._fireArrow(tip.clone(), dir.clone(), b.draw);
-      else fx.burst(tip, 20, FIRE, 1, 0.03, 0.4);
+      else this._fizzle(tip);
       A.dispose();
       fx.releaseLight(b.light);
       b.loop?.stop(0.3);
@@ -498,7 +495,7 @@ export class Sukuna {
     const light = fx.borrowLight(FIRE, 6, 10);
     this.arrows.push({ arrow, pos: arrow.group.position, vel: dir.multiplyScalar(18 + draw * 24), life: 3, draw, light });
     if (!sfx.play('fire_whoosh', { at: pos, vol: 1.1 })) sfx.fire(pos, 0.5);
-    fx.burst(pos, 40, FIRE, 2.5, 0.05, 0.4);
+    this._muzzle(pos, dir.clone().normalize(), draw);
     this.used.kai = this.used.hachi = false;
     const inp = this.ctx.input;
     inp.left.pulse(1, 150);
@@ -522,14 +519,11 @@ export class Sukuna {
           break;
         }
       }
-      if (a.light) a.light.position.copy(a.pos);
-      // 불티와 꼬리 연기
-      const back = _v3.copy(a.vel).normalize();
-      for (let k = 0; k < 5; k++) {
-        const p = _v2.copy(a.pos).addScaledVector(back, -Math.random() * 2.2).add(_v.randomDirection().multiplyScalar(0.25));
-        fx.spawn(p, _v.randomDirection().multiplyScalar(1.2).addScaledVector(a.vel, -0.04), k % 2 ? FIRE : FIRE_HI, 0.025 + Math.random() * 0.03, 0.5 + Math.random() * 0.4, 1.5, -0.6, 0);
+      if (a.light) {
+        a.light.position.copy(a.pos);
+        a.light.intensity = 5 + Math.random() * 2.5; // 불빛이 일렁인다
       }
-      if (Math.random() < 0.6 && a.pos.distanceTo(this.ctx.input.head) > 4) fx.spawnDark(_v2.copy(a.pos).addScaledVector(back, -1.6), _v.set((Math.random() - 0.5) * 0.4, 0.5, (Math.random() - 0.5) * 0.4), new THREE.Color(0x3a3030), 0.18, 1.2, 1, -0.4, 2.5);
+      // 불꽃·연기·불티 꼬리는 FireArrow.update 가 지나온 자리에 뿌린다
       if (hit) {
         this._kamino(a.pos.clone(), a.draw, true);
         a.arrow.dispose();
@@ -548,10 +542,10 @@ export class Sukuna {
       t.impulse(n.clone().multiplyScalar(8 + 15 * k), 10);
       t.damage(70 + 280 * k, { type: 'burn', burn: true, dir: n, dirAmt: 3.5 });
     });
-    this._toonFireBlast(pos, R, draw, primary);
-    fx.shockwave(_v.copy(pos).setY(0.06), FIRE, R * 1.5, 0.6);
-    fx.burst(pos, primary ? 90 : 40, FIRE_HI, 7, 0.05, 0.9, { up: 1.6, grav: 4, drag: 0.6 }); // 튀는 불티
-    fx.flash(pos, FIRE, 16, 0.9, 28);
+    // 실사풍 폭발: 섬광 → 화구 → 불기둥(竈) → 검은 연기·버섯구름 → 먼지 고리 → 불티
+    fx.fire.explosion(pos, R * 0.6, { height: 5 + draw * 9, colR: 0.8 + draw * 1.6, lite: !primary, head: this.ctx.input.head });
+    fx.flash(pos, FIRE_HI, 22, 0.25, 30);
+    fx.flash(pos, FIRE, 10, 2.2, 26);
     sfx.fire(pos, 1 + draw);
     sfx.explosion(pos, 0.8 + draw * 0.8);
     sfx.rumble(0.6 + draw * 0.6, 0.3 + draw * 0.2);
@@ -563,65 +557,24 @@ export class Sukuna {
     }
   }
 
-  /** 개(開) 착탄: 불새 화살과 같은 셀 셰이딩 화염 (화구 → 사방의 불덩이 → 불기둥 → 검은 연기) */
-  _toonFireBlast(pos, R, draw, primary) {
-    const fx = this.ctx.fx;
-    const lite = !primary;
-    const base = new THREE.Vector3(pos.x, Math.max(0.25, pos.y), pos.z);
-    // 가까이서 터져도 불덩이가 얼굴을 덮지 않게: 머리에서 1.3m 밖까지만 부푼다
-    const head = this.ctx.input.head;
-    const fit = (to, r) => Math.min(r, Math.max(0.15, to.distanceTo(head) - 1.3));
-    const blob = (pal, o) => {
-      const to = o.to ?? o.from;
-      o.r1 = fit(to, o.r1);
-      if (o.r1 <= 0.15) return;
-      spawnToonBlob(fx, pal, o);
-    };
-    const H = 5 + draw * 9;
-    const colR = 0.8 + draw * 1.6;
-    // 하얗게 타오르는 중심 화구
-    blob('fireHot', { from: base, r0: 0.2, r1: R * 0.42, dur: 1.5, growK: 0.18, erodeAt: 0.45, outline: 0.09, disp: 0.5 });
-    // 사방으로 부풀어 오르는 불덩이
-    const nPuff = lite ? 5 : 9;
-    for (let i = 0; i < nPuff; i++) {
-      const d = _v.randomDirection();
-      d.y = Math.abs(d.y) * 0.8 + 0.1;
-      d.normalize();
-      blob(i % 3 ? 'fire' : 'fireHot', {
-        from: base, to: base.clone().addScaledVector(d, R * (0.35 + Math.random() * 0.3)),
-        r0: 0.15, r1: R * (0.17 + Math.random() * 0.13), delay: Math.random() * 0.12, dur: 1.7 + Math.random() * 0.6,
-        rise: 0.6, erodeAt: 0.5, outline: 0.07, disp: 0.45,
-      });
+  /** 발사 순간: 앞으로 뿜어지는 불길 + 연기 한 모금 + 불티 */
+  _muzzle(pos, dir, draw) {
+    const fire = this.ctx.fx.fire;
+    for (let i = 0; i < 18; i++) {
+      _v.copy(dir).multiplyScalar(4 + Math.random() * 6 * (0.5 + draw)).add(_v2.randomDirection().multiplyScalar(1.5));
+      fire.flame(pos, _v, { size0: 0.08, size1: 0.3 + Math.random() * 0.25, life: 0.25 + Math.random() * 0.2, heat: 1.45, cool: 0.9, drag: 5, rise: 2 });
     }
-    // 불기둥: 덩어리가 겹겹이 솟구친다
-    const nCol = lite ? 3 : 6;
-    for (let j = 0; j < nCol; j++) {
-      const f = (j + 1) / nCol;
-      blob(j < 2 ? 'fireHot' : 'fire', {
-        from: base, to: base.clone().add(_v.set((Math.random() - 0.5) * 0.4, H * f, (Math.random() - 0.5) * 0.4)),
-        r0: 0.2, r1: colR * (1.15 - f * 0.35), delay: j * 0.05, dur: 2.2 + f * 0.5, growK: 0.25,
-        erodeAt: 0.55, outline: 0.07, disp: 0.4, stretch: 1.35,
-      });
+    for (let i = 0; i < 5; i++) {
+      fire.smoke(_v3.copy(pos).addScaledVector(_v2.randomDirection(), 0.1), _v.copy(dir).multiplyScalar(1.5).add(_v2.randomDirection().multiplyScalar(0.4)), { size0: 0.12, size1: 0.6 + Math.random() * 0.3, life: 1.4 + Math.random() * 0.6, shade: 0.2, lit: 0.8, opacity: 0.35, drag: 1.8, rise: 0.5 });
     }
-    // 꼭대기의 검은 연기 (버섯구름) + 바닥을 쓸고 퍼지는 연기
-    const nSmoke = lite ? 3 : 6;
-    for (let i = 0; i < nSmoke; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = colR * (0.4 + Math.random() * 0.9);
-      blob('smoke', {
-        from: base.clone().add(_v.set(0, H * 0.75, 0)), to: base.clone().add(_v.set(Math.cos(a) * sp, H * (0.95 + Math.random() * 0.25), Math.sin(a) * sp)),
-        r0: 0.3, r1: colR * (1.1 + Math.random() * 0.6), delay: 0.45 + Math.random() * 0.3, dur: 3.4, rise: 0.7,
-        growK: 0.4, erodeAt: 0.5, outline: 0.06, disp: 0.5,
-      });
-    }
-    for (let i = 0; i < (lite ? 3 : 7); i++) {
-      const a = (i / (lite ? 3 : 7)) * Math.PI * 2 + Math.random() * 0.5;
-      blob('smoke', {
-        from: base.clone().setY(0.3), to: base.clone().add(_v.set(Math.cos(a) * R * 0.6, 0.4, Math.sin(a) * R * 0.6)).setY(0.45),
-        r0: 0.2, r1: R * (0.08 + Math.random() * 0.05), delay: 0.15 + Math.random() * 0.2, dur: 2.8, rise: 0.25,
-        growK: 0.4, erodeAt: 0.45, outline: 0.05, disp: 0.45,
-      });
-    }
+    for (let i = 0; i < 20; i++) fire.spark(pos, _v.copy(dir).multiplyScalar(3 + Math.random() * 5).add(_v2.randomDirection().multiplyScalar(2.5)), { life: 0.4 + Math.random() * 0.5, size: 0.02, grav: 4 });
+  }
+
+  /** 덜 당겨서 꺼질 때: 확 피었다 연기로 사그라든다 */
+  _fizzle(pos) {
+    const fire = this.ctx.fx.fire;
+    for (let i = 0; i < 8; i++) fire.flame(pos, _v.randomDirection().multiplyScalar(0.8).add(_v2.set(0, 0.8, 0)), { size0: 0.06, size1: 0.18, life: 0.3 + Math.random() * 0.2, heat: 1.2, cool: 1, drag: 3, rise: 2 });
+    for (let i = 0; i < 4; i++) fire.smoke(pos, _v.set((Math.random() - 0.5) * 0.3, 0.6, (Math.random() - 0.5) * 0.3), { size0: 0.06, size1: 0.35, life: 1.4, shade: 0.3, lit: 0.5, opacity: 0.3, rise: 0.4 });
   }
 
   /** 진짜 같은 그을음: 숯처럼 까만 중심 · 갈색 외곽 · 폭발 줄무늬 · 식어 가는 잔불 */

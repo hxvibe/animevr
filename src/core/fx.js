@@ -1,5 +1,6 @@
 // 범용 VFX: GPU 파티클(발광/어두움), 번개 리본, 별 플레어, 충격파, 섬광 조명 풀
 import * as THREE from 'three';
+import { RealFire } from './realFire.js';
 
 const vert = /* glsl */ `
 attribute float aSize;
@@ -339,6 +340,7 @@ export class Fx {
     this._sphereGeo = new THREE.SphereGeometry(1, 24, 16);
     this.stars = [];
     this.brightBg = false; // 밝은 배경에서는 가산 혼합이 안 보이므로 일부를 일반 혼합으로
+    this.fire = new RealFire(scene); // 실사풍 불꽃·연기 빌보드
 
   }
 
@@ -440,6 +442,8 @@ export class Fx {
     const scale = isXR ? 900 : this.renderer.domElement.height * 0.5;
     this.add.update(dt, scale);
     this.dark.update(dt, scale);
+    this.fire.bright = this.brightBg;
+    this.fire.update(dt);
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       const f = this.flashes[i];
       f.t += dt;

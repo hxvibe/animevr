@@ -8,6 +8,8 @@ import { classifyHand, makeGestureResult, JOINT_NAMES } from './gestures.js';
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _fwd = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 const PROFILES = new URL('../../assets/profiles/', import.meta.url).href;
 
 export class HandState {
@@ -105,6 +107,9 @@ export class Input {
     this._palmUp = 0;
     this._snapReady = true;
     this.locomotion = true;
+    // 핸드트래킹 이동: 엄지 척을 한 손이 가상 조이스틱 (왼손 = 이동, 오른손 = 회전)
+    this.handLoco = { left: null, right: null };
+    this._locoViz = this._makeLocoViz();
 
     this._setupXR();
     this._setupDesktop();
@@ -146,6 +151,78 @@ export class Input {
         ray.visible = false;
       });
     }
+  }
+
+  _makeLocoViz() {
+    const make = (color) => {
+      const g = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.035, 0.042, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthTest: false, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      const zone = new THREE.Mesh(new THREE.RingGeometry(0.118, 0.122, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthTest: false, side: THREE.DoubleSide }));
+      zone.rotation.x = -Math.PI / 2;
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshBasicMaterial({ color, depthTest: false }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8, depthTest: false }));
+      for (const o of [ring, zone, dot, line]) o.renderOrder = 60;
+      g.add(ring, zone, dot, line);
+      g.visible = false;
+      this.rig.add(g);
+      return { g, dot, line };
+    };
+    return { left: make(0x7fd0ff), right: make(0xffd27f) };
+  }
+
+  /** 엄지 척 조이스틱: 쥔 자리에서 손을 민 만큼 이동(왼손) / 옆으로 밀면 스냅 회전(오른손) */
+  _updateHandLoco(dt) {
+    for (const h of this.hands) {
+      const viz = this._locoViz[h.side];
+      const on = this.locomotion && h.active && h.source === 'hand' && h.gesture === 'thumbsup' && !h.uiBlock;
+      let L = this.handLoco[h.side];
+      if (!on) {
+        // 잠깐 흐트러진 건 봐준다
+        if (L && (L.lost = (L.lost ?? 0) + dt) < 0.15 && h.active) continue;
+        this.handLoco[h.side] = null;
+        viz.g.visible = false;
+        continue;
+      }
+      // 리그 공간의 손 위치 (리그가 움직여도 기준점이 같이 따라온다)
+      const local = this.rig.worldToLocal(_v.copy(h.palm));
+      if (!L) {
+        L = this.handLoco[h.side] = { center: local.clone(), armed: true };
+        h.pulse?.(0.3, 30);
+      }
+      L.lost = 0;
+      const off = _fwd.subVectors(local, L.center);
+      off.y = 0;
+      const d = off.length();
+      viz.g.visible = true;
+      viz.g.position.copy(L.center);
+      viz.dot.position.copy(off);
+      viz.line.geometry.attributes.position.setXYZ(1, off.x, 0, off.z);
+      viz.line.geometry.attributes.position.needsUpdate = true;
+      if (h.side === 'left') {
+        // 이동: 3cm 안은 멈춤, 12cm에서 최고 속도
+        const k = THREE.MathUtils.clamp((d - 0.03) / 0.09, 0, 1);
+        if (k > 0) {
+          const dir = off.clone().normalize().applyQuaternion(this.rig.quaternion);
+          this.rig.position.addScaledVector(dir, k * k * 2.6 * dt);
+        }
+      } else {
+        // 회전: 옆으로 7cm 밀면 30도, 가운데로 돌아와야 다시
+        const sideways = off.dot(_v2.set(1, 0, 0).applyQuaternion(this._headLocalQuat()));
+        if (L.armed && Math.abs(sideways) > 0.07) {
+          L.armed = false;
+          this.snapTurn(sideways > 0 ? -Math.PI / 6 : Math.PI / 6);
+          h.pulse?.(0.5, 40);
+        } else if (Math.abs(sideways) < 0.03) L.armed = true;
+      }
+    }
+  }
+
+  /** 머리 방향(수평)을 리그 공간에서 */
+  _headLocalQuat() {
+    const f = _v3.copy(this.headDir).applyQuaternion(_q.copy(this.rig.quaternion).invert()).setY(0);
+    if (f.lengthSq() < 1e-4) f.set(0, 0, -1);
+    return _q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, Math.atan2(-f.x, -f.z));
   }
 
   /** 메뉴가 열렸을 때만 컨트롤러 레이저 표시 */
@@ -303,6 +380,7 @@ export class Input {
       } else if (Math.abs(x) < 0.3) this._snapReady = true;
     }
 
+    this._updateHandLoco(dt);
     if (L.source === 'controller' && (L.pressed('b') || L.pressed('menu'))) this.actions.toggleMenu = true; // Y / 메뉴
     if (R.source === 'controller' && R.pressed('b')) this.actions.quickSpawn = true; // B
   }

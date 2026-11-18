@@ -26,7 +26,7 @@ export class Grab {
         if (!h.active || h.uiBlock || h.source === 'desktop' || busy(side)) continue;
         const want = h.source === 'hand' ? h.gesture === 'fist' && h.gestureTime < 0.25 : h.pressed('grip');
         if (!want || h.speed > 1.6) continue;
-        const t = world.nearestTarget(h.palm, 0.13, (x) => !x.heldBy && !x.held && !x.dying);
+        const t = world.nearestTarget(h.palm, 0.13, (x) => !x.heldBy && !x.held && !x.dying && !x.noGrab);
         if (t) this._grab(side, t, h);
       } else {
         const t = H.t;
@@ -50,7 +50,7 @@ export class Grab {
         let t = null;
         let best = Infinity;
         for (const x of world.targets()) {
-          if (x.heldBy || x.held || x.dying) continue;
+          if (x.heldBy || x.held || x.dying || x.noGrab) continue;
           const c = x.center(new THREE.Vector3());
           const rel = c.sub(inp.head);
           const along = rel.dot(inp.headDir);

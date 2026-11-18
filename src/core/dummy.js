@@ -185,6 +185,9 @@ export class Dummy {
     this.dying = false;
     this._upright = new THREE.Quaternion();
     this.faceTo(world.ctx.input.head);
+    this.root.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
     world.scene.add(this.root);
   }
 
@@ -814,7 +817,8 @@ export class Dummy {
 
   _ai(dt) {
     const W = this.world;
-    const head = W.ctx.input.head;
+    // 미끼(메구미의 탈토 등)가 있으면 그쪽을 노린다
+    const head = W.decoy?.(this) ?? W.ctx.input.head;
     const ai = W.settings.dummyAI ? this.def.ai : 'idle';
     this.spine.rotation.x = Math.sin(this.t * 1.6) * 0.02;
     this.spine.rotation.z = THREE.MathUtils.lerp(this.spine.rotation.z, 0, dt * 5);
@@ -843,7 +847,7 @@ export class Dummy {
       this.armR.el.rotation.x = THREE.MathUtils.lerp(this.armR.el.rotation.x, 0, dt * 8);
       if (this.shootT <= 0) {
         this.shootT = 2.2 + Math.random() * 1.5;
-        W.spawnBullet(this.gun.localToWorld(_v2.set(0, 0, 0.12)), head);
+        W.spawnBullet(this.gun.localToWorld(_v2.set(0, 0, 0.12)), head, this);
       }
     } else if (ai === 'rusher') {
       const reach = 0.85 * this.scale;

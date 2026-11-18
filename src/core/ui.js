@@ -209,8 +209,38 @@ export class UI {
         g.fillStyle = c.color;
         g.fillText(c.kanji, x + 30, 530);
       });
+    } else if (n > 4) {
+      // 5명 이상: 3열 격자. 이름 아래에 대표 기술, 맨 아래에 작품/술식
+      const cols = 3;
+      const rows = Math.ceil(n / cols);
+      const gap = 20;
+      const cw = (W - 180 - gap * (cols - 1)) / cols;
+      const chh = (285 - (rows - 1) * gap) / rows;
+      CHARACTERS.forEach((c, i) => {
+        const x = 90 + (i % cols) * (cw + gap);
+        const y = 318 + Math.floor(i / cols) * (chh + gap);
+        const active = this.sel.character === c.id;
+        p.button(x, y, cw, chh, '', 'char:' + c.id, { active, accent: c.color + 'aa', r: 20 });
+        g.textAlign = 'left';
+        g.fillStyle = '#ffffff';
+        let ns = 40;
+        g.font = `900 ${ns}px ${FONT}`;
+        while (ns > 26 && g.measureText(c.name).width > cw - 40) g.font = `900 ${(ns -= 2)}px ${FONT}`;
+        g.fillText(c.name, x + 20, y + 46);
+        let ks = 26;
+        g.font = `900 ${ks}px ${JFONT}`;
+        while (ks > 16 && g.measureText(c.kanji).width > cw - 40) g.font = `900 ${(ks -= 2)}px ${JFONT}`;
+        g.fillStyle = c.color;
+        g.fillText(c.kanji, x + 20, y + 84);
+        let ts = 20;
+        g.font = `400 ${ts}px ${FONT}`;
+        const sub = `${c.work} · ${c.technique}`;
+        while (ts > 14 && g.measureText(sub).width > cw - 40) g.font = `400 ${(ts -= 1)}px ${FONT}`;
+        g.fillStyle = 'rgba(255,255,255,0.75)';
+        g.fillText(sub, x + 20, y + chh - 14);
+      });
     } else {
-      // 3명 이상: 2열 격자 (이름 · 작품/술식 · 대표 기술)
+      // 3~4명: 2열 격자 (이름 · 작품/술식 · 대표 기술)
       const cols = 2;
       const rows = Math.ceil(n / cols);
       const gap = 24;
@@ -290,28 +320,30 @@ export class UI {
       Object.entries(BACKGROUNDS).forEach(([id, b], i) => p.button(50 + i * 258, 200, 240, 90, b.label, 'bg:' + id, { active: this.ctx.env.id === id, size: 32 }));
       const toggles = [
         ['hud', '손목 HUD'], ['skillNames', '기술명 표시'], ['damageNumbers', '데미지 숫자'],
-        ['invincible', '플레이어 무적'], ['locomotion', '스틱 이동'], ['domainGesture', `${this.ctx.character?.domainLabel ?? '영역전개'} 손동작`],
+        ['invincible', '플레이어 무적'], ['locomotion', '이동 (스틱·엄지척)'], ['domainGesture', `${this.ctx.character?.domainLabel ?? '영역전개'} 손동작`], ['shadows', '그림자'],
       ];
       const cid = this.ctx.character?.id;
       if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건']);
+      if (cid === 'megumi') toggles.push(['mahoragaTamed', '마허라 조복됨'], ['dogTotality', '옥견 혼 (白 파괴됨)']);
       g.fillText('옵션', 50, 345);
       toggles.forEach(([k, l], i) => p.button(50 + (i % 3) * 430, 365 + Math.floor(i / 3) * 105, 410, 88, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 28, accent: '#2e6a9a' }));
-      if (this.ctx.character?.castDomain) p.button(910, 640 - 75, 440, 90, `${this.ctx.character.domainLabel ?? '영역전개'} 발동`, 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
+      if (this.ctx.character?.castDomain) p.button(910, 735, 440, 90, `${this.ctx.character.domainLabel ?? '영역전개'} 발동`, 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
       g.fillStyle = '#ffffff';
       g.font = `700 32px ${FONT}`;
-      g.fillText(`높이 보정  ${S.heightOffset >= 0 ? '+' : ''}${Math.round(S.heightOffset * 100)} cm`, 50, 640);
-      p.button(50, 665, 160, 90, '−5', 'h:-', { size: 36 });
-      p.button(230, 665, 160, 90, '+5', 'h:+', { size: 36 });
-      p.button(410, 665, 200, 90, '초기화', 'h:0', { size: 30 });
+      g.fillText(`높이 보정  ${S.heightOffset >= 0 ? '+' : ''}${Math.round(S.heightOffset * 100)} cm`, 50, 710);
+      p.button(50, 735, 160, 90, '−5', 'h:-', { size: 36 });
+      p.button(230, 735, 160, 90, '+5', 'h:+', { size: 36 });
+      p.button(410, 735, 200, 90, '초기화', 'h:0', { size: 30 });
       g.font = `400 26px ${FONT}`;
       g.fillStyle = 'rgba(255,255,255,0.6)';
-      g.fillText('세상이 크거나 작게 느껴지면 높이 보정으로 눈높이를 맞추세요.', 50, 800);
-      g.fillText('VR 시작 전 기기에서 바닥 높이(가디언)를 설정해 두면 가장 정확합니다.', 50, 840);
+      g.fillText('세상이 크거나 작게 느껴지면 높이 보정으로 눈높이를 맞추세요.', 50, 880);
+      g.fillText('VR 시작 전 기기에서 바닥 높이(가디언)를 설정해 두면 가장 정확합니다.', 50, 920);
     } else {
       const ch = this.ctx.character;
       const anyHand = this.ctx.input.hands.some((h) => h.source === 'hand');
       const mode = anyHand ? 'hand' : this.ctx.input.mode === 'desktop' ? 'desktop' : 'controller';
       const lines = ch ? ch.helpLines(mode) : [];
+      if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기 · 오른손 엄지 척 → 옆으로 밀면 30° 회전' });
       let y = 180;
       g.font = `400 24px ${FONT}`;
       g.fillStyle = 'rgba(255,255,255,0.55)';
@@ -363,6 +395,7 @@ export class UI {
     else if (k === 'opt') {
       S[v] = !S[v];
       if (v === 'locomotion') ctx.input.locomotion = S.locomotion;
+      if (v === 'shadows') ctx.env.applyShadows();
     } else if (k === 'h') {
       S.heightOffset = v === '0' ? 0 : THREE.MathUtils.clamp(S.heightOffset + (v === '+' ? 0.05 : -0.05), -0.5, 0.5);
       ctx.game.applyHeight();

@@ -83,6 +83,8 @@ export class World {
     this.slicer = new Slicer(this.scene, this.shatter);
     this.dummies = [];
     this.props = [];
+    // 더미·소품 말고 칠 수 있는 것 (메구미의 조복 의식 중인 마허라 등). { alive, pos, radius, center(), distanceTo(), damage(), noGrab }
+    this.extraTargets = [];
     this.bullets = [];
     this.time = 0;
     this.kills = 0;
@@ -148,6 +150,12 @@ export class World {
   // ── 소품 ──
   addProp(obj, opts) {
     const p = new Prop(this, obj, opts);
+    obj.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.userData.isProp = true;
+      }
+    });
     this.props.push(p);
     return p;
   }
@@ -170,10 +178,16 @@ export class World {
       const dist = p.pos.distanceTo(center);
       if (dist < r + p.radius) fn(p, dist, p.pos);
     }
+    for (const x of this.extraTargets) {
+      if (!x.alive) continue;
+      const c = x.center(new THREE.Vector3());
+      const dist = c.distanceTo(center);
+      if (dist < r + x.radius) fn(x, dist, c);
+    }
   }
 
   targets() {
-    return [...this.dummies.filter((d) => d.alive), ...this.props.filter((p) => p.alive)];
+    return [...this.dummies.filter((d) => d.alive), ...this.props.filter((p) => p.alive), ...this.extraTargets.filter((x) => x.alive)];
   }
 
   /** 점에 가장 가까운 대상 (몸 표면까지 거리) */
@@ -192,13 +206,13 @@ export class World {
   }
 
   // ── 더미 공격 ──
-  spawnBullet(from, to) {
+  spawnBullet(from, to, src = null) {
     const mesh = new THREE.Mesh(this.bulletGeo, this.bulletMat);
     mesh.position.copy(from);
     const dir = _v.subVectors(to, from).add(_v2.set(0, -0.15, 0)).normalize();
     mesh.lookAt(_v2.copy(from).add(dir));
     this.scene.add(mesh);
-    this.bullets.push({ mesh, pos: mesh.position, vel: dir.clone().multiplyScalar(9), life: 6, alive: true, stall: 0 });
+    this.bullets.push({ mesh, pos: mesh.position, vel: dir.clone().multiplyScalar(9), life: 6, alive: true, stall: 0, src });
     this.ctx.sfx.gunshot(from);
     this.ctx.fx.burst(from, 6, new THREE.Color(0xffaa60), 1.5, 0.03, 0.15);
   }
@@ -212,12 +226,17 @@ export class World {
 
   dummyMelee(dummy, fist, dmg) {
     if (this.meleeShield && this.meleeShield(dummy, fist)) return;
+    // 식신 등이 대신 맞는다
+    if (this.absorbMelee && this.absorbMelee(dummy, fist, dmg)) return;
     const bc = this.ctx.input.bodyCenter(_v);
-    if (fist.distanceTo(bc) < 0.65 || fist.distanceTo(this.ctx.input.head) < 0.45) this.hitPlayer(dmg);
+    if (fist.distanceTo(bc) < 0.65 || fist.distanceTo(this.ctx.input.head) < 0.45) this.hitPlayer(dmg, { type: 'punch', src: dummy });
   }
 
-  hitPlayer(amount) {
+  /** info: { type, src } — 마허라 법진 같은 적응이 피해를 줄일 수 있다 */
+  hitPlayer(amount, info = {}) {
     const P = this.player;
+    if (this.playerDamageMul) amount *= this.playerDamageMul(info.type ?? 'punch', info);
+    if (amount <= 0.01) return;
     this.ctx.sfx.hit();
     this.ctx.ui.damageFlash(amount);
     this.ctx.input.left.pulse(0.6, 80);
@@ -326,9 +345,13 @@ export class World {
         this.removeBullet(b);
         continue;
       }
+      if (this.absorbBullet && this.absorbBullet(b)) {
+        this.removeBullet(b);
+        continue;
+      }
       if (b.pos.distanceTo(bc) < 0.38 || b.pos.distanceTo(ctx.input.head) < 0.2) {
         this.removeBullet(b);
-        this.hitPlayer(10);
+        this.hitPlayer(10, { type: 'bullet', src: b.src });
       }
     }
 

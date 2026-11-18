@@ -67,7 +67,7 @@ export function makeGestureResult() {
 
 /**
  * 손 모양 분류. 결과 raw:
- *  open(손바닥 펼침) / fist(주먹) / point(검지) / two(검지+중지) / crossed(검지·중지 꼬기) / purple(茈 수인) / pinch / none
+ *  open(손바닥 펼침) / fist(주먹) / point(검지) / two(검지+중지) / crossed(검지·중지 꼬기) / purple(茈 수인) / pinch / thumbsup(엄지 척: 이동) / none
  */
 export function classifyHand(J, side, out) {
   for (let k = 0; k < 4; k++) {
@@ -114,8 +114,22 @@ export function classifyHand(J, side, out) {
   out.thumbOn = thumbOn;
   const purpleSign = sI !== 2 && sM !== 2 && bI > 95 && bM > 95 && sR !== 0 && sP !== 0 && bR + bP < 200 && bR < bM - 40 && thumbOn < 0.04;
 
+  // 엄지 척: 네 손가락은 말아 쥐고 엄지만 곧게 위로 (이동용)
+  const tm = J['thumb-metacarpal'];
+  const tp = J['thumb-phalanx-proximal'];
+  const tt = J['thumb-tip'];
+  _a.subVectors(tt, tp);
+  const thumbLen = _a.length();
+  _b.subVectors(tp, tm);
+  const thumbStraight = thumbLen > 1e-4 && angleBetween(_a, _b) < 40;
+  const thumbUp = thumbLen > 1e-4 && _a.y / thumbLen > 0.65;
+  const thumbOut = tt.distanceTo(J['index-finger-phalanx-proximal']) > 0.055;
+  const curled = (k) => out.states[k] === 0 || out.bends[k] > 120;
+  out.thumbsUp = thumbStraight && thumbUp && thumbOut && curled(0) && curled(1) && curled(2) && curled(3);
+
   let g = 'none';
-  if (purpleSign) g = 'purple';
+  if (out.thumbsUp) g = 'thumbsup';
+  else if (purpleSign) g = 'purple';
   else if (crossed) g = 'crossed';
   else if (sI === 2 && sM === 2 && sR === 2 && sP !== 0) g = 'open';
   else if (sI === 2 && middleUp && lowerCurled) g = 'two';

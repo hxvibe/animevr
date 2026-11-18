@@ -1,6 +1,7 @@
 // 배경 전환 + 조명/안개 관리. 영역전개는 배경을 숨기고 자체 연출을 띄운다.
 import * as THREE from 'three';
 import { BACKGROUNDS } from './backgrounds.js';
+import { captureEnvironment } from './realism.js';
 
 export class Environment {
   constructor(ctx) {
@@ -9,6 +10,20 @@ export class Environment {
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x888888, 2);
     this.sun = new THREE.DirectionalLight(0xffffff, 1.5);
     this.scene.add(this.hemi, this.sun, this.sun.target);
+    // 해 그림자: 플레이어 주변만 (그림자 카메라가 따라다닌다)
+    const r = ctx.renderer;
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -24;
+    sc.right = sc.top = 24;
+    sc.near = 1;
+    sc.far = 220;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.03;
+    this.sunDir = new THREE.Vector3(0.4, 0.8, 0.3).normalize();
+    this.envTex = null;
     this.fog = new THREE.Fog(0xffffff, 30, 120);
     this.scene.fog = this.fog;
     this.current = null;
@@ -42,8 +57,22 @@ export class Environment {
       exposure: bg.exposure ?? 1,
     };
     this.sun.position.set(...bg.sun.pos);
+    this.sunDir.set(...bg.sun.pos).normalize();
     this.restore();
     this.setHidden(false);
+    this.applyShadows();
+    // 이 배경을 플레이어 눈높이에서 찍어 반사 환경맵으로 (젖은 바닥·유리에 거리가 비친다)
+    this.envTex?.dispose();
+    this.envTex = null;
+    if (bg.capture) {
+      try {
+        const lights = [this.hemi.clone(), this.sun.clone()];
+        this.envTex = captureEnvironment(this.ctx.renderer, [bg.group, bg.sky], new THREE.Vector3(bg.spawn.x, 1.6, bg.spawn.z), { lights });
+      } catch (e) {
+        console.warn('환경맵 실패', e);
+      }
+    }
+    this.scene.environment = this.envTex;
     return bg;
   }
 
@@ -79,5 +108,23 @@ export class Environment {
     for (const p of this.ctx.world.props) p.obj.traverse((o) => (o.visible = true));
   }
 
-  update() {}
+  /** 설정(그림자)과 배경에 맞춰 그림자를 켜고 끈다 */
+  applyShadows() {
+    const on = !!(this.ctx.settings.shadows && this.current?.shadows);
+    this.sun.castShadow = on;
+  }
+
+  update(dt) {
+    this.current?.update?.(dt);
+    if (this.sun.castShadow) {
+      // 그림자 카메라를 플레이어 주변으로 (텍셀 단위로 맞춰 흔들림 방지)
+      const h = this.ctx.input.head;
+      const step = 48 / 2048;
+      const cx = Math.round(h.x / step) * step;
+      const cz = Math.round(h.z / step) * step;
+      this.sun.target.position.set(cx, 0, cz);
+      this.sun.position.set(cx, 0, cz).addScaledVector(this.sunDir, 100);
+      this.sun.target.updateMatrixWorld();
+    }
+  }
 }

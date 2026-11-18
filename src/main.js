@@ -14,7 +14,7 @@ import { CHARACTERS } from './characters/index.js';
 const DEFAULTS = {
   character: 'gojo', background: 'white', hud: false, skillNames: true, damageNumbers: true,
   invincible: false, dummyAI: true, locomotion: true, kaminoRule: false, heightOffset: 0, blackFlashChance: 0.2,
-  domainGesture: true,
+  domainGesture: true, shadows: true, mahoragaTamed: false, dogTotality: false,
 };
 let saved = {};
 try {
@@ -245,6 +245,7 @@ renderer.setAnimationLoop(() => {
     ctx.melee.update(dt);
     ctx.world.update(simDt);
   }
+  ctx.env.update(simDt);
   ctx.fx.brightBg = !!ctx.env.current?.bright && !ctx.env.hidden;
   ctx.fx.update(simDt, renderer.xr.isPresenting);
   ctx.ui.update(dt);

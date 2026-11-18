@@ -61,7 +61,7 @@ export class Melee {
   }
 
   hit(target, pos, dir, speed, hand) {
-    const { fx, sfx, ui, world, settings } = this.ctx;
+    const { world, settings } = this.ctx;
     // 캐릭터가 자기 방식의 타격을 쓰면 그쪽으로 (흑섬은 주술회전 캐릭터만)
     if (this.ctx.character?.meleeHit?.(target, pos, dir, speed, hand)) return;
     const now = world.time;
@@ -69,29 +69,40 @@ export class Melee {
     this.lastHit = now;
     const black = Math.random() < (settings.blackFlashChance ?? 0.2) + Math.min(0.15, this.combo * 0.03);
     const base = 10 + speed * 3;
-    if (black) {
-      // 흑섬: 타격과 주력의 오차가 0.000001초 이내 → 위력 2.5승
-      const dmg = Math.pow(base, 1.25) * 2.5;
-      target.damage(dmg, { type: 'punch', dir, color: '#ff3040' });
-      target.impulse?.(_v.copy(dir).multiplyScalar(9).add(_v2.set(0, 3, 0)), 10);
-      this.ctx.game.hitstop = 0.09;
-      this.flashT = 0.3;
-      this.flashPos.copy(pos);
-      fx.burst(pos, 60, BLACK, 5, 0.06, 0.5, { dark: true, drag: 3 });
-      fx.burst(pos, 50, RED, 6, 0.05, 0.4, { drag: 2 });
-      fx.shockwave(pos, 0x000000, 1.8, 0.35, { dark: true, faceDir: dir.clone(), opacity: 0.9 });
-      fx.shockwave(pos, RED, 2.4, 0.45, { faceDir: dir.clone() });
-      fx.sphereBlast(pos, 0x000000, 0.8, 0.25, { dark: true, opacity: 0.8 });
-      fx.flash(pos, RED, 10, 0.3);
-      sfx.blackFlash(pos);
-      ui.manga({ main: '黒閃', ruby: 'こくせん', color: '#ff1a30', side: hand?.side });
-      hand?.pulse(1, 160);
-    } else {
-      target.damage(base, { type: 'punch', dir });
-      target.impulse?.(_v.copy(dir).multiplyScalar(2 + speed * 0.6).add(_v2.set(0, 0.8, 0)), 3);
-      fx.burst(pos, 14, new THREE.Color(0xffffff), 2, 0.03, 0.25);
-      sfx.punch(pos);
-      hand?.pulse(0.7, 60);
-    }
+    if (black) this.blackFlash(target, pos, dir, base, hand);
+    else this.normalHit(target, pos, dir, base, speed, hand);
+  }
+
+  /** 흑섬: 타격과 주력의 오차가 0.000001초 이내 → 위력 2.5승. 캐릭터 타격에서도 부른다 */
+  blackFlash(target, pos, dir, base, hand, { mul = 1, label = null, top = null } = {}) {
+    const { fx, sfx, ui } = this.ctx;
+    const dmg = Math.pow(base, 1.25) * 2.5 * mul;
+    target.damage(dmg, { type: 'punch', dir, color: '#ff3040' });
+    target.impulse?.(_v.copy(dir).multiplyScalar(9 * Math.sqrt(mul)).add(_v2.set(0, 3, 0)), 10);
+    this.ctx.game.hitstop = 0.09;
+    this.flashT = 0.3;
+    this.flashPos.copy(pos);
+    fx.burst(pos, 60, BLACK, 5, 0.06, 0.5, { dark: true, drag: 3 });
+    fx.burst(pos, 50, RED, 6, 0.05, 0.4, { drag: 2 });
+    fx.shockwave(pos, 0x000000, 1.8, 0.35, { dark: true, faceDir: dir.clone(), opacity: 0.9 });
+    fx.shockwave(pos, RED, 2.4, 0.45, { faceDir: dir.clone() });
+    fx.sphereBlast(pos, 0x000000, 0.8, 0.25, { dark: true, opacity: 0.8 });
+    fx.flash(pos, RED, 10, 0.3);
+    sfx.blackFlash(pos);
+    ui.manga({ top, main: label ?? '黒閃', ruby: 'こくせん', color: '#ff1a30', side: hand?.side });
+    hand?.pulse?.(1, 160);
+    return dmg;
+  }
+
+  /** 보통 주먹 */
+  normalHit(target, pos, dir, base, speed, hand, { mul = 1, push = 1 } = {}) {
+    const { fx, sfx } = this.ctx;
+    const dmg = base * mul;
+    target.damage(dmg, { type: 'punch', dir });
+    target.impulse?.(_v.copy(dir).multiplyScalar((2 + speed * 0.6) * push).add(_v2.set(0, 0.8 * push, 0)), 3);
+    fx.burst(pos, 14, new THREE.Color(0xffffff), 2, 0.03, 0.25);
+    sfx.punch(pos);
+    hand?.pulse?.(0.7, 60);
+    return dmg;
   }
 }

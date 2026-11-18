@@ -6,8 +6,6 @@ import { Gojo } from './gojo/gojo.js';
 import { Sukuna } from './sukuna/sukuna.js';
 import { Itadori } from './itadori/itadori.js';
 import { Megumi } from './megumi/megumi.js';
-import { Naruto } from './naruto/naruto.js';
-import { Goku } from './goku/goku.js';
 
 export const CHARACTERS = [
   {
@@ -45,23 +43,5 @@ export const CHARACTERS = [
     kanji: '玉犬 · 鵺 · 魔虚羅 · 嵌合暗翳庭',
     color: '#7f93ff',
     create: (ctx) => new Megumi(ctx),
-  },
-  {
-    id: 'naruto',
-    name: '우즈마키 나루토',
-    work: '나루토',
-    technique: '차크라 · 풍둔',
-    kanji: '螺旋丸 · 影分身 · 九喇嘛',
-    color: '#ff8a1a',
-    create: (ctx) => new Naruto(ctx),
-  },
-  {
-    id: 'goku',
-    name: '손오공',
-    work: '드래곤볼',
-    technique: '기(気)',
-    kanji: 'かめはめ波 · 元気玉 · 超サイヤ人',
-    color: '#ffc21a',
-    create: (ctx) => new Goku(ctx),
   },
 ];

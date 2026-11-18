@@ -289,7 +289,7 @@ export class EnergyOrb {
     if (this.boltT <= 0) {
       this.boltT = 0.05 + Math.random() * 0.04;
       this.bolts.width = Math.max(0.004, r * 0.05);
-      const nb = !!this.P.noBolts; // 번개 없는 구체 (원기옥 등)
+      const nb = !!this.P.noBolts; // 번개 없는 구체
       this.bolts.regen(this.pos, r, cam, 1.1, nb ? 0 : Math.round(3 + 4 * intensity));
       this.darkBolts.width = Math.max(0.004, r * (this.P.dark ? 0.07 : 0.035));
       this.darkBolts.regen(this.pos, r * 1.05, cam, 1.3, !nb && (this.P.dark || this.ctx.fx.brightBg) ? 3 : 0);

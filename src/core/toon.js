@@ -1,5 +1,5 @@
 // 만화풍(셀 셰이딩) 폭발 부품: 일렁이는 덩어리(불꽃·연기·바람) + 검은 테두리 + 조각조각 부서지며 사라짐
-// 스쿠나 개(開)의 착탄 폭발, 나선수리검의 바람 칼날 구에 쓴다
+// 스쿠나 개(開)의 착탄 폭발 등에 쓴다
 import * as THREE from 'three';
 
 const NOISE = /* glsl */ `
@@ -85,7 +85,6 @@ export const TOON = {
   fireHot: { c: [0xff4a0a, 0xff8a1a, 0xffc040, 0xfff0a0, 0xffffff], line: 0x3a0a02, mode: 0 },
   smoke: { c: [0x141010, 0x241e1c, 0x3a3230, 0x544a46, 0x6e625c], line: 0x050303, mode: 1 },
   wind: { c: [0x2a6cc8, 0x5aa8f0, 0x9ad4ff, 0xd8f2ff, 0xffffff], line: 0x0a2248, mode: 0 },
-  windGold: { c: [0xc06a00, 0xffa020, 0xffd060, 0xfff0b0, 0xffffff], line: 0x3a1a00, mode: 0 },
 };
 
 const _geo = new THREE.IcosahedronGeometry(1, 4);

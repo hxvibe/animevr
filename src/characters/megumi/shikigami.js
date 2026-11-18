@@ -2275,6 +2275,13 @@ function buildGiant(ctx) {
 
 const SWING_DUR = 1.0;
 
+/** 법진이 도는 소리 (사용자 제공 파일). 아직 못 불러왔으면 합성음으로 대신한다 */
+function wheelSound(sfx, at) {
+  if (sfx.play('mahoragaWheel', { at, vol: 1, jitter: 0 })) return;
+  sfx.tone({ type: 'square', f0: 120, f1: 60, dur: 0.12, vol: 0.25, at });
+  sfx.play('click', { at, vol: 1, rate: 0.5 });
+}
+
 /** 금빛 법진 (팔각 바퀴) — 대체 몸 · 법진만 소환 · 떨어진 법진에 쓴다 */
 export function makeWheel(ctx, size = 1) {
   const gold = new THREE.MeshStandardMaterial({ color: 0xc9a65a, roughness: 0.32, metalness: 0.75, envMap: ctx.world.envMap });
@@ -2382,7 +2389,7 @@ export class MahoragaWheel {
     this.mesh = makeWheel(this.ctx, 1.1);
     this.ctx.scene.add(this.mesh);
     this.ctx.fx.flash(this.ctx.input.head, new THREE.Color(0xffe0a0), 3, 0.3, 4);
-    this.ctx.sfx.tone({ type: 'square', f0: 120, f1: 60, dur: 0.12, vol: 0.2 });
+    wheelSound(this.ctx.sfx, this.ctx.input.head);
   }
 
   /** 술사가 맞을 때: 적응한 만큼 피해를 줄이고, 처음 보는 성질과 상대는 분석한다 */
@@ -2403,8 +2410,7 @@ export class MahoragaWheel {
     if (done) {
       this.target += Math.PI / 4;
       const p = this.mesh.position;
-      this.ctx.sfx.tone({ type: 'square', f0: 120, f1: 60, dur: 0.12, vol: 0.25, at: p });
-      this.ctx.sfx.play('click', { at: p, vol: 1, rate: 0.5 });
+      wheelSound(this.ctx.sfx, p);
       this.ctx.fx.flash(p, new THREE.Color(0xffe0a0), 3, 0.25, 5);
       this.ctx.ui.callout(`법진 적응 · ${adaptLabel(done.key)}`, { color: '#ffe0a0', size: 40, dur: 1 });
     }
@@ -2599,8 +2605,7 @@ export class Mahoraga extends Shiki {
       this.swingRate = Math.min(1.6, this.swingRate * 1.18);
     }
     const wp = this._wheelPos(_v);
-    sfx.tone({ type: 'square', f0: 120, f1: 60, dur: 0.12, vol: 0.25, at: wp });
-    sfx.play('click', { at: wp, vol: 1, rate: 0.5 });
+    wheelSound(sfx, wp);
     fx.flash(wp, new THREE.Color(0xffe0a0), 5, 0.3, 8);
     // 재생: 상처에서 하얀 김이 피어오르며 한순간에 아문다
     const c = this.aimPoint(_v2);

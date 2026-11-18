@@ -21,6 +21,8 @@ try {
   saved = JSON.parse(localStorage.getItem('animevr.settings') || '{}');
 } catch (_) { /* 저장소 사용 불가 */ }
 const settings = { ...DEFAULTS, ...saved };
+// 지운 캐릭터(나루토·오공)를 고른 채 저장돼 있으면 처음 캐릭터로
+if (!CHARACTERS.some((c) => c.id === settings.character)) settings.character = DEFAULTS.character;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -46,6 +48,7 @@ ctx.sfx.preloadClips({
   gojoDomain: 'assets/audio/gojo_domain_voice.mp3',
   sukunaDomain: 'assets/audio/sukuna_domain_voice.mp3',
   shrineMusic: 'assets/audio/sukuna_domain_music.mp3',
+  mahoragaWheel: 'assets/audio/mahoraga_wheel.mp3',
 });
 ctx.fx = new Fx(scene, renderer);
 ctx.input = new Input(renderer, rig, camera, renderer.domElement);

@@ -148,9 +148,9 @@ function buildWhiteRoomGLB(ctx, src) {
   // 바닥: 광을 낸 흰 콘크리트 (주변이 은은하게 비친다) + 이음매
   const cset = R.concreteSet(0.92);
   const floorMat = new THREE.MeshStandardMaterial({ color: 0xf4f4f2, map: cset.map, normalMap: cset.normalMap, normalScale: new THREE.Vector2(0.25, 0.25), roughness: 0.22, metalness: 0, envMapIntensity: 0.9 });
-  const fl = R.ground(18, 30, floorMat, 3, 0, -11, 0.012);
+  const fl = R.ground(18, 30, floorMat, 3, 0, -11, 0.012, 1); // 방 모델 자체의 바닥 위에 깐다
   group.add(fl);
-  const seam = new THREE.MeshStandardMaterial({ color: 0xc9ccd2, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 });
+  const seam = new THREE.MeshStandardMaterial({ color: 0xc9ccd2, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -12 });
   for (let x = -9; x <= 9; x += 3) group.add(new THREE.Mesh(R.stripe(x, -11, 0.015, 30, 0, 0.014), seam));
   for (let z = -26; z <= 4; z += 3) group.add(new THREE.Mesh(R.stripe(0, z, 18, 0.015, 0, 0.014), seam));
   // 파괴 가능한 흰 큐브

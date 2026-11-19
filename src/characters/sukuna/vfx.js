@@ -1,7 +1,6 @@
-// 스쿠나 VFX: 참격 초승달 · 절단선 · 실사풍 화염 화살 · 불기둥
+// 스쿠나 VFX: 참격 초승달 · 절단선 · 셀 셰이딩 불새 화살 · 불기둥
 import * as THREE from 'three';
 import { glowTexture } from '../../core/fx.js';
-import { fireNoiseTexture, FIRE_RAMP_GLSL } from '../../core/realFire.js';
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -202,191 +201,240 @@ export function fireMaterial(scroll = 2.0) {
 }
 
 // ── 개(開) 화염 화살: 실사풍. 백열하는 가는 심 + 그 둘레를 핥으며 타오르는 불꽃 빌보드 + 연기 꼬리 ──
-// 화살 축: 꼬리 z=0 → 머리 z=-1 (단위 길이)
+// ── 개(開) 화염 화살: 셀 셰이딩(애니메이션풍)으로 칠한 입체 불새 화살 ──
+// 화살 축: 꼬리 z=0 → 머리 z=-1 (단위 길이). aT = 0(머리) ~ 1(꼬리)
 
-let _coreGeo = null;
-function arrowCoreGeometry() {
-  if (_coreGeo) return _coreGeo;
-  // 뾰족한 머리 → 앞쪽이 가장 굵고 → 꼬리로 가늘게
-  const prof = [[0, 0], [0.07, 0.03], [0.14, 0.08], [0.18, 0.16], [0.17, 0.3], [0.13, 0.5], [0.08, 0.72], [0.03, 0.9], [0.005, 1]];
-  const g = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y)), 16, 0, Math.PI * 2);
-  g.rotateX(Math.PI / 2);
-  g.translate(0, 0, -1);
-  g.computeBoundingSphere();
-  _coreGeo = g;
+/** 반지름이 줄어드는 튜브 (곡선을 따라가는 불꽃 혀) */
+function taperedTube(curve, segs, radial, r0, rFn) {
+  const frames = curve.computeFrenetFrames(segs, false);
+  const pos = [];
+  const nor = [];
+  const at = [];
+  const idx = [];
+  const P = new THREE.Vector3();
+  for (let i = 0; i <= segs; i++) {
+    const u = i / segs;
+    curve.getPointAt(u, P);
+    const r = r0 * rFn(u);
+    const N = frames.normals[i];
+    const B = frames.binormals[i];
+    for (let j = 0; j <= radial; j++) {
+      const a = (j / radial) * Math.PI * 2;
+      const nx = Math.cos(a) * N.x + Math.sin(a) * B.x;
+      const ny = Math.cos(a) * N.y + Math.sin(a) * B.y;
+      const nz = Math.cos(a) * N.z + Math.sin(a) * B.z;
+      pos.push(P.x + nx * r, P.y + ny * r, P.z + nz * r);
+      nor.push(nx, ny, nz);
+      at.push(u);
+    }
+  }
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < radial; j++) {
+      const a = i * (radial + 1) + j;
+      const b = a + radial + 1;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('aT', new THREE.Float32BufferAttribute(at, 1));
+  g.setIndex(idx);
   return g;
 }
 
-const coreVert = /* glsl */ `
+let _arrowGeo = null;
+function arrowGeometry() {
+  if (_arrowGeo) return _arrowGeo;
+  const parts = [];
+  // 몸통: 뾰족한 머리 → 부푼 가슴 → 길게 빠지는 꼬리
+  const prof = [[0, 0], [0.05, 0.03], [0.12, 0.07], [0.2, 0.12], [0.24, 0.2], [0.16, 0.27], [0.19, 0.36], [0.17, 0.5], [0.12, 0.66], [0.07, 0.82], [0.02, 1]];
+  const pts = prof.map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y));
+  const body = new THREE.LatheGeometry(pts, 14);
+  body.rotateX(Math.PI / 2);
+  body.translate(0, 0, -1);
+  const bp = body.attributes.position;
+  const bt = new Float32Array(bp.count);
+  for (let i = 0; i < bp.count; i++) bt[i] = THREE.MathUtils.clamp(bp.getZ(i) + 1, 0, 1);
+  body.setAttribute('aT', new THREE.BufferAttribute(bt, 1));
+  body.deleteAttribute('uv');
+  parts.push(body);
+  // 날개처럼 뒤로 휘어지는 불꽃 혀들 (위·아래·좌·우)
+  let seed = 3;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const tongue = (z0, ang, spread, len, r0, curl) => {
+    const dx = Math.cos(ang);
+    const dy = Math.sin(ang);
+    const c = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(dx * 0.08, dy * 0.08, z0),
+      new THREE.Vector3(dx * spread * 0.45, dy * spread * 0.45, z0 + len * 0.3),
+      new THREE.Vector3(dx * spread * 0.85 - dy * curl, dy * spread * 0.85 + dx * curl, z0 + len * 0.65),
+      new THREE.Vector3(dx * spread * 1.0 - dy * curl * 2, dy * spread * 1.0 + dx * curl * 2, z0 + len),
+    ]);
+    const g = taperedTube(c, 22, 7, r0, (u) => Math.pow(Math.sin(Math.min(1, u * 2.2 + 0.08) * Math.PI * 0.5), 0.7) * Math.pow(1 - u, 0.85));
+    // 몸통 기준 aT로 변환 (머리 0 ~ 꼬리 1)
+    const a = g.attributes.aT;
+    for (let i = 0; i < a.count; i++) a.setX(i, THREE.MathUtils.clamp(z0 + 1 + a.getX(i) * len, 0, 1.3));
+    parts.push(g);
+  };
+  // 큰 날개 (좌우로 크게)
+  for (const side of [0, Math.PI]) {
+    tongue(-0.74, side + 0.25, 0.75, 0.75, 0.085, 0.05);
+    tongue(-0.66, side - 0.25, 0.62, 0.7, 0.07, -0.06);
+    tongue(-0.55, side + 0.6, 0.5, 0.62, 0.06, 0.08);
+  }
+  // 위아래로 짧게
+  tongue(-0.7, Math.PI / 2 + 0.2, 0.38, 0.6, 0.06, 0.04);
+  tongue(-0.62, -Math.PI / 2 - 0.2, 0.34, 0.55, 0.055, -0.04);
+  // 꼬리 쪽 가는 갈래
+  for (let i = 0; i < 5; i++) tongue(-0.42 + i * 0.07, rnd() * Math.PI * 2, 0.22 + rnd() * 0.25, 0.5 + rnd() * 0.3, 0.035, (rnd() - 0.5) * 0.15);
+  // 합치기
+  let total = 0;
+  for (const g of parts) total += g.attributes.position.count;
+  const pos = new Float32Array(total * 3);
+  const nor = new Float32Array(total * 3);
+  const at = new Float32Array(total);
+  const idx = [];
+  let off = 0;
+  for (const g of parts) {
+    pos.set(g.attributes.position.array, off * 3);
+    nor.set(g.attributes.normal.array, off * 3);
+    at.set(g.attributes.aT.array, off);
+    const I = g.index.array;
+    for (let i = 0; i < I.length; i++) idx.push(I[i] + off);
+    off += g.attributes.position.count;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute('aT', new THREE.BufferAttribute(at, 1));
+  geo.setIndex(idx);
+  geo.computeBoundingSphere();
+  _arrowGeo = geo;
+  return geo;
+}
+
+const NOISE_GLSL = /* glsl */ `
+float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float noise(vec3 p) {
+  vec3 i = floor(p); vec3 f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
+}`;
+const celVert = /* glsl */ `
+attribute float aT;
 uniform float uTime;
+uniform float uSeed;
+uniform float uOutline;
 varying float vT;
 varying vec3 vN;
 varying vec3 vV;
-varying vec2 vUv;
+varying vec3 vP;
+${NOISE_GLSL}
 void main() {
+  vT = aT;
+  float t = uTime * 3.0 + uSeed;
   vec3 p = position;
-  vT = clamp(-p.z, 0.0, 1.0);
-  vT = 1.0 - vT; // 0 머리 ~ 1 꼬리
-  float w = smoothstep(0.2, 1.0, vT);
-  p.x += sin(vT * 13.0 - uTime * 17.0) * 0.06 * w;
-  p.y += cos(vT * 11.0 - uTime * 14.0) * 0.06 * w;
-  vUv = uv;
+  // 꼬리로 갈수록 일렁임
+  float w = smoothstep(0.15, 1.0, aT);
+  p += normal * (noise(vec3(p * 9.0 + vec3(0.0, 0.0, t))) - 0.4) * 0.07 * w;
+  p.x += sin(aT * 11.0 - uTime * 12.0 + uSeed) * 0.05 * w;
+  p.y += cos(aT * 9.0 - uTime * 10.0 + uSeed) * 0.05 * w;
+  p += normal * uOutline;
+  vP = p;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   vN = normalize(normalMatrix * normal);
   vV = normalize(-mv.xyz);
   gl_Position = projectionMatrix * mv;
 }`;
-const coreFrag = /* glsl */ `
-uniform sampler2D uNoise;
+const celFrag = /* glsl */ `
 uniform float uTime;
+uniform float uSeed;
 uniform float uFade;
-uniform float uOcc;
+uniform float uIsOutline;
 varying float vT;
 varying vec3 vN;
 varying vec3 vV;
-varying vec2 vUv;
-${FIRE_RAMP_GLSL}
+varying vec3 vP;
+${NOISE_GLSL}
 void main() {
+  float t = uTime * 4.0 + uSeed;
+  // 꼬리 끝은 조각조각 끊기며 사라진다
+  float br = noise(vec3(vP.x * 8.0, vP.y * 8.0, vT * 10.0 - t));
+  if (vT > 0.5 && br < (vT - 0.5) * 1.6 + (1.0 - uFade)) discard;
+  if (uIsOutline > 0.5) { gl_FragColor = vec4(0.23, 0.03, 0.01, 1.0); return; }
   float facing = abs(dot(normalize(vN), normalize(vV)));
-  float n = texture2D(uNoise, vec2(vUv.x * 2.0, vT * 1.4 - uTime * 2.6)).a;
-  float n2 = texture2D(uNoise, vec2(vUv.x * 4.0 + 0.3, vT * 3.0 - uTime * 4.2)).g;
-  float body = pow(facing, 1.3);
-  float tailCut = 1.0 - smoothstep(0.4, 1.0, vT + (n - 0.5) * 0.55);
-  float T = (0.6 + 0.95 * body) * (1.0 - vT * 0.5) * (0.82 + 0.36 * n2);
-  float a = (0.2 + 0.8 * body) * tailCut * uFade;
-  gl_FragColor = vec4(fireRamp(T) * a, a * uOcc * 0.5);
+  // 셀 단계: 짙은 주황 테두리 → 주황 → 밝은 주황 → 노랑 결 → 흰 심
+  vec3 deep = vec3(0.62, 0.12, 0.03);
+  vec3 orange = vec3(1.0, 0.36, 0.07);
+  vec3 light = vec3(1.0, 0.6, 0.16);
+  vec3 yellow = vec3(1.0, 0.86, 0.42);
+  vec3 white = vec3(1.0, 0.97, 0.85);
+  float flow = noise(vec3(vP.x * 14.0, vP.y * 14.0, vT * 16.0 - t * 2.0));
+  float f = facing + (flow - 0.5) * 0.35;
+  vec3 c = deep;
+  c = mix(c, orange, step(0.1, f));
+  c = mix(c, light, step(0.45, f));
+  // 머리에서 꼬리로 흐르는 노란 빛줄기
+  float streak = noise(vec3(vP.x * 26.0, vP.y * 26.0, vT * 9.0 - t * 1.6));
+  c = mix(c, yellow, step(0.62, streak) * step(0.25, f));
+  // 머리 쪽 흰 심
+  c = mix(c, white, step(0.68, f) * step(vT, 0.4 + flow * 0.15));
+  gl_FragColor = vec4(c * 1.08, 1.0);
 }`;
 
-const _h = new THREE.Vector3();
-const _t = new THREE.Vector3();
-const _dir = new THREE.Vector3();
-const _mv = new THREE.Vector3();
-const _p = new THREE.Vector3();
-const _r = new THREE.Vector3();
-const _vel = new THREE.Vector3();
-const rnd = (a, b) => a + Math.random() * (b - a);
-const count = (x) => Math.floor(x) + (Math.random() < x % 1 ? 1 : 0);
-
 export class FireArrow {
-  /** @param ctx 게임 컨텍스트 (ctx.fx.fire 로 불꽃을 뿌린다). 예전 호출(scene)도 지원 */
+  /** @param ctx 게임 컨텍스트. 예전 호출(scene)도 지원 */
   constructor(ctxOrScene) {
     const isCtx = !!ctxOrScene?.scene;
     this.scene = isCtx ? ctxOrScene.scene : ctxOrScene;
     this.ctx = isCtx ? ctxOrScene : null;
-    this.fire = this.ctx?.fx?.fire ?? null;
     this.group = new THREE.Group();
+    const geo = arrowGeometry();
+    const uni = () => ({ uTime: this.time, uSeed: this.seed, uFade: this.fade, uOutline: { value: 0 }, uIsOutline: { value: 0 } });
     this.time = { value: Math.random() * 10 };
+    this.seed = { value: Math.random() * 50 };
     this.fade = { value: 1 };
-    this.mat = new THREE.ShaderMaterial({
-      vertexShader: coreVert,
-      fragmentShader: coreFrag,
-      uniforms: { uTime: this.time, uFade: this.fade, uNoise: { value: fireNoiseTexture() }, uOcc: { value: 0.15 } },
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      blending: THREE.CustomBlending,
-      blendEquation: THREE.AddEquation,
-      blendSrc: THREE.OneFactor,
-      blendDst: THREE.OneMinusSrcAlphaFactor,
-      fog: false,
-    });
-    this.body = new THREE.Mesh(arrowCoreGeometry(), this.mat);
-    this.body.frustumCulled = false;
-    this.body.renderOrder = 12;
+    const u1 = uni();
+    const u2 = uni();
+    u2.uOutline.value = 0.013;
+    u2.uIsOutline.value = 1;
+    this.mat = new THREE.ShaderMaterial({ vertexShader: celVert, fragmentShader: celFrag, uniforms: u1, toneMapped: false, side: THREE.FrontSide });
+    this.outMat = new THREE.ShaderMaterial({ vertexShader: celVert, fragmentShader: celFrag, uniforms: u2, toneMapped: false, side: THREE.BackSide });
+    this.body = new THREE.Group();
+    this.main = new THREE.Mesh(geo, this.mat);
+    this.outline = new THREE.Mesh(geo, this.outMat);
+    this.main.frustumCulled = this.outline.frustumCulled = false;
+    this.body.add(this.outline, this.main);
     const tex = glowTexture();
-    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xff5a14, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: 0.35 }));
-    this.tip = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xfff1d6, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
+    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xff5a10, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: 0.5 }));
+    this.tip = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xfff0c0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
     this.group.add(this.glow, this.body, this.tip);
     this.scene.add(this.group);
-    this._prev = new THREE.Vector3();
-    this._hasPrev = false;
     this.setLength(0.5);
   }
 
   /** 길이만 바뀌고 굵기는 고정 (당길수록 길어진다) */
   setLength(len, thick = 1) {
     this.len = len;
-    this.width = 0.4 * thick;
-    this.body.scale.set(this.width, this.width, len);
+    const w = 0.26 * thick;
+    this.body.scale.set(w, w, len);
     this.glow.position.set(0, 0, -len * 0.6);
-    this.glow.scale.set(0.5 + len * 0.22, 0.5 + len * 0.22, 1);
-    this.tip.position.set(0, 0, -len * 0.97);
-    this.tip.scale.setScalar(0.16);
+    this.glow.scale.set(0.6 + len * 0.25, 0.6 + len * 0.25, 1);
+    this.tip.position.set(0, 0, -len * 0.98);
+    this.tip.scale.setScalar(0.12);
   }
 
   update(dt) {
     this.time.value += dt;
-    this.glow.material.opacity = 0.28 + Math.random() * 0.14;
-    const fire = this.fire;
-    if (!fire || !(dt > 0)) return;
-    this.mat.uniforms.uOcc.value = this.ctx.fx.brightBg ? 0.5 : 0.12;
-    this.group.updateMatrixWorld(true);
-    const head = this.group.localToWorld(_h.set(0, 0, -this.len));
-    const tail = this.group.localToWorld(_t.set(0, 0, 0));
-    _dir.subVectors(head, tail).normalize();
-    let speed = 0;
-    if (this._hasPrev) {
-      _mv.subVectors(head, this._prev);
-      speed = _mv.length() / dt;
-    }
-    const moving = speed > 4;
-    const coreR = this.width * 0.17;
-    // 화살 몸을 핥으며 위로 타오르는 불꽃 (날아갈 땐 지나온 자리에 남아 꼬리가 된다)
-    const n = count(this.len * (moving ? 160 : 200) * dt);
-    for (let i = 0; i < n; i++) {
-      const u = Math.pow(Math.random(), 0.85); // 0 머리 ~ 1 꼬리
-      _p.lerpVectors(head, tail, u).addScaledVector(_r.randomDirection(), coreR * 1.3);
-      if (moving) _p.addScaledVector(_mv, -Math.random());
-      const s = this.width * (0.36 - u * 0.14) * rnd(0.8, 1.2);
-      _vel.randomDirection().multiplyScalar(0.35);
-      _vel.y += rnd(0.3, 0.9);
-      if (moving) _vel.addScaledVector(_dir, -speed * 0.04);
-      // 위로 늘어난 불꽃 혀 (속도 방향으로 길어진다)
-      fire.flame(_p, _vel, { size0: s * 0.6, size1: s * rnd(1.3, 1.8), life: moving ? rnd(0.18, 0.34) : rnd(0.22, 0.4), heat: (moving ? 1.3 : 1.15) - u * 0.35, cool: 0.95, drag: 2, rise: 4, stretch: 0.45 });
-    }
-    // 날아가는 중: 머리가 지나온 길을 촘촘히 메워 끊기지 않는 불꼬리
-    if (moving) {
-      const np = count(speed * dt * 28);
-      for (let i = 0; i < np; i++) {
-        _p.copy(head).addScaledVector(_mv, -Math.random()).addScaledVector(_dir, -Math.random() * this.len * 0.3).addScaledVector(_r.randomDirection(), coreR * 1.5);
-        const s = this.width * rnd(0.45, 0.7);
-        _vel.randomDirection().multiplyScalar(0.6);
-        _vel.y += 0.5;
-        fire.flame(_p, _vel, { size0: s * 0.7, size1: s * rnd(1.6, 2.4), life: rnd(0.25, 0.45), heat: rnd(1.15, 1.35), cool: 1, drag: 2, rise: 3 });
-      }
-    }
-    // 머리의 백열
-    if (Math.random() < 0.7) {
-      _p.copy(head).addScaledVector(_dir, -this.width * 0.15);
-      fire.flame(_p, _vel.set(0, 0.3, 0), { size0: this.width * 0.3, size1: this.width * 0.45, life: 0.12, heat: 1.45, cool: 0.4, drag: 3, rise: 1 });
-    }
-    // 꼬리에서 피어오르는 연기
-    const ns = count((moving ? 45 : 9) * dt);
-    for (let i = 0; i < ns; i++) {
-      const u = rnd(0.55, 1);
-      _p.lerpVectors(head, tail, u).addScaledVector(_r.randomDirection(), coreR * 2);
-      if (moving) _p.addScaledVector(_mv, -Math.random());
-      fire.smoke(_p, _vel.set((Math.random() - 0.5) * 0.4, rnd(0.5, 1.1), (Math.random() - 0.5) * 0.4), {
-        size0: this.width * 0.3, size1: moving ? rnd(0.8, 1.3) : rnd(0.2, 0.35), life: moving ? rnd(1.6, 2.6) : rnd(0.9, 1.4),
-        shade: rnd(0.1, 0.25), lit: moving ? 0.5 : 0.15, opacity: moving ? 0.45 : 0.16, rise: 0.4, drag: 1.2,
-      });
-    }
-    // 튀는 불티
-    const nk = count((moving ? 40 : 22) * dt);
-    for (let i = 0; i < nk; i++) {
-      _p.lerpVectors(head, tail, Math.random() * 0.7);
-      if (moving) _p.addScaledVector(_mv, -Math.random());
-      _vel.randomDirection().multiplyScalar(rnd(1, 3));
-      _vel.y += 1;
-      fire.spark(_p, _vel, { life: rnd(0.4, 0.9), size: rnd(0.014, 0.024), grav: 3, drag: 1 });
-    }
-    this._prev.copy(head);
-    this._hasPrev = true;
+    this.glow.material.opacity = 0.35 + Math.random() * 0.2;
+    this.body.rotation.z += dt * 1.5; // 천천히 비틀며 타오른다
   }
 
   dispose() {
     this.scene.remove(this.group);
     this.mat.dispose();
+    this.outMat.dispose();
     this.glow.material.dispose();
     this.tip.material.dispose();
   }

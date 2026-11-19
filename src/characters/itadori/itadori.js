@@ -63,12 +63,12 @@ export class Itadori {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '주먹 · 경정권(逕庭拳)', color: '#7fb0ff', text: '주먹으로 더미를 치면 한 박자 늦게 주력이 한 번 더 터진다 (2타)' },
-        { head: '흑섬(黒閃)', color: '#ff3040', text: '손을 편 채 휘두르다 닿기 직전에 주먹을 쥐면 흑섬 확정\n흑섬 뒤 8초는 존: 흑섬 확률↑ · 연속 기록' },
-        { head: '어주자 「解」', color: '#ff6070', text: '검지·중지를 편 가위 손으로 더미를 건드리기 → 절취선이 그어지고 싹둑\n영역 안에서는 가위 손으로 0.25초 가리키기만 해도 된다' },
-        { head: '적혈조술 「穿血」', color: '#d0001a', text: '두 손바닥을 맞대고 손끝을 앞으로 (백렴: 피가 압축된다)\n0.5초 이상 모은 뒤 두 손을 떼면 손끝 방향으로 발사' },
-        { head: '영역전개', color: '#ffb070', text: '한 손바닥을 위로 펴 가슴 앞에, 다른 손은 주먹을 세워 1.5초 (지장보살)\n안의 모든 것에 영혼을 가르는 해가 필중 · 메뉴에서도 발동' },
-        { head: '잡기', color: '#ffffff', text: '더미에 손을 대고 천천히 주먹 → 잡기, 펴면 던지기' },
+        { head: '주먹 · 경정권(逕庭拳)', demo: 'itadori.punch', color: '#7fb0ff', text: '주먹으로 더미를 치면 한 박자 늦게 주력이 한 번 더 터진다 (2타)' },
+        { head: '흑섬(黒閃)', demo: 'itadori.blackflash', color: '#ff3040', text: '손을 편 채 휘두르다 닿기 직전에 주먹을 쥐면 흑섬 확정\n흑섬 뒤 8초는 존: 흑섬 확률↑ · 연속 기록' },
+        { head: '어주자 「解」', demo: 'itadori.cut', color: '#ff6070', text: '검지·중지를 편 가위 손으로 더미를 건드리기 → 절취선이 그어지고 싹둑\n영역 안에서는 가위 손으로 0.25초 가리키기만 해도 된다' },
+        { head: '적혈조술 「穿血」', demo: 'itadori.blood', color: '#d0001a', text: '두 손바닥을 맞대고 손끝을 앞으로 (백렴: 피가 압축된다)\n0.5초 이상 모은 뒤 두 손을 떼면 손끝 방향으로 발사' },
+        { head: '영역전개', demo: 'itadori.domain', color: '#ffb070', text: '두 손을 깍지 끼고 두 검지만 맞대어 위로 세워 1.5초\n(한 손 검지·중지를 세우고 다른 손 주먹을 붙여도 OK)\n안의 모든 것에 영혼을 가르는 해가 필중 · 메뉴에서도 발동' },
+        { head: '잡기', demo: 'common.grab', color: '#ffffff', text: '더미에 손을 대고 천천히 주먹 → 잡기, 펴면 던지기' },
       ];
     }
     if (mode === 'desktop') {
@@ -438,9 +438,17 @@ export class Itadori {
     else if (L.active && R.active) {
       if (L.source === 'hand' && R.source === 'hand') {
         // 지장보살: 한 손은 손바닥을 위로 펴 구슬을 받치고, 다른 손은 주먹을 세워 석장을 쥔다
+        // 그림: 한 손 검지·중지를 곧게 세워 얼굴 앞에, 다른 손 주먹을 그 손에 붙인다
+        const fingers = (A, B) => (A.gesture === 'two' || A.gesture === 'point' || A.gesture === 'crossed') && A.dir.y > 0.55 && B.gesture === 'fist' && A.palm.distanceTo(B.palm) < 0.15 && A.palm.distanceTo(inp.head) < 0.5;
         const pose = (P, F) => P.gesture === 'open' && P.palmNormal.y > 0.6 && F.gesture === 'fist' && F.fingersDir.y > 0.45 && P.palm.distanceTo(F.palm) < 0.3;
         const mid = _v.addVectors(L.palm, R.palm).multiplyScalar(0.5);
-        sign = this.ctx.settings.domainGesture && (pose(L, R) || pose(R, L)) && mid.distanceTo(inp.head) < 0.65 && mid.y < inp.head.y - 0.05 && L.speed < 0.6 && R.speed < 0.6;
+        const still = L.speed < 0.6 && R.speed < 0.6;
+        const a = fingers(L, R) || fingers(R, L);
+        const b = (pose(L, R) || pose(R, L)) && mid.distanceTo(inp.head) < 0.65 && mid.y < inp.head.y - 0.05;
+        // 수인표: 두 검지를 맞대어 세우고 나머지 손가락은 깍지 — 손바닥이 마주 본다
+        const up = (h) => (h.gesture === 'point' || h.gesture === 'two' || h.gesture === 'crossed') && h.dir.y > 0.5;
+        const c = up(L) && up(R) && L.palm.distanceTo(R.palm) < 0.1 && L.palmNormal.dot(R.palmNormal) < -0.3 && mid.distanceTo(inp.head) < 0.6;
+        sign = this.ctx.settings.domainGesture && still && (a || b || c);
       } else if (L.source === 'controller' && R.source === 'controller') sign = L.btn.stick && R.btn.stick;
     }
     if (sign && this.town.state === 'idle' && d.cd <= 0) {

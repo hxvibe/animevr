@@ -18,6 +18,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const RED = new THREE.Color(0xff2a30);
 const FIRE = new THREE.Color(0xff6a10);
 const FIRE_HI = new THREE.Color(0xffd070);
+const SMOKE = new THREE.Color(0x3a3030);
 
 export class Sukuna {
   constructor(ctx) {
@@ -67,12 +68,12 @@ export class Sukuna {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '解(해) — 참격', color: '#ff6a6a', text: '손을 펴고 빠르게 휘두르기. 휘두른 방향으로 참격이 날아감 (연속 가능)' },
-        { head: '捌(팔) — 난도질', color: '#ff9a7a', text: '편 손으로 더미를 직접 건드리기. 약한 상대일수록 잘게 썰림' },
-        { head: '竈 開(フーガ) — 화염', color: '#ffb050', text: '한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기' },
-        { head: '세계를 가르는 해', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 1.3초 유지(영창) → 그 손을 크게 휘두르기' },
-        { head: '영역전개 「伏魔御廚子」', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 손가락을 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
-        { head: '잡기 · 흑섬', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
+        { head: '解(해) — 참격', demo: 'sukuna.dismantle', color: '#ff6a6a', text: '손을 펴고 빠르게 휘두르기. 휘두른 방향으로 참격이 날아감 (연속 가능)' },
+        { head: '捌(팔) — 난도질', demo: 'sukuna.cleave', color: '#ff9a7a', text: '편 손으로 더미를 직접 건드리기. 약한 상대일수록 잘게 썰림' },
+        { head: '竈 開(フーガ) — 화염', demo: 'sukuna.fuga', color: '#ffb050', text: '한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기' },
+        { head: '세계를 가르는 해', demo: 'sukuna.world', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 1.3초 유지(영창) → 그 손을 크게 휘두르기' },
+        { head: '영역전개 「伏魔御廚子」', demo: 'sukuna.domain', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 손가락을 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
+        { head: '잡기 · 흑섬', demo: 'common.grab', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
       ];
     }
     if (mode === 'desktop') {
@@ -471,6 +472,7 @@ export class Sukuna {
     b.loop?.set(0.6 + b.draw * 1.2, 0.9 + b.draw * 0.6);
     b.loop?.pos(tip);
     if (b.light) b.light.position.copy(tip);
+    if (Math.random() < 0.9) fx.spawn(tip, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.3), Math.random() < 0.5 ? FIRE : FIRE_HI, 0.04 + b.draw * 0.06, 0.4, 1, -1, 0.5);
     if (Math.random() < 0.4) {
       B.pulse?.(0.1 + b.draw * 0.5, 15);
       D.pulse?.(0.1 + b.draw * 0.5, 15);
@@ -523,7 +525,13 @@ export class Sukuna {
         a.light.position.copy(a.pos);
         a.light.intensity = 5 + Math.random() * 2.5; // 불빛이 일렁인다
       }
-      // 불꽃·연기·불티 꼬리는 FireArrow.update 가 지나온 자리에 뿌린다
+      // 불새 꼬리: 셀풍 불티와 검은 연기
+      const back = _v3.copy(a.vel).normalize();
+      for (let k = 0; k < 5; k++) {
+        const p = _v2.copy(a.pos).addScaledVector(back, -Math.random() * 2.2).add(_v.randomDirection().multiplyScalar(0.25));
+        fx.spawn(p, _v.randomDirection().multiplyScalar(1.2).addScaledVector(a.vel, -0.04), k % 2 ? FIRE : FIRE_HI, 0.025 + Math.random() * 0.03, 0.5 + Math.random() * 0.4, 1.5, -0.6, 0);
+      }
+      if (Math.random() < 0.6 && a.pos.distanceTo(this.ctx.input.head) > 4) fx.spawnDark(_v2.copy(a.pos).addScaledVector(back, -1.6), _v.set((Math.random() - 0.5) * 0.4, 0.5, (Math.random() - 0.5) * 0.4), SMOKE, 0.18, 1.2, 1, -0.4, 2.5);
       if (hit) {
         this._kamino(a.pos.clone(), a.draw, true);
         a.arrow.dispose();

@@ -119,7 +119,7 @@ function sidewalk(group, B, mats, x0, z0, x1, z1, { tactile = true, axis = 'z' }
   B.add(mats.curb, new THREE.BoxGeometry(w, 0.15, d).translate((x0 + x1) / 2, 0.075, (z0 + z1) / 2));
   if (tactile) {
     const tw = 0.3;
-    const g = axis === 'z' ? R.ground(tw, d, mats.tactile, 0.3, x0 + w * 0.35, (z0 + z1) / 2, 0.152) : R.ground(w, tw, mats.tactile, 0.3, (x0 + x1) / 2, z0 + d * 0.35, 0.152);
+    const g = axis === 'z' ? R.ground(tw, d, mats.tactile, 0.3, x0 + w * 0.35, (z0 + z1) / 2, 0.152, 1) : R.ground(w, tw, mats.tactile, 0.3, (x0 + x1) / 2, z0 + d * 0.35, 0.152, 1);
     group.add(g);
   }
 }
@@ -309,7 +309,7 @@ export function buildShibuya(ctx) {
   B.add(RM.roof, new THREE.CircleGeometry(9, 40).rotateX(-Math.PI / 2).translate(off + 10, 46, off + 10));
   // 남서: 역 광장 (나무 · 벤치) + 고가 철도
   for (let i = 0; i < 6; i++) tree(B, -off - 6 - (i % 3) * 5, off + 6 + Math.floor(i / 3) * 6, 1.1);
-  const plaza = R.ground(30, 26, S.paverRed, 1, -off - 15, off + 13, 0.16);
+  const plaza = R.ground(30, 26, S.paverRed, 1, -off - 15, off + 13, 0.155, 2);
   group.add(plaza);
   // 고가 철도 (서쪽)
   const viaduct = R.pbrMat(R.concreteSet(0.6));
@@ -506,11 +506,10 @@ export function buildCity(ctx) {
   group.add(R.ground(260, L + 60, S.asphalt, 4, 0, 0, 0));
   for (const s of [-1, 1]) sidewalk(group, B, S, s > 0 ? RW / 2 : -RW / 2 - SW, -L / 2, s > 0 ? RW / 2 + SW : -RW / 2, L / 2, { axis: 'z' });
   // 교차로 (z = -30) + 횡단보도
-  group.add(R.ground(L, RW, S.asphalt, 4, 0, -30, 0.004));
   crosswalk(B, S.paint, 0, -30 + RW / 2 + 2.5, RW, 4, 0);
   crosswalk(B, S.paint, 0, -30 - RW / 2 - 2.5, RW, 4, 0);
   // 중앙선(노랑) · 차선
-  const yellow = new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 });
+  const yellow = new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   for (let z = -L / 2; z < L / 2; z += 1) if (Math.abs(z + 30) > RW / 2 + 5) B.add(yellow, R.stripe(0, z, 0.15, 1.02));
   for (let z = -L / 2; z < L / 2; z += 8) {
     if (Math.abs(z + 30) < RW / 2 + 5) continue;

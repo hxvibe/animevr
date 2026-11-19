@@ -8,7 +8,11 @@ import { UI, JFONT } from './core/ui.js';
 import { Melee } from './core/melee.js';
 import { Grab } from './core/grab.js';
 import { preload } from './core/assets.js';
+import { preloadChars } from './core/rigged.js';
+import { DUMMY_TYPES } from './core/dummy.js';
 import { CHARACTERS } from './characters/index.js';
+
+const ENEMY_MODELS = [...new Set(Object.values(DUMMY_TYPES).map((d) => d.model).filter(Boolean))];
 
 // ── 설정 (브라우저에 저장) ──
 const DEFAULTS = {
@@ -34,7 +38,7 @@ renderer.xr.setReferenceSpaceType('local-floor');
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.03, 900);
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 900); // near 를 너무 작게 두면 먼 바닥의 깊이 정밀도가 떨어진다
 camera.position.set(0, 1.6, 0);
 const rig = new THREE.Group();
 rig.add(camera);
@@ -116,10 +120,13 @@ document.getElementById('status').textContent = '모델 불러오는 중…';
 const loading = preload(['dummy', 'white_room', 'shrine']).then(() => {
   game.setBackground(settings.background);
   btnDesk0.disabled = false;
+  // 적 주령 모델은 뒤에서 받는다 (받기 전에 부르면 더미 모양으로 나온다)
+  preloadChars(ENEMY_MODELS);
+  preload(['wpn_yuta_sword', 'wpn_yuta_sheath', 'curse_rika']); // 유타 칼 · 리카
 });
 
 // 폰트(한글·일본어)를 미리 받아둔다
-const JP_CHARS = '術式順転反蒼赫虚茈領域展開無量空処下限六眼黒閃解捌竈開伏魔御廚子世界を断つ龍鱗反発番いの流星あおかむらさきりょうくうしょげんりくがんこくせんカイハチカミノフーガふくまみづしゅんはつつがいせ「」■螺旋丸手裏剣風遁影分身の術多重九喇嘛モードらせんがんしゅりけんふうとんかげぶんしんじゅつたじゅうクラマかめはめ波元気玉瞬間移動超サイヤ人げんきだまどうスーパー';
+const JP_CHARS = '術式順転反蒼赫虚茈領域展開無量空処下限六眼黒閃解捌竈開伏魔御廚子世界を断つ龍鱗反発番いの流星あおかむらさきりょうくうしょげんりくがんこくせんカイハチカミノフーガふくまみづしゅんはつつがいせ「」■螺旋丸手裏剣風遁影分身の術多重九喇嘛モードらせんがんしゅりけんふうとんかげぶんしんじゅつたじゅうクラマかめはめ波元気玉瞬間移動超サイヤ人げんきだまどうスーパー呪霊操術虹龍化身玉藻前極ノ番うずまき私キレイ無為転変火山呪力撥体自閉円頓裹じへいえんどんか遍殺即霊体蓋棺鉄囲山がいかんてっちせん隕いん煉獄れんごく火山頭かざんとう火礫蟲完全顕現里香りか純愛砲じゅんあいほう動くなうごく真贋相愛しんがんそうあい嵌合暗翳庭';
 Promise.all([
   document.fonts?.load?.(`900 100px ${JFONT.split(',')[0]}`, JP_CHARS),
   document.fonts?.load?.(`700 40px ${JFONT.split(',')[0]}`, JP_CHARS),

@@ -13,6 +13,7 @@ import { preloadShikigami } from './models.js';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const SHADOW_AURA = { glow: 0x2a3c80, hot: 0x9fb0e0, inner: 0x010104, line: 0x000000 };
 
 export const SIGNS = {
@@ -133,13 +134,13 @@ export class Megumi {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '玉犬 옥견 · 鵺 누에', color: '#a8b8ff', text: '옥견: 두 손을 같은 방향으로 포개 손끝을 앞으로 (개 머리) — 옥견이 파괴된 뒤엔 玉犬・渾\n누에: 두 엄지를 걸고 손바닥을 내 쪽으로, 손가락을 날개처럼 펼치기' },
-        { head: '蝦蟇 가마 · 脱兎 탈토', color: '#a8b8ff', text: '가마: 두 손바닥을 위아래로 마주 보게 벌려 손끝을 앞으로 (두꺼비 입) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다' },
-        { head: '大蛇 오로치 · 満象 만상', color: '#a8b8ff', text: '오로치: 한 손을 펴서 손끝으로 앞쪽 바닥을 가리키기 → 바라본 대상 밑에서 솟는다\n만상: 두 주먹을 모아 머리 위로 → 아래로 내려치기 → 바라본 대상 위로 떨어진다' },
-        { head: '貫牛 관우', color: '#a8b8ff', text: '두 검지를 관자놀이 옆에서 앞으로 (소뿔) → 바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
-        { head: '魔虚羅 마허라', color: '#ffd28a', text: '주먹을 다른 손 손바닥에 대고 1초 (布瑠部由良由良) · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
-        { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: '두 손을 모아 깍지 끼고 손끝을 아래로, 허리 아래까지 내려 1.2초\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
-        { head: '공통', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
+        { head: '玉犬 옥견 · 鵺 누에', demo: ['megumi.dogs', 'megumi.nue'], color: '#a8b8ff', text: '옥견: 한 손 손날을 아래로 세워 네 손가락을 앞으로 곧게, 엄지만 위로 (개 머리와 귀) · 두 손을 포개 손끝을 앞으로도 OK\n누에: 두 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 펴기 (엄지를 걸어도 OK)' },
+        { head: '蝦蟇 가마 · 脱兎 탈토', demo: ['megumi.toad', 'megumi.rabbits'], color: '#a8b8ff', text: '가마: 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다' },
+        { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리) · 편 손끝으로 앞 바닥을 가리켜도 OK\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코) · 두 주먹을 머리 위로 → 내려치기도 OK' },
+        { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기 · 두 검지를 관자놀이 옆에서 앞으로도 OK\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
+        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 앞에서 맞대고 1초 (주먹을 다른 손바닥에 대도 OK) — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
+        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '두 손을 모아 깍지 끼고 손끝을 아래로, 허리 아래까지 내려 1.2초\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
+        { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
       ];
     }
     if (mode === 'desktop') {
@@ -227,50 +228,81 @@ export class Megumi {
     const fwd = _v3.copy(inp.headDir).setY(0);
     if (fwd.lengthSq() < 1e-3) fwd.set(0, 0, -1);
     fwd.normalize();
+    const right = _v4.set(-fwd.z, 0, fwd.x);
     const nf = (h) => h.gesture !== 'fist';
+    const fist = (h) => h.gesture === 'fist';
     const facing = (h) => h.palmNormal.dot(_v.subVectors(head, h.palm).normalize());
+    const front = (h) => _v.subVectors(h.palm, head).dot(fwd);
+    const J = (h, n) => h.joints?.[n];
+    // 엄지가 위로 서 있는가 (리그 공간도 y 는 그대로)
+    const thumbUp = (h) => {
+      const t = J(h, 'thumb-tip');
+      const m = J(h, 'thumb-metacarpal');
+      if (!t || !m) return false;
+      const d = t.distanceTo(m);
+      return d > 1e-3 && (t.y - m.y) / d > 0.55;
+    };
+    this._signSide = null;
     if (L.active && R.active && L.source === 'hand' && R.source === 'hand' && !L.uiBlock && !R.uiBlock) {
       const d = L.palm.distanceTo(R.palm);
-      // 관우: 두 검지를 관자놀이 옆에서 앞으로 (소뿔)
-      const horn = (h) => h.gesture === 'point' && Math.abs(h.palm.y - head.y) < 0.28 && h.dir.dot(fwd) > 0.4 && Math.hypot(h.palm.x - head.x, h.palm.z - head.z) < 0.4;
-      if (horn(L) && horn(R) && d > 0.12) return 'ox';
       const mid = _v2.addVectors(L.palm, R.palm).multiplyScalar(0.5);
       // 영역전개: 깍지 낀 두 손을 허리 아래로, 손끝은 아래
       if (settings.domainGesture && d < 0.1 && mid.y < head.y - 0.6 && L.fingersDir.y < -0.35 && R.fingersDir.y < -0.35) return 'domain';
-      // 마허라: 주먹을 다른 손 손바닥에
-      const fistInPalm = (F, P) => F.gesture === 'fist' && nf(P) && F.palm.distanceTo(P.palm) < 0.1 && P.palmNormal.dot(_v.subVectors(F.palm, P.palm).normalize()) > 0.2;
+      // 영역전개 (수인표): 가슴 앞에서 두 손을 맞잡아 손가락을 깍지 낀다 — 손바닥이 서로 마주 본다
+      const clasp = d < 0.075 && L.palmNormal.dot(R.palmNormal) < -0.5 && mid.y < head.y - 0.12 && mid.y > head.y - 0.65 && front(L) > 0.1;
+      if (settings.domainGesture && clasp) return 'domain';
+      // 마허라: 두 주먹을 맞댄다 (그림) · 주먹을 다른 손바닥에 대기
+      if (fist(L) && fist(R) && d < 0.13 && L.palmNormal.dot(R.palmNormal) > -0.3 && mid.y < head.y - 0.12 && mid.distanceTo(head) < 0.75) return 'mahoraga';
+      const fistInPalm = (F, P) => fist(F) && nf(P) && F.palm.distanceTo(P.palm) < 0.1 && P.palmNormal.dot(_v.subVectors(F.palm, P.palm).normalize()) > 0.2;
       if ((fistInPalm(L, R) || fistInPalm(R, L)) && mid.distanceTo(head) < 0.75) return 'mahoraga';
-      // 만상 준비: 모은 두 주먹을 머리 위로
-      if (L.gesture === 'fist' && R.gesture === 'fist' && d < 0.15 && mid.y > head.y - 0.05) return 'elephant';
-      // 누에: 두 엄지를 걸고 손바닥을 내 쪽으로 (날갯짓하는 새)
-      if (nf(L) && nf(R) && this._thumbs(L, R) < 0.045 && d > 0.05 && d < 0.24 && facing(L) > 0.3 && facing(R) > 0.3) return 'nue';
-      // 가마: 위아래로 마주 본 손바닥 (두꺼비 입)
+      // 만상 (던지기형): 모은 두 주먹을 머리 위로 → 내려치기
+      if (fist(L) && fist(R) && d < 0.15 && mid.y > head.y - 0.05) return 'elephant';
+      // 관우 (그림): 한 손 검지를 뿔처럼 세우고, 다른 손을 그 아래에 받친다
+      const horn = (H, B) => (H.gesture === 'point' || H.gesture === 'two') && H.dir.y > 0.45 && nf(B) && H.palm.y - B.palm.y > 0.02 && Math.hypot(H.palm.x - B.palm.x, H.palm.z - B.palm.z) < 0.15 && front(H) > 0.12;
+      if (horn(L, R) || horn(R, L)) return 'ox';
+      // 관우 (쉬운 판): 두 검지를 관자놀이 옆에서 앞으로
+      const temple = (h) => h.gesture === 'point' && Math.abs(h.palm.y - head.y) < 0.28 && h.dir.dot(fwd) > 0.4 && Math.hypot(h.palm.x - head.x, h.palm.z - head.z) < 0.4;
+      if (temple(L) && temple(R) && d > 0.12) return 'ox';
+      // 가마 (그림): 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴)
+      const li = J(L, 'index-finger-tip');
+      const ri = J(R, 'index-finger-tip');
+      const lt = J(L, 'thumb-tip');
+      const rt = J(R, 'thumb-tip');
+      if (li && ri && lt && rt && li.distanceTo(ri) < 0.055 && lt.distanceTo(rt) < 0.065 && (li.y + ri.y) / 2 - (lt.y + rt.y) / 2 > 0.03 && front(L) > 0.12) return 'toad';
+      // 가마 (예전): 위아래로 마주 본 손바닥 (두꺼비 입)
       if (nf(L) && nf(R) && d > 0.035 && d < 0.17 && Math.abs(L.palmNormal.y) > 0.55 && Math.abs(R.palmNormal.y) > 0.55 && L.palmNormal.dot(R.palmNormal) < -0.5 && L.fingersDir.dot(fwd) > 0.35 && R.fingersDir.dot(fwd) > 0.35) return 'toad';
-      // 옥견: 같은 방향으로 포갠 두 손, 손끝은 앞 (개 머리)
+      // 누에 (그림): 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 편다
+      //   엄지를 거는 원래 수인은 손가락이 가려 인식이 흔들리므로, 손목이 교차했는지로 본다
+      if (nf(L) && nf(R) && d < 0.22 && facing(L) > 0.25 && facing(R) > 0.25) {
+        const crossed = _v.subVectors(L.palm, R.palm).dot(right) > 0.01;
+        if (crossed || this._thumbs(L, R) < 0.045) return 'nue';
+      }
+      // 옥견 (예전): 같은 방향으로 포갠 두 손, 손끝은 앞 (개 머리)
       if (nf(L) && nf(R) && d < 0.09 && L.palmNormal.dot(R.palmNormal) > 0.5 && L.fingersDir.dot(fwd) > 0.5 && R.fingersDir.dot(fwd) > 0.5) return 'dogs';
     }
     for (const h of [L, R]) {
       if (!h.active || h.source !== 'hand' || h.uiBlock) continue;
       const o = h === L ? R : L;
       if (o.active && o.source === 'hand' && o.palm.distanceTo(h.palm) < 0.25) continue;
-      const front = _v.subVectors(h.palm, head).dot(fwd);
+      const fr = front(h);
+      this._signSide = h.side;
       // 탈토: 검지·중지를 토끼 귀처럼 세운다
-      if (h.gesture === 'two' && h.dir.y > 0.7 && Math.abs(h.palm.y - head.y) < 0.35 && front > 0.12) return 'rabbits';
-      // 오로치: 편 손끝으로 앞쪽 바닥(그림자)을 가리킨다
-      if (h.gesture === 'open' && h.fingersDir.y < -0.7 && front > 0.25 && h.palm.y < head.y - 0.35) return 'orochi';
+      if (h.gesture === 'two' && h.dir.y > 0.7 && Math.abs(h.palm.y - head.y) < 0.35 && fr > 0.12) return 'rabbits';
+      // 옥견 (변형): 손날을 아래로 세우고 네 손가락을 앞으로 곧게 (개 주둥이), 엄지만 위로 (귀)
+      if (h.gesture === 'open' && Math.abs(h.palmNormal.y) < 0.5 && h.fingersDir.dot(fwd) > 0.6 && thumbUp(h) && fr > 0.15) return 'dogs';
+      // 만상 (그림): 손등을 위로 하고 검지·중지를 아래로 늘어뜨린다 (코끼리 코)
+      if ((h.gesture === 'two' || h.gesture === 'point') && h.dir.y < -0.55 && fr > 0.18 && h.palm.y < head.y - 0.15) return 'elephantT';
+      // 오로치 (변형): 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 아래에 붙인다 (뱀 머리 · 입)
+      if (h.gesture !== 'fist' && h.palmNormal.y < -0.5 && h.fingersDir.dot(fwd) > 0.5 && Math.abs(h.fingersDir.y) < 0.6 && (h.pinchDist < 0.05 || h.gesture === 'pinch') && fr > 0.15) return 'orochi';
+      // 오로치 (쉬운 판): 편 손끝으로 앞쪽 바닥(그림자)을 가리킨다
+      if (h.gesture === 'open' && h.fingersDir.y < -0.7 && fr > 0.25 && h.palm.y < head.y - 0.35) return 'orochi';
     }
+    this._signSide = null;
     return null;
   }
 
   _signHands(id) {
-    const inp = this.ctx.input;
-    if (id === 'rabbits' || id === 'orochi') {
-      // 한 손 수인: 해당하는 손만
-      for (const h of [inp.left, inp.right]) {
-        if (id === 'rabbits' && h.gesture === 'two') return [h.side];
-        if (id === 'orochi' && h.gesture === 'open' && h.fingersDir.y < -0.7) return [h.side];
-      }
-    }
+    if (this._signSide && (id === 'rabbits' || id === 'orochi' || id === 'dogs' || id === 'elephantT')) return [this._signSide];
     return ['left', 'right'];
   }
 
@@ -298,7 +330,7 @@ export class Megumi {
     }
     if (!id) return;
     S.t += dt;
-    const hold = id === 'domain' ? 1.2 : SIGNS[id].hold;
+    const hold = id === 'domain' ? 1.2 : id === 'elephantT' ? 0.35 : SIGNS[id].hold;
     const k = Math.min(1, S.t / hold);
     for (const side of this._signHands(id)) this.aura.set(side, 0.2 + k * 0.8);
     if (Math.random() < 0.5) for (const side of this._signHands(id)) inp[side].pulse?.(0.1 + k * 0.4, 20);
@@ -311,7 +343,7 @@ export class Megumi {
         E.armed = 1.5;
         inp.left.pulse?.(0.6, 50);
         inp.right.pulse?.(0.6, 50);
-      } else this.summon(id);
+      } else this.summon(id === 'elephantT' ? 'elephant' : id);
     }
   }
 
@@ -371,7 +403,7 @@ export class Megumi {
     if (gazeFirst) {
       let best = null;
       let bs = 0.35;
-      for (const t of world.targets()) {
+      for (const t of world.enemies()) {
         if (!ok(t)) continue;
         const c = t.center(_v);
         const rel = _v2.subVectors(c, inp.head);
@@ -387,7 +419,7 @@ export class Megumi {
     }
     let best = null;
     let bd = maxD;
-    for (const t of world.targets()) {
+    for (const t of world.enemies()) {
       if (!ok(t)) continue;
       const d = t.center(_v).distanceTo(from);
       if (d < bd) {

@@ -6,6 +6,10 @@ import { Gojo } from './gojo/gojo.js';
 import { Sukuna } from './sukuna/sukuna.js';
 import { Itadori } from './itadori/itadori.js';
 import { Megumi } from './megumi/megumi.js';
+import { Geto } from './geto/geto.js';
+import { Mahito } from './mahito/mahito.js';
+import { Jogo } from './jogo/jogo.js';
+import { Yuta } from './yuta/yuta.js';
 
 export const CHARACTERS = [
   {
@@ -43,5 +47,41 @@ export const CHARACTERS = [
     kanji: '玉犬 · 鵺 · 魔虚羅 · 嵌合暗翳庭',
     color: '#7f93ff',
     create: (ctx) => new Megumi(ctx),
+  },
+  {
+    id: 'geto',
+    name: '게토 스구루',
+    work: '주술회전',
+    technique: '주령조술',
+    kanji: '呪霊操術 · 虹龍 · うずまき',
+    color: '#a07ad8',
+    create: (ctx) => new Geto(ctx),
+  },
+  {
+    id: 'yuta',
+    name: '옷코츠 유타',
+    work: '주술회전',
+    technique: '리카 · 모방 · 반전술식',
+    kanji: '里香 · 純愛砲 · 動くな · 真贋相愛',
+    color: '#c8a0ff',
+    create: (ctx) => new Yuta(ctx),
+  },
+  {
+    id: 'mahito',
+    name: '마히토',
+    work: '주술회전',
+    technique: '무위전변',
+    kanji: '無為転変 · 撥体 · 自閉円頓裹',
+    color: '#7ad8ff',
+    create: (ctx) => new Mahito(ctx),
+  },
+  {
+    id: 'jogo',
+    name: '죠고',
+    work: '주술회전',
+    technique: '화산 · 화력 조작',
+    kanji: '火礫蟲 · 煉獄 · 隕 · 蓋棺鉄囲山',
+    color: '#ff7a2a',
+    create: (ctx) => new Jogo(ctx),
   },
 ];

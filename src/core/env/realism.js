@@ -906,12 +906,29 @@ export function curveMirror(B, x, z, rotY = 0) {
   B.add(mirror, new THREE.CircleGeometry(0.3, 24).translate(0, 2.9, 0.07).applyMatrix4(m));
 }
 
-/** 땅바닥 판 (홀수로 나눠 중심에 정점이 오지 않게) */
-export function ground(w, d, mat, repeatMeters, x = 0, z = 0, y = 0) {
+/**
+ * 땅바닥 판 (홀수로 나눠 중심에 정점이 오지 않게).
+ * 텍스처 좌표는 월드 좌표 기준 → 같은 재질의 판이 겹쳐도(보도 모서리 등) 똑같이 보여 지직거리지 않는다.
+ * layer > 0: 다른 바닥 위에 깔리는 판 (점자 블록·광장 등) → 깊이를 앞으로 당겨 항상 위에 그린다
+ */
+const _layerMats = new Map();
+export function ground(w, d, mat, repeatMeters, x = 0, z = 0, y = 0, layer = 0) {
   const g = new THREE.PlaneGeometry(w, d, 7, 7).rotateX(-Math.PI / 2);
-  const uv = g.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * w) / repeatMeters, (uv.getY(i) * d) / repeatMeters);
   g.translate(x, y, z);
+  const pos = g.attributes.position;
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / repeatMeters, -pos.getZ(i) / repeatMeters);
+  if (layer > 0) {
+    const key = mat.uuid + ':' + layer;
+    if (!_layerMats.has(key)) {
+      const m2 = mat.clone();
+      m2.polygonOffset = true;
+      m2.polygonOffsetFactor = -layer;
+      m2.polygonOffsetUnits = -4 * layer;
+      _layerMats.set(key, m2);
+    }
+    mat = _layerMats.get(key);
+  }
   const m = new THREE.Mesh(g, mat);
   m.receiveShadow = true;
   return m;
@@ -923,7 +940,7 @@ export function stripe(x, z, w, d, rotY = 0, y = 0.012) {
 }
 
 export const roadPaint = () => M('paint', () => {
-  const m = new THREE.MeshStandardMaterial({ color: 0xe9e7df, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const m = new THREE.MeshStandardMaterial({ color: 0xe9e7df, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   m.userData.noShadow = true;
   return m;
 });

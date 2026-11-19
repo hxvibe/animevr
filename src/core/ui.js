@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CHARACTERS } from '../characters/index.js';
 import { BACKGROUNDS } from './env/backgrounds.js';
 import { DUMMY_TYPES } from './dummy.js';
+import { HandDemo } from './handDemo.js';
 
 export const FONT = "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
 export const JFONT = "'Noto Serif JP', 'Yu Mincho', 'Hiragino Mincho ProN', serif";
@@ -20,6 +21,29 @@ function rr(g, x, y, w, h, r) {
   g.arcTo(x, y + h, x, y, r);
   g.arcTo(x, y, x + w, y, r);
   g.closePath();
+}
+
+/** 글자 폭에 맞춰 줄바꿈 (한글은 글자 단위, 공백 우선) */
+function wrap(g, text, maxW) {
+  const out = [];
+  let line = '';
+  for (const word of text.split(/(\s+)/)) {
+    if (g.measureText(line + word).width <= maxW) {
+      line += word;
+      continue;
+    }
+    if (line.trim()) out.push(line.trim());
+    line = '';
+    for (const ch of word) {
+      if (g.measureText(line + ch).width > maxW) {
+        out.push(line);
+        line = '';
+      }
+      line += ch;
+    }
+  }
+  if (line.trim()) out.push(line.trim());
+  return out;
 }
 
 function canvasPlane(cw, ch, mw, mh, opts = {}) {
@@ -103,6 +127,18 @@ export class UI {
     this.title = new Panel(1600, 1000, 1.76, 1.1, (g, p) => this._drawTitle(g, p));
     this.options = new Panel(1400, 1050, 1.4, 1.05, (g, p) => this._drawOptions(g, p));
     scene.add(this.title.mesh, this.options.mesh);
+    // 조작법 탭: 손 모양 영상 (퀘스트 손 모델이 수인을 맺는 동작을 반복)
+    this.handDemo = new HandDemo();
+    const hd = this.handDemo.group;
+    hd.position.set(0.315, 0.125, 0.3); // 패널 오른쪽 위 영상 칸의 가운데 앞
+    hd.scale.setScalar(1.15);
+    // 오른쪽 어깨 뒤에서 내려다본 시점. 가슴 앞 손 자리(C)가 칸 가운데에 오게
+    const st = this.handDemo.stage;
+    st.rotation.set(0.3, -0.45, 0, 'XYZ');
+    st.position.set(0.02, -0.3, -0.33).applyEuler(st.rotation).negate();
+    hd.visible = false;
+    this.options.mesh.add(hd);
+    this.help = { sel: 0, auto: 4.5, pinned: false, view: null, demoIdx: 0, demoT: 0 };
 
     // 메타 퀘스트식 메뉴 아이콘: 왼손바닥을 얼굴 쪽으로 돌리면 나타나고, 왼손 집기로 열기
     this.menuIcon = canvasPlane(128, 128, 0.05, 0.05, { renderOrder: 65, depthTest: false });
@@ -210,8 +246,8 @@ export class UI {
         g.fillText(c.kanji, x + 30, 530);
       });
     } else if (n > 4) {
-      // 5명 이상: 3열 격자. 이름 아래에 대표 기술, 맨 아래에 작품/술식
-      const cols = 3;
+      // 5명 이상: 3열(7명 이상은 4열) 격자. 이름 아래에 대표 기술, 맨 아래에 작품/술식
+      const cols = n > 6 ? 4 : 3;
       const rows = Math.ceil(n / cols);
       const gap = 20;
       const cw = (W - 180 - gap * (cols - 1)) / cols;
@@ -300,13 +336,26 @@ export class UI {
     g.fillStyle = '#ffffff';
     if (this.tab === 'dummy') {
       g.font = `700 32px ${FONT}`;
-      g.fillText('종류', 50, 180);
-      Object.entries(DUMMY_TYPES).forEach(([id, d], i) => p.button(50 + i * 258, 200, 240, 90, d.label, 'dtype:' + id, { active: this.spawn.type === id, size: 30 }));
-      g.fillText('체력', 50, 345);
+      g.fillText('종류', 50, 172);
+      // 첫 줄: 더미 · 둘째 줄: 주령 · 주저사
+      const types = Object.entries(DUMMY_TYPES);
+      const dum = types.filter(([, d]) => !d.model);
+      const cur = types.filter(([, d]) => d.model);
+      dum.forEach(([id, d], i) => p.button(50 + i * 258, 185, 240, 76, d.label, 'dtype:' + id, { active: this.spawn.type === id, size: 28 }));
+      const cw = Math.min(240, Math.floor((W - 100) / Math.max(1, cur.length)) - 12);
+      cur.forEach(([id, d], i) => p.button(50 + i * (cw + 12), 272, cw, 76, `${d.label}\n${d.grade ?? ''}`, 'dtype:' + id, { active: this.spawn.type === id, size: 24, accent: '#7a2e9a' }));
+      g.fillStyle = '#ffffff';
+      g.font = `700 32px ${FONT}`;
+      g.fillText('체력', 50, 392);
+      g.font = `400 22px ${FONT}`;
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      g.fillText('주령은 100 = 기본 체력, 나머지는 배율', 130, 392);
+      g.fillStyle = '#ffffff';
+      g.font = `700 32px ${FONT}`;
       const hps = [[50, '50'], [100, '100'], [300, '300'], [1000, '1000'], [Infinity, '∞']];
-      hps.forEach(([v, l], i) => p.button(50 + i * 258, 365, 240, 90, l, 'dhp:' + i, { active: this.spawn.hp === v, size: 34, accent: '#2e9a5a' }));
-      g.fillText('수량', 50, 510);
-      [1, 3, 5].forEach((n, i) => p.button(50 + i * 258, 530, 240, 90, `${n}개`, 'dcount:' + n, { active: this.spawn.count === n, size: 34, accent: '#8a5a2e' }));
+      hps.forEach(([v, l], i) => p.button(50 + i * 258, 405, 240, 80, l, 'dhp:' + i, { active: this.spawn.hp === v, size: 34, accent: '#2e9a5a' }));
+      g.fillText('수량', 50, 530);
+      [1, 3, 5].forEach((n, i) => p.button(50 + i * 258, 545, 240, 80, `${n}개`, 'dcount:' + n, { active: this.spawn.count === n, size: 34, accent: '#8a5a2e' }));
       p.button(50, 680, 620, 130, '소환', 'spawn', { active: true, accent: '#d6334a', size: 48, weight: 900 });
       p.button(700, 680, 310, 130, '모두 제거', 'clear', { size: 32 });
       p.button(1030, 680, 320, 130, `더미 AI\n${S.dummyAI ? '켜짐' : '꺼짐'}`, 'ai', { size: 30, active: S.dummyAI, accent: '#555' });
@@ -339,27 +388,79 @@ export class UI {
       g.fillText('세상이 크거나 작게 느껴지면 높이 보정으로 눈높이를 맞추세요.', 50, 880);
       g.fillText('VR 시작 전 기기에서 바닥 높이(가디언)를 설정해 두면 가장 정확합니다.', 50, 920);
     } else {
-      const ch = this.ctx.character;
-      const anyHand = this.ctx.input.hands.some((h) => h.source === 'hand');
-      const mode = anyHand ? 'hand' : this.ctx.input.mode === 'desktop' ? 'desktop' : 'controller';
-      const lines = ch ? ch.helpLines(mode) : [];
-      if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기 · 오른손 엄지 척 → 옆으로 밀면 30° 회전' });
-      let y = 180;
+      this._drawHelp(g, p);
+    }
+  }
+
+  /** 조작법: 왼쪽 목록 · 오른쪽 손 모양 영상 + 설명 */
+  _helpLines() {
+    const ch = this.ctx.character;
+    const anyHand = this.ctx.input.hands.some((h) => h.source === 'hand');
+    const cur = anyHand ? 'hand' : this.ctx.input.mode === 'desktop' ? 'desktop' : 'controller';
+    const mode = this.help.view ?? cur;
+    const lines = ch ? [...ch.helpLines(mode)] : [];
+    if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', demo: 'common.loco', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기\n오른손 엄지 척 → 옆으로 밀면 30° 회전' });
+    return { lines, mode, cur };
+  }
+
+  _drawHelp(g, p) {
+    const W = p.canvas.width;
+    const { lines, mode } = this._helpLines();
+    const H = this.help;
+    if (H.sel >= lines.length) H.sel = 0;
+    // 보기 전환: 핸드트래킹 손 모양은 어떤 입력에서도 볼 수 있다
+    const views = [['hand', '손 모양'], ['controller', '컨트롤러'], ['desktop', '키보드']];
+    views.forEach(([id, l], i) => p.button(40 + i * 175, 128, 160, 52, l, 'hview:' + id, { active: mode === id, size: 22, accent: '#5a4a9a' }));
+    // 왼쪽 목록
+    const top = 200;
+    const rowH = Math.min(92, Math.floor((1010 - top) / Math.max(1, lines.length)) - 8);
+    lines.forEach((l, i) => {
+      const y = top + i * (rowH + 8);
+      p.button(40, y, 600, rowH, '', 'help:' + i, { active: i === H.sel, accent: 'rgba(90,110,200,0.55)', r: 14 });
+      g.textAlign = 'left';
+      g.textBaseline = 'middle';
+      let fs = 28;
+      g.font = `700 ${fs}px ${FONT}`;
+      while (fs > 18 && g.measureText(l.head).width > 520) g.font = `700 ${(fs -= 1)}px ${FONT}`;
+      g.fillStyle = l.color || '#ffffff';
+      g.fillText(l.head, 62, y + rowH / 2);
+      if (l.demo) {
+        g.font = `400 20px ${FONT}`;
+        g.fillStyle = 'rgba(255,255,255,0.6)';
+        g.textAlign = 'right';
+        g.fillText('▶ 손 모양', 625, y + rowH / 2);
+      }
+      g.textAlign = 'left';
+      g.textBaseline = 'alphabetic';
+    });
+    // 오른쪽: 영상 칸 + 설명
+    const sel = lines[H.sel];
+    rr(g, 670, 128, W - 710, 520, 18);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fill();
+    g.lineWidth = 2;
+    g.strokeStyle = 'rgba(255,255,255,0.18)';
+    g.stroke();
+    if (sel && !sel.demo) {
+      g.textAlign = 'center';
       g.font = `400 24px ${FONT}`;
-      g.fillStyle = 'rgba(255,255,255,0.55)';
-      g.fillText(mode === 'hand' ? '핸드트래킹 조작' : mode === 'desktop' ? '키보드·마우스 조작' : '컨트롤러 조작', 50, 150);
-      for (const l of lines) {
-        g.font = `700 30px ${FONT}`;
-        g.fillStyle = l.color || '#ffffff';
-        g.fillText(l.head, 50, y);
-        y += 38;
-        g.font = `400 24px ${FONT}`;
-        g.fillStyle = '#d5dcf0';
-        for (const t of (l.text || '').split('\n')) {
-          g.fillText(t, 70, y);
+      g.fillStyle = 'rgba(255,255,255,0.45)';
+      g.fillText(mode === 'hand' ? '손 모양 영상 없음' : '왼쪽 위 「손 모양」을 누르면 핸드트래킹 동작을 영상으로 볼 수 있어요', 670 + (W - 710) / 2, 390);
+      g.textAlign = 'left';
+    }
+    if (sel) {
+      g.font = `700 30px ${FONT}`;
+      g.fillStyle = sel.color || '#ffffff';
+      g.fillText(sel.head, 680, 700);
+      g.font = `400 23px ${FONT}`;
+      g.fillStyle = '#d5dcf0';
+      let y = 742;
+      for (const para of (sel.text || '').split('\n')) {
+        for (const ln of wrap(g, para, W - 730)) {
+          g.fillText(ln, 690, y);
           y += 31;
         }
-        y += 10;
+        y += 6;
       }
     }
   }
@@ -375,6 +476,15 @@ export class UI {
       if (this.mode === 'game') ctx.game.setBackground(v);
     } else if (id === 'start') ctx.game.start(this.sel.character, this.sel.background);
     else if (k === 'tab') this.tab = v;
+    else if (k === 'help') {
+      this.help.sel = +v;
+      this.help.pinned = true;
+      this.help.demoIdx = 0;
+    } else if (k === 'hview') {
+      this.help.view = v;
+      this.help.sel = 0;
+      this.help.pinned = false;
+    }
     else if (id === 'close') this.showOptions(false);
     else if (id === 'title') ctx.game.toTitle();
     else if (k === 'dtype') this.spawn.type = v;
@@ -748,6 +858,51 @@ export class UI {
     }
   }
 
+  _updateHelpDemo(dt) {
+    const D = this.handDemo;
+    const on = this.options.mesh.visible && this.tab === 'help' && !!this.ctx.character;
+    if (!on) {
+      D.group.visible = false;
+      D.play(null);
+      return;
+    }
+    const H = this.help;
+    const { lines } = this._helpLines();
+    // 아무것도 고르지 않았으면 손 모양이 있는 항목을 차례로 보여준다
+    if (!H.pinned) {
+      H.auto -= dt;
+      if (H.auto <= 0) {
+        const n = lines.length;
+        for (let i = 1; i <= n; i++) {
+          const j = (H.sel + i) % n;
+          if (lines[j]?.demo) {
+            H.sel = j;
+            H.demoIdx = 0;
+            H.demoT = 0;
+            H.auto = Array.isArray(lines[j].demo) ? lines[j].demo.reduce((a, d) => a + this.handDemo.durOf(d) * 2, 0) : Math.max(4.5, this.handDemo.durOf(lines[j].demo) * 2);
+            break;
+          }
+        }
+        this.options.redraw();
+      }
+    }
+    const sel = lines[H.sel];
+    let id = sel?.demo ?? null;
+    // 한 항목에 수인이 둘이면 번갈아
+    if (Array.isArray(id)) {
+      H.demoT += dt;
+      const cur = id[H.demoIdx % id.length];
+      const dur = D.durOf(cur);
+      if (H.demoT > dur * 2) {
+        H.demoT = 0;
+        H.demoIdx++;
+      }
+      id = id[H.demoIdx % id.length];
+    }
+    D.play(id);
+    D.update(dt);
+  }
+
   _updateMenuIcon(dt) {
     const inp = this.ctx.input;
     const L = inp.left;
@@ -783,6 +938,7 @@ export class UI {
     const inp = this.ctx.input;
     const S = this.ctx.settings;
     this._updateMenuIcon(dt);
+    this._updateHelpDemo(dt);
     // HUD
     const hm = this.hud.mesh;
     const L = inp.left;

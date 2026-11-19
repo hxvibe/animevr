@@ -2,6 +2,7 @@
 // GLB의 본 계층을 그대로 쓰지 않고, 본 위치에 축 정렬 관절을 새로 만들어 부위별 메시를 붙인다.
 import * as THREE from 'three';
 import { getModel } from './assets.js';
+import { RiggedBody } from './rigged.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -9,6 +10,7 @@ const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _c = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
+const lerpN = (a, b, k) => a + (b - a) * Math.max(0, Math.min(1, k));
 
 export const DUMMY_TYPES = {
   basic: { label: '기본', color: null, scale: 1, ai: 'idle' },
@@ -16,6 +18,14 @@ export const DUMMY_TYPES = {
   rusher: { label: '돌격형', color: 0xe8640c, scale: 1, ai: 'rusher' },
   giant: { label: '거대', color: 0x6a3ad0, scale: 1.45, ai: 'rusher' },
   sandbag: { label: '샌드백(∞)', color: 0xe8e8e8, scale: 1, ai: 'idle', infinite: true },
+  // ── 주령 · 주저사 (주술회전 게임 모델). hp 는 체력 메뉴 100 기준, h 는 키(m)
+  // curse: 주령조술로 거둘 수 있다 · orb: 주령구 색 · grade: 등급
+  mahito: { label: '마히토', model: 'mahito', h: 1.78, hp: 600, ai: 'rusher', speed: 2.2, punch: 14, curse: true, grade: '특급', orb: 0x8fc4d8, shard: 0x9aa8b0, blade: true },
+  jogo: { label: '죠고', model: 'jogo', h: 1.5, hp: 500, ai: 'shooter', bullet: 'fire', shootCd: 1.6, curse: true, grade: '특급', orb: 0xff7a2a, shard: 0xd8c8a8 },
+  fingerBearer: { label: '손가락 보유자', model: 'fingerBearer', h: 1.95, hp: 700, ai: 'rusher', speed: 2.6, punch: 16, curse: true, grade: '특급', orb: 0xd8203a, shard: 0xe0e0e0 },
+  kuchisake: { label: '쿠치사케온나', model: 'kuchisake', h: 1.82, hp: 260, ai: 'rusher', speed: 1.6, punch: 10, curse: true, grade: '1급', orb: 0xf0c890, shard: 0xd8c0a0 },
+  cyclops: { label: '단안 주령', model: 'cyclops', h: 4.0, hp: 500, ai: 'rusher', speed: 1.3, punch: 20, curse: true, grade: '1급', orb: 0x50c0ff, shard: 0xe8e0e0 },
+  bagmask: { label: '주저사(봉투)', model: 'bagmask', h: 1.85, hp: 160, ai: 'rusher', speed: 2.0, punch: 9, grade: '주저사', shard: 0xc8a070 },
 };
 
 const NAMES = ['다나카 히로시', '스즈키 켄타', '야마다 타로', '사토 유이치', '이토 마사키', '와타나베 쇼', '나카무라 료', '고바야시 준', '카토 다이스케', '요시다 하루', '야마모토 렌', '마츠모토 카이', '이노우에 소타', '기무라 히나', '하야시 아오이', '시미즈 유키', '모리 겐지', '이케다 세나'];
@@ -29,7 +39,8 @@ const TORSO = ['hips', 'chest', 'neck', 'shL', 'shR', 'hpL', 'hpR'];
 const LIMBS = [['neck', 'head'], ['shL', 'elL'], ['elL', 'hdL'], ['shR', 'elR'], ['elR', 'hdR'], ['hpL', 'knL'], ['knL', 'ftL'], ['hpR', 'knR'], ['knR', 'ftR']];
 // 너무 접히지 않도록 하는 최소 거리 (팔꿈치·무릎·목)
 const MINS = [['shL', 'hdL', 0.45], ['shR', 'hdR', 0.45], ['hpL', 'ftL', 0.55], ['hpR', 'ftR', 0.55], ['chest', 'head', 0.8], ['hips', 'knL', 0.5], ['hips', 'knR', 0.5]];
-const RAD = { hips: 0.11, chest: 0.12, neck: 0.08, head: 0.1, shL: 0.06, shR: 0.06, elL: 0.045, elR: 0.045, hdL: 0.04, hdR: 0.04, hpL: 0.08, hpR: 0.08, knL: 0.06, knR: 0.06, ftL: 0.05, ftR: 0.05 };
+// 관절 둘레 반지름: 쓰러졌을 때 몸 겉면이 바닥을 뚫지 않게 실제 두께에 맞춘다
+const RAD = { hips: 0.15, chest: 0.16, neck: 0.09, head: 0.12, shL: 0.09, shR: 0.09, elL: 0.06, elR: 0.06, hdL: 0.05, hdR: 0.05, hpL: 0.1, hpR: 0.1, knL: 0.075, knR: 0.075, ftL: 0.07, ftR: 0.07 };
 const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
@@ -159,12 +170,14 @@ export class Dummy {
     this.hp = this.maxHp = this.infinite ? 1e9 : hp;
     this.alive = true;
     this.kind = 'dummy';
-    this.name = NAMES[_nameIdx++ % NAMES.length];
+    this.name = def.model ? def.label : NAMES[_nameIdx++ % NAMES.length];
+    if (def.h) this.scale = def.h / DUMMY_H;
     this.root = new THREE.Group();
     this.root.position.copy(pos);
     this.root.scale.setScalar(this.scale);
     const tpl = dummyTemplate();
-    if (tpl) this._buildFromTemplate(tpl);
+    if (def.model && this._buildFromRig(def)) { /* 스키닝 모델 */ }
+    else if (tpl) this._buildFromTemplate(tpl);
     else this._buildProcedural();
     this.vel = new THREE.Vector3();
     this.angVel = new THREE.Vector3();
@@ -227,6 +240,35 @@ export class Dummy {
     this.restZ = 0;
     this.unit = 1 / tpl.scale;
     if (this.def.ai === 'shooter') this._addGun();
+  }
+
+  /** 주술회전 게임 모델: 뼈 위치에 더미 관절을 세우고 매 프레임 뼈로 옮긴다 (rigged.js) */
+  _buildFromRig(def) {
+    const body = new RiggedBody(def.model, { height: DUMMY_H, outline: 0.011 / this.scale });
+    if (!body.ok || !body.J) return false;
+    this.glb = true;
+    this.rig = body;
+    this.root.add(body.model);
+    this.mats = body.mats;
+    this.mat = this.mats[0];
+    this.color = new THREE.Color(def.shard ?? 0x9a9a9a);
+    const J = body.J;
+    this.hips = J.hips;
+    this.spine = J.chest;
+    this.neck = J.neck;
+    this.head = J.head;
+    this.armL = { sh: J.shL, el: J.elL, hd: J.hdL };
+    this.armR = { sh: J.shR, el: J.elR, hd: J.hdR };
+    this.legL = { hp: J.hpL, kn: J.knL, ft: J.ftL };
+    this.legR = { hp: J.hpR, kn: J.knR, ft: J.ftR };
+    // 바인드는 A자 자세 → 팔을 내린 각도를 쉬는 자세로
+    const P = body.P;
+    const a = Math.atan2(P.elL.x - P.shL.x, P.shL.y - P.elL.y);
+    this.restZ = -Math.max(0, a - 0.12);
+    this.armL.sh.rotation.z = this.restZ;
+    this.armR.sh.rotation.z = -this.restZ;
+    this.unit = 1 / body.scale;
+    return true;
   }
 
   _buildProcedural() {
@@ -590,6 +632,13 @@ export class Dummy {
     const c = this.center();
     this.root.updateMatrixWorld(true);
     const type = info.type ?? 'shatter';
+    // 주령조술: 쓰러뜨린 주령은 주령구가 된다 (게토)
+    if (this.def.curse && W.captureCurse?.(this, info)) {
+      W.scene.remove(this.root);
+      this._dispose();
+      return;
+    }
+    if (this.rig && (type === 'slash' || type === 'cleave')) this.rig.bake();
     if (type === 'slash' && info.plane) {
       W.slicer.slice(this.root, info.plane, { color: this.color, vel: this.vel.clone().add(info.push ?? _v.set(0, 0, 0)), center: c, radius: 0.35 * this.scale, sep: 1.2 });
       W.shatter.emit(info.plane.projectPoint(c, new THREE.Vector3()), 12, this.color, { spread: 0.3, speed: 2.5, size: 0.04 });
@@ -625,6 +674,7 @@ export class Dummy {
 
   _dispose() {
     for (const m of this.mats) m.dispose();
+    this.rig?.dispose();
     this.gun?.material.dispose();
   }
 
@@ -641,6 +691,11 @@ export class Dummy {
   }
 
   update(dt) {
+    this._step(dt);
+    if (this.rig && this.alive) this.rig.sync();
+  }
+
+  _step(dt) {
     if (!this.alive) return;
     this.t += dt;
     this.stateT += dt;
@@ -712,6 +767,7 @@ export class Dummy {
       }
     } else if (this.state === 'down') {
       this.vel.set(0, 0, 0);
+      this._keepAboveFloor();
       if (this.dying) {
         if (this.stateT > 2.5) this.kill({ type: 'fade' });
         return;
@@ -728,19 +784,64 @@ export class Dummy {
         this._getupJ = Object.values(J).map((j) => [j, j.quaternion.clone()]);
       }
     } else if (this.state === 'getup') {
-      const k = Math.min(1, this.stateT / 0.7);
+      // 엉덩이를 바닥 근처에 둔 채 몸을 세우며 무릎을 꿇었다가 → 일어선다 (발을 축으로 판자처럼 들리지 않게)
+      const dur = 0.9;
+      const k = Math.min(1, this.stateT / dur);
       const e = k * k * (3 - 2 * k);
-      // 래그돌로 꺾인 관절을 기본 자세로 되돌린다
-      if (this._getupJ) for (const [j, q0] of this._getupJ) j.quaternion.slerpQuaternions(q0, _q.identity(), e);
-      if (k >= 1) this._getupJ = null;
-      this.root.quaternion.slerpQuaternions(this._getupFrom, this._upright, e);
-      this.root.position.copy(this._getupPos).lerp(_v.set(this._getupPos.x, 0, this._getupPos.z), e);
+      const J = this._jointMap();
+      if (!this._hipLocal) {
+        this._hipLocal = this._ragRestPose().rest[RI.hips].clone(); // 서 있을 때 엉덩이 (root 기준, 크기 1)
+        this._hipStart = J.hips.getWorldPosition(new THREE.Vector3());
+      }
+      if (this._getupJ) for (const [j, q0] of this._getupJ) j.quaternion.slerpQuaternions(q0, _q.identity(), Math.min(1, e * 1.4));
+      // 웅크림: 가운데쯤 무릎을 가장 깊게
+      const crouch = Math.sin(Math.min(1, k * 1.15) * Math.PI);
+      for (const leg of [this.legL, this.legR]) {
+        leg.hp.rotateX(-1.25 * crouch);
+        leg.kn.rotateX(2.1 * crouch);
+        leg.ft.rotateX(-0.75 * crouch);
+      }
+      this.spine.rotateX(0.45 * crouch);
+      const rot = Math.min(1, e * 1.6);
+      this.root.quaternion.slerpQuaternions(this._getupFrom, this._upright, rot);
+      // 엉덩이 높이: 누운 높이 → 웅크린 높이 → 선 높이
+      const standY = this._hipLocal.y * this.scale;
+      const hy = k < 0.55 ? lerpN(this._hipStart.y, standY * 0.5, k / 0.55) : lerpN(standY * 0.5, standY, (k - 0.55) / 0.45);
+      const hipNow = _v.copy(this._hipLocal).multiplyScalar(this.scale).applyQuaternion(this.root.quaternion);
+      // 수평 위치는 엉덩이를 축으로 (엉덩이가 제자리에 있도록)
+      this.root.position.set(this._hipStart.x - hipNow.x, 0, this._hipStart.z - hipNow.z);
+      const hw = J.hips.getWorldPosition(_v3);
+      this.root.position.y += hy - hw.y;
+      // 다리를 웅크린 만큼 발이 바닥 위에 있도록
+      let pen = 0;
+      for (const kk of ['ftL', 'ftR', 'knL', 'knR']) pen = Math.max(pen, RAD[kk] * this.scale - J[kk].getWorldPosition(_v2).y);
+      if (pen > 0) this.root.position.y += pen;
       if (k >= 1) {
+        for (const leg of [this.legL, this.legR]) {
+          leg.hp.quaternion.identity();
+          leg.kn.quaternion.identity();
+          leg.ft.quaternion.identity();
+        }
+        this.spine.quaternion.identity();
+        this._getupJ = null;
+        this._hipLocal = null;
+        this.root.position.y = 0;
         this.state = 'stand';
         this.stateT = 0;
       }
     }
     if (this.root.position.lengthSq() > 250 * 250 || this.root.position.y < -20) this.kill({ type: 'erase' });
+  }
+
+  /** 쓰러진 자세의 관절이 바닥 아래면 몸 전체를 들어 올린다 */
+  _keepAboveFloor() {
+    const J = this._jointMap();
+    let pen = 0;
+    for (const k of RAG) {
+      const p = J[k].getWorldPosition(_v);
+      pen = Math.max(pen, RAD[k] * this.scale - p.y);
+    }
+    if (pen > 0.002) this.root.position.y += pen;
   }
 
   _pose(dt, kind, k = 1) {
@@ -784,9 +885,9 @@ export class Dummy {
     }
     this.root.position.addScaledVector(this.vel, dt);
     this.grounded = false;
-    for (const y of [0.05, 1.75, 1.0]) {
+    for (const y of [0.05, 0.5, 1.0, 1.35, 1.72]) {
       const p = this.root.localToWorld(_v.set(0, y, 0));
-      const r = y === 1.0 ? 0.2 * this.scale : 0.1 * this.scale;
+      const r = (y === 0.05 ? 0.08 : y === 1.72 ? 0.13 : 0.18) * this.scale;
       if (p.y < r) {
         this.root.position.y += r - p.y;
         this.grounded = true;
@@ -846,8 +947,10 @@ export class Dummy {
       this.armR.sh.rotation.x = THREE.MathUtils.lerp(this.armR.sh.rotation.x, aiming ? -Math.PI / 2 : 0, dt * 8);
       this.armR.el.rotation.x = THREE.MathUtils.lerp(this.armR.el.rotation.x, 0, dt * 8);
       if (this.shootT <= 0) {
-        this.shootT = 2.2 + Math.random() * 1.5;
-        W.spawnBullet(this.gun.localToWorld(_v2.set(0, 0, 0.12)), head, this);
+        const cd = this.def.shootCd ?? 2.2;
+        this.shootT = cd + Math.random() * cd * 0.7;
+        const from = this.gun ? this.gun.localToWorld(_v2.set(0, 0, 0.12)) : this.armR.hd.getWorldPosition(_v2).addScaledVector(_v3.subVectors(head, this.armR.hd.getWorldPosition(_v3)).normalize(), 0.15);
+        W.spawnBullet(from, head, this, this.def.bullet);
       }
     } else if (ai === 'rusher') {
       const reach = 0.85 * this.scale;
@@ -860,11 +963,20 @@ export class Dummy {
         this.armR.el.rotation.x = -0.2 * (1 - ext);
         if (!this._punchHit && k > 0.38) {
           this._punchHit = true;
-          W.dummyMelee(this, this.armR.hd.getWorldPosition(_v2), 8);
+          W.dummyMelee(this, this.armR.hd.getWorldPosition(_v2), this.def.punch ?? 8);
+        }
+        // 마히토: 치는 동안 팔을 칼날로 바꾼다 (무위전변)
+        if (this.def.blade && this.rig) {
+          const on = this.punchT > 0.05;
+          if (on !== this._blade) {
+            this._blade = on;
+            this.rig.show('ArmsNormal', !on);
+            this.rig.show('ArmsBlades', on);
+          }
         }
         this._legs(0, dt);
       } else if (dist > reach) {
-        const sp = 1.7 * Math.sqrt(this.scale);
+        const sp = (this.def.speed ?? 1.7) * Math.sqrt(this.scale);
         flat.normalize();
         this.root.position.addScaledVector(flat, sp * dt);
         this._legs(sp, dt);

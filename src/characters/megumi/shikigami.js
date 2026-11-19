@@ -83,6 +83,16 @@ function segDist(p, a, b) {
 }
 const _v4 = new THREE.Vector3();
 
+/** 모델의 발 뼈 중 가장 낮은 것의 (root 기준) 높이 - 발 두께 → 몸을 이만큼 내리면 발이 땅에 닿는다 */
+function footFloor(M, names, root, body, r = 0.05) {
+  let lo = Infinity;
+  for (const n of names) {
+    const p = M.rig.pos(n, _v4);
+    if (p) lo = Math.min(lo, p.y);
+  }
+  return lo === Infinity ? 0 : lo - root.position.y - body.position.y - r;
+}
+
 function groundOf(t, out = new THREE.Vector3()) {
   if (t.root) out.copy(t.root.position);
   else out.copy(t.pos);
@@ -494,7 +504,7 @@ export class DogTotality extends Shiki {
   constructor(owner) {
     super(owner, { height: 2.7, riseDur: 0.5, poolR: 1.4 });
     this.name = '옥견 혼';
-    this.setHp(260, 2.2, 0.6);
+    this.setHp(260, 1.5, 0.7);
     this.M = makeShiki('dogTotality', 2.7, { outline: 0.016 });
     if (this.M) this.body.add(this.M.root);
     else {
@@ -625,7 +635,7 @@ export class DogTotality extends Shiki {
     const along = new THREE.Vector3().copy(right).multiplyScalar(-side).add(_v3.set(0, -0.8, 0)).normalize();
     const n = new THREE.Vector3().crossVectors(along, fwd).normalize();
     let any = false;
-    for (const t of world.targets()) {
+    for (const t of world.enemies()) {
       if (t.heldBy) continue;
       const c = t.center(new THREE.Vector3());
       const rel = _v3.subVectors(c, P).setY(0);
@@ -647,7 +657,7 @@ export class DogTotality extends Shiki {
     const P = this.root.position;
     const fwd = _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     const c = _v2.copy(P).addScaledVector(fwd, 0.9).setY(0);
-    world.forEachTarget(_v3.copy(c).setY(0.8), 2.0, (t, d) => {
+    world.forEachEnemy(_v3.copy(c).setY(0.8), 2.0, (t, d) => {
       const k = Math.max(0.3, 1 - d / 2.4);
       t.damage(75 * k, { type: 'impact', dir: fwd.clone(), color: '#c8c8ff' });
       t.impulse?.(_v4.subVectors(t.center(new THREE.Vector3()), c).setY(0).normalize().multiplyScalar(4 * k).add(new THREE.Vector3(0, 4 * k, 0)), 5);
@@ -664,8 +674,9 @@ export class DogTotality extends Shiki {
   }
 
   /**
-   * 두 발 짐승의 몸놀림: 웅크린 자세로 상체를 숙이고, 빨라질수록 보폭·무릎 접기·앞기울기가 커지며 공중에 뜨는 순간이 생긴다.
-   * 팔(앞발)은 다리와 엇갈려 크게 흔들고, 꼬리는 몸을 늦게 따라온다
+   * 네 발 짐승의 몸놀림: 몸통을 눕혀 팔을 앞다리로 쓴다.
+   * 걷기(뒷다리 → 같은 쪽 앞다리) · 속보(대각선 짝) · 질주(회전 갤럽, 등을 굽혔다 편다)를 속도에 따라 섞고,
+   * 할퀼 땐 앞발을 들고 일어서며, 덮칠 땐 네 다리를 뻗어 날아든다
    */
   _animateModel(dt) {
     const R = this.M.rig;
@@ -674,29 +685,42 @@ export class DogTotality extends Shiki {
     const sp = this.speed;
     const moving = sp > 0.15;
     const run = Math.min(1, sp / 7);
-    const stride = 1.6 + run * 1.6;
-    this.phase = (this.phase + (dt * sp) / stride) % 1;
-    const duty = lerp(0.6, 0.36, run);
-    const A = moving ? lerp(0.32, 0.7, run) : 0;
-    const leg = (p) => {
-      if (p < duty) {
-        const s = p / duty;
-        return { hp: A * (1 - 2 * s), kn: Math.sin(s * Math.PI) * 0.2, an: lerp(-0.1, 0.4, s) };
+    // 걸음새 가중치
+    const want = sp < 1.8 ? 'walk' : sp < 5 ? 'trot' : 'gallop';
+    G.w ??= { walk: 1, trot: 0, gallop: 0 };
+    for (const k in G.w) G.w[k] = damp(G.w[k], k === want ? 1 : 0, 4, dt);
+    const stride = 1.4 + run * 1.8;
+    this.phase = (this.phase + (dt * Math.max(sp, 0)) / stride) % 1;
+    const A = moving ? lerp(0.28, 0.75, run) : 0;
+    const GAIT = { walk: { LH: 0, LF: 0.25, RH: 0.5, RF: 0.75, duty: 0.64 }, trot: { LF: 0, RH: 0, RF: 0.5, LH: 0.5, duty: 0.45 }, gallop: { LH: 0, RH: 0.1, RF: 0.45, LF: 0.57, duty: 0.32 } };
+    const legOf = (key) => {
+      let fw = 0;
+      let lift = 0;
+      for (const g in GAIT) {
+        const w = G.w[g];
+        if (w < 0.01) continue;
+        const p = (this.phase + GAIT[g][key]) % 1;
+        const duty = GAIT[g].duty;
+        if (p < duty) fw += A * (1 - (2 * p) / duty) * w;
+        else {
+          const q = (p - duty) / (1 - duty);
+          const e = q * q * (3 - 2 * q);
+          fw += (-A + 2 * A * e) * w;
+          lift += Math.sin(q * Math.PI) * w;
+        }
       }
-      const s = (p - duty) / (1 - duty);
-      const e = s * s * (3 - 2 * s);
-      return { hp: -A + 2 * A * e, kn: Math.sin(s * Math.PI) * lerp(0.9, 1.7, run), an: lerp(0.4, -0.2, e) };
+      return { fw, lift: lift * Math.min(1, A * 2.5) };
     };
-    const lL = leg(this.phase);
-    const lR = leg((this.phase + 0.5) % 1);
+    const L = { LF: legOf('LF'), RF: legOf('RF'), LH: legOf('LH'), RH: legOf('RH') };
     const ph = this.phase * Math.PI * 2;
-    // 기본 자세 (+ 공격 동작)
-    let lean = moving ? lerp(0.25, 0.6, run) : 0.18;
+    // 공격: 일어서기(rear) · 몸 비틀기 · 덮치기
+    let rear = 0;
     let twist = 0;
     let crouch = 0;
     let lunge = 0;
-    let armR = { x: moving ? lL.hp * -1.0 : -0.25, z: 0, el: moving ? -0.4 - run * 0.5 : -0.5 };
-    let armL = { x: moving ? lR.hp * -1.0 : -0.25, z: 0, el: armR.el };
+    let reach = 0; // 덮칠 때 앞다리를 앞으로 뻗기
+    let armR = { x: -0.3, z: 0, el: -0.5 };
+    let armL = { x: -0.3, z: 0, el: -0.5 };
     const at = this.atk;
     if (at) {
       const k = at.t / at.dur;
@@ -704,77 +728,82 @@ export class DogTotality extends Shiki {
       if (at.kind === 'leap') {
         crouch = sm(0, 0.22, k) * (1 - sm(0.22, 0.3, k)) + sm(0.7, 0.76, k) * (1 - sm(0.8, 1, k)) * 0.8;
         const air = sm(0.25, 0.35, k) * (1 - sm(0.68, 0.74, k));
-        const slam = sm(0.68, 0.74, k) * (1 - sm(0.85, 1, k));
-        lean = lerp(lean, 0.55, crouch) - air * 0.25 + slam * 0.5;
-        for (const a of [armR, armL]) {
-          a.x = lerp(a.x, 0.5, crouch) * (1 - air - slam) + air * -2.7 + slam * -0.5;
-          a.el = lerp(a.el, -0.3, air);
-        }
-        // 공중에서 다리를 접어 올린다
-        lL.kn = lerp(lL.kn, 1.4, air);
-        lR.kn = lerp(lR.kn, 1.4, air);
-        lL.hp = lerp(lL.hp, 0.5, air);
-        lR.hp = lerp(lR.hp, 0.3, air);
+        reach = air;
+        lunge = sm(0.68, 0.74, k) * (1 - sm(0.85, 1, k)) * 0.4;
       } else {
         const sd = at.kind === 'R' ? 1 : -1;
         const wind = sm(0, 0.4, k) * (1 - sm(0.4, 0.5, k));
         const strike = sm(0.4, 0.52, k) * (1 - sm(0.7, 1, k));
+        rear = Math.max(wind, strike) * 0.85;
         const a = sd > 0 ? armR : armL;
         const o = sd > 0 ? armL : armR;
-        // 들어 올려 뒤로 젖혔다가 → 몸 앞을 가로질러 내리긋는다
         a.x = -2.3 * wind - 0.5 * strike;
         a.z = -0.55 * wind + 0.45 * strike;
         a.el = -0.9 * wind - 0.1 * strike;
         o.x = -0.6 * wind + 0.3 * strike;
         o.el = -0.8;
         twist = (-0.45 * wind + 0.6 * strike) * sd;
-        lean += -0.1 * wind + 0.35 * strike;
         lunge = 0.5 * strike;
       }
     }
-    G.lean = damp(G.lean, lean, 12, dt);
+    G.rear = damp(G.rear ?? 0, rear, 10, dt);
     G.twist = damp(G.twist, twist, 18, dt);
     G.crouch = damp(G.crouch, crouch, 16, dt);
     G.lunge = damp(G.lunge, lunge, 14, dt);
-    const bob = moving ? -Math.cos(ph * 2) * lerp(0.04, 0.1, run) : Math.sin(this.t * 2) * 0.01;
-    G.bob = damp(G.bob, bob - G.crouch * 0.35, 16, dt);
-    if (!at || at.kind !== 'leap' || this.root.position.y <= 0.01) this.body.position.y = this.state === 'act' ? G.bob : this.body.position.y;
-    this.body.position.z = G.lunge;
-    // 다리
-    for (const [sd, l] of [['L', lL], ['R', lR]]) {
-      R.rot(sd + '_leg', AX.X, -(l.hp + G.crouch * 0.7));
-      R.rot(sd + '_knee', AX.X, l.kn + G.crouch * 1.1);
-      R.rot(sd + '_ankle', AX.X, l.an * (moving ? 1 : 0) - G.crouch * 0.4);
-    }
-    R.rot('hip', AX.Y, moving ? Math.sin(ph + Math.PI / 2) * 0.12 : 0);
-    // 몸통: 숙이고, 공격 땐 비튼다
-    R.rot('waist', AX.X, G.lean * 0.3);
-    R.rot('spine', AX.X, G.lean * 0.35);
-    R.rot('chest', AX.X, G.lean * 0.35 + Math.sin(this.t * (moving ? 6 : 1.8)) * 0.02 - this.hurtK * 0.3);
-    R.rot('spine', AX.Y, G.twist * 0.5 - (moving ? Math.sin(ph + Math.PI / 2) * 0.1 : 0));
+    G.reach = damp(G.reach ?? 0, reach, 14, dt);
+    // 몸통 기울기: 네 발일 땐 거의 수평, 일어서면 세운다. 질주하면 등을 굽혔다 편다
+    const flex = moving ? Math.sin(ph) * 0.14 * G.w.gallop : 0;
+    // 앞발·뒷발이 함께 땅에 닿도록 몸 기울기를 조금씩 고친다 (pitchFix)
+    const pitch = lerp(1.18 + (this.pitchFix ?? 0), 0.35, G.rear) + G.crouch * 0.1 - G.reach * 0.15;
+    R.rot('COG', AX.X, pitch);
+    R.rot('waist', AX.X, flex * 0.6);
+    R.rot('spine', AX.X, -flex * 0.4 - this.hurtK * 0.2);
+    R.rot('chest', AX.X, Math.sin(this.t * (moving ? 6 : 1.8)) * 0.02);
+    R.rot('spine', AX.Y, G.twist * 0.5 - (moving ? Math.sin(ph + Math.PI / 2) * 0.08 : 0));
     R.rot('chest', AX.Y, G.twist * 0.5);
-    // 머리는 앞을 향해 들어 올린다 (상체를 숙여도 시선은 대상에게)
-    R.rot('neck', AX.X, -G.lean * 0.55);
-    R.rot('head', AX.X, -G.lean * 0.3 + (moving ? Math.cos(ph * 2) * 0.04 : 0));
-    R.rot('jaw', AX.X, at || run > 0.6 ? 0.35 : 0.06 + Math.max(0, Math.sin(this.t * 3)) * 0.04);
-    // 팔 (바인드가 A자 자세 → 내린 뒤 앞뒤로)
-    R.rot('L_arm', AX.Z, -0.6 + armL.z);
-    R.rot('L_arm', AX.X, armL.x);
-    R.rot('R_arm', AX.Z, 0.6 - armR.z);
-    R.rot('R_arm', AX.X, armR.x);
-    R.rot('L_elbow', AX.X, armL.el);
-    R.rot('R_elbow', AX.X, armR.el);
-    // 발톱을 세운다
-    for (const sd of ['L', 'R']) for (const f of ['indexfinger', 'middlefinger', 'ringfinger']) R.rot(`${sd}_${f}_A`, AX.X, at ? -0.2 : 0.35);
+    // 머리는 앞(대상)을 본다
+    R.rot('neck', AX.X, -pitch * 0.62 + G.crouch * 0.2);
+    R.rot('head', AX.X, -pitch * 0.3 + (moving ? Math.cos(ph * 2) * 0.05 : 0));
+    R.rot('jaw', AX.X, at || run > 0.6 ? 0.38 : 0.06 + Math.max(0, Math.sin(this.t * 3)) * 0.05);
+    // 뒷다리: 몸을 눕힌 만큼 되돌려 땅을 딛는다 (늑대 다리: 무릎 앞 · 뒤꿈치 뒤)
+    for (const [sd, l] of [['L', L.LH], ['R', L.RH]]) {
+      R.rot(sd + '_leg', AX.X, -pitch - l.fw - G.crouch * 0.7 + G.reach * 0.6 + 0.1);
+      R.rot(sd + '_knee', AX.X, 0.15 + l.lift * 0.9 + G.crouch * 1.1 + G.reach * 0.5);
+      R.rot(sd + '_ankle', AX.X, -l.lift * 0.5 - G.crouch * 0.4);
+    }
+    R.rot('hip', AX.Y, moving ? Math.sin(ph + Math.PI / 2) * 0.1 : 0);
+    // 앞다리(팔): 내려서 땅을 딛고 걸음에 맞춰 흔든다. 일어서면 할퀴는 팔 동작으로
+    for (const [sd, l, a, sg] of [['L', L.LF, armL, 1], ['R', L.RF, armR, -1]]) {
+      const qx = -pitch - l.fw * 1.1 - G.reach * 1.4;
+      const qel = -0.15 - l.lift * 0.8;
+      R.rot(sd + '_arm', AX.Z, sg * (-0.62 + (sg > 0 ? a.z : -a.z) * G.rear));
+      R.rot(sd + '_arm', AX.X, lerp(qx, a.x, G.rear));
+      R.rot(sd + '_elbow', AX.X, lerp(qel, a.el, G.rear));
+      R.rot(sd + '_hand', AX.X, lerp(0.35 + l.lift * 0.9 + pitch * 0.25, 0, G.rear));
+      for (const f of ['indexfinger', 'middlefinger', 'ringfinger']) R.rot(`${sd}_${f}_A`, AX.X, at ? -0.2 : 0.3);
+    }
     // 귀 · 꼬리
-    R.rot('L_ear', AX.X, Math.sin(this.t * 0.7) * 0.08 - run * 0.3);
-    R.rot('R_ear', AX.X, Math.sin(this.t * 0.9 + 1) * 0.08 - run * 0.3);
+    R.rot('L_ear', AX.X, Math.sin(this.t * 0.7) * 0.08 - run * 0.35);
+    R.rot('R_ear', AX.X, Math.sin(this.t * 0.9 + 1) * 0.08 - run * 0.35);
     this.tailT = (this.tailT ?? 0) + dt;
     ['tail_A', 'tail_B', 'tail_C', 'tail_D', 'tail_E', 'tail_F'].forEach((b, i) => {
       R.rot(b, AX.Y, Math.sin(this.tailT * (moving ? 7 : 2) - i * 0.6) * (0.06 + i * 0.02) - G.twist * 0.25);
-      // 꼬리는 바인드에서 뒤로 곧게 뻗어 있다 → 아래로 늘어뜨려 휘게 하고, 달리면 뒤로 흩날린다
-      R.rot(b, AX.X, (i ? -0.13 : -0.62) * (1 - run * 0.6) + Math.sin(this.tailT * 2.2 - i * 0.7) * 0.03);
+      // 몸을 눕힌 만큼 꼬리 뿌리를 되돌려 뒤로 늘어뜨린다
+      R.rot(b, AX.X, (i ? -0.1 : -0.35 - pitch * 0.85) * (i ? 1 - run * 0.7 : 1) + Math.sin(this.tailT * 2.2 - i * 0.7) * 0.03);
     });
+    // 발이 땅에 닿게 몸 높이 (공중에선 마지막 값 유지)
+    const grounded = this.root.position.y <= 0.01;
+    const foot = footFloor(this.M, ['L_toe', 'R_toe', 'L_middlefinger_C', 'R_middlefinger_C', 'L_indexfinger_C', 'R_indexfinger_C'], this.root, this.body, 0.03);
+    if (grounded) this.footOff = damp(this.footOff ?? foot, foot, 14, dt);
+    if (grounded && !at) {
+      const hind = footFloor(this.M, ['L_toe', 'R_toe'], this.root, this.body, 0.03);
+      const front = footFloor(this.M, ['L_middlefinger_C', 'R_middlefinger_C'], this.root, this.body, 0.03);
+      this.pitchFix = THREE.MathUtils.clamp((this.pitchFix ?? 0) - (hind - front) * dt * 3, -0.7, 0.5);
+    }
+    const bob = moving ? -Math.cos(ph * 2) * lerp(0.03, 0.06, run) * (1 - G.w.gallop) + Math.sin(ph) * 0.08 * G.w.gallop : Math.sin(this.t * 2) * 0.01;
+    G.bob = damp(G.bob, bob, 16, dt);
+    if (this.state === 'act') this.body.position.y = -(this.footOff ?? 0) + G.bob;
+    this.body.position.z = G.lunge;
   }
 }
 
@@ -1179,36 +1208,48 @@ export class Toad extends Shiki {
       const R = this.M.rig;
       R.begin();
       R.scale('tongue_A', 0.01);
-      R.rot('L_arm', AX.Z, -1.0);
-      R.rot('R_arm', AX.Z, 1.0);
-      R.rot('L_elbow', AX.X, -0.5);
-      R.rot('R_elbow', AX.X, -0.5);
       this.jawK = damp(this.jawK ?? 0, this.mode === 'out' || this.mode === 'in' ? 0.55 : 0, 12, dt);
       R.rot('jaw', AX.X, this.jawK);
-      // 자세: 혀를 쏘기 전 몸을 낮추고 웅크렸다가 → 쏠 때 앞으로 튀어나가듯 숙이고 → 끌어올 땐 뒤로 버틴다
+      // 자세: 네 발로 땅을 짚고 웅크린 두꺼비. 혀를 쏘기 전 더 낮게 → 쏠 때 앞으로 내밀고 → 끌어올 땐 뒤로 버틴다
       const m = this.mode;
-      const lean = m === 'wait' ? -0.18 : m === 'out' ? 0.32 : m === 'in' ? (this.held ? -0.28 : -0.12) : 0;
-      const crouch = m === 'wait' ? 1 : m === 'out' ? 0.3 : m === 'in' ? 0.6 : 0;
+      const lean = m === 'wait' ? -0.12 : m === 'out' ? 0.3 : m === 'in' ? (this.held ? -0.25 : -0.1) : 0;
+      const crouch = m === 'wait' ? 1 : m === 'out' ? 0.3 : m === 'in' ? 0.6 : 0.5;
       this.leanK = damp(this.leanK ?? 0, lean, m === 'out' ? 22 : 8, dt);
       this.crouchK = damp(this.crouchK ?? 0, crouch, 10, dt);
-      R.rot('spine', AX.X, this.leanK * 0.5);
-      R.rot('chest', AX.X, this.leanK * 0.5);
-      R.rot('head', AX.X, -this.leanK * 0.3 - this.crouchK * 0.1);
-      // 무거운 것을 끌 땐 몸이 부르르 떨린다
+      const pitch = 0.62 + this.leanK * 0.5; // 몸통을 앞으로 눕힌다
+      R.rot('COG', AX.X, pitch);
+      // 머리는 앞을 본다
+      R.rot('neck', AX.X, -pitch * 0.45);
+      R.rot('head', AX.X, -pitch * 0.35 - this.crouchK * 0.08);
       if (this.held) R.rot('chest', AX.Y, Math.sin(this.t * 31) * 0.04);
-      for (const [sd, s] of [['L', 1], ['R', -1]]) {
-        R.rot(sd + '_leg', AX.X, -this.crouchK * 0.25);
-        R.rot(sd + '_knee', AX.X, this.crouchK * 0.35);
-        // 앞발로 땅을 짚어 버틴다
-        R.rot(sd + '_arm', AX.X, -this.leanK * 0.6);
-        R.rot(sd + '_arm', AX.Z, -this.crouchK * 0.15 * s);
+      for (const [sd, sg] of [['L', 1], ['R', -1]]) {
+        // 뒷다리: 크게 접어 엉덩이 밑에 깔고 발바닥을 땅에
+        R.rot(sd + '_leg', AX.X, -pitch - 0.95 - this.crouchK * 0.25);
+        R.rot(sd + '_leg', AX.Z, 0.28 * sg);
+        R.rot(sd + '_knee', AX.X, 2.0 + this.crouchK * 0.3);
+        R.rot(sd + '_ankle', AX.X, -1.05);
+        // 앞다리: 어깨에서 내려 앞쪽 땅을 짚는다 (팔꿈치는 바깥으로)
+        R.rot(sd + '_arm', AX.Z, -0.95 * sg);
+        R.rot(sd + '_arm', AX.X, -pitch - 0.35 - this.leanK * 0.4 + (this.armFix ?? 0));
+        R.rot(sd + '_elbow', AX.X, -0.35);
+        R.rot(sd + '_hand', AX.X, 0.9 + pitch * 0.4);
+        for (const f of ['firstfinger', 'secondfinger', 'thirdfinger', 'fourthfinger']) R.rot(`${sd}_${f}_A`, AX.X, 0.12);
       }
       // 개구리 목주머니: 빠르게 벌렁이고, 삼킨 뒤엔 크게 부푼다
       const gulp = m === 'done' ? Math.sin(Math.min(1, this.modeT / 0.5) * Math.PI) : 0;
       const throat = Math.max(0, Math.sin(this.t * 17)) * 0.08 + gulp * 0.45;
       R.rot('undermouth_A', AX.X, -throat);
       R.rot('undermouth_B', AX.X, -throat * 0.6);
-      this.body.position.y = this.state === 'act' ? -this.crouchK * 0.08 + gulp * 0.04 : this.body.position.y;
+      // 네 발이 바닥에 닿도록 몸 높이를 맞춘다
+      // 뒷발(발끝)로 높이를 정하고, 앞발은 손끝이 땅에 닿을 때까지 팔 각도를 조금씩 고친다
+      const foot = footFloor(this.M, ['L_toe', 'R_toe'], this.root, this.body, 0.03);
+      this.footOff = damp(this.footOff ?? foot, foot, 12, dt);
+      const hand = footFloor(this.M, ['L_secondfinger_C', 'R_secondfinger_C', 'L_thirdfinger_C', 'R_thirdfinger_C'], this.root, this.body, 0.02);
+      this.armFix = THREE.MathUtils.clamp((this.armFix ?? 0) + (hand - foot) * dt * 10, -1.4, 0.6);
+      if (this.state === 'act') this.body.position.y = -this.footOff + gulp * 0.04;
+      // 혀가 나오는 입 (턱 뼈 앞)
+      const jw = R.pos('jaw', _v4);
+      if (jw) this.mouth.copy(this.root.worldToLocal(jw)).add(_v3.set(0, 0.05, 0.25));
     }
     if (this.state !== 'act') return true;
     this.modeT += dt;
@@ -1816,7 +1857,7 @@ export class MaxElephant extends Shiki {
     const { world, fx, sfx, input: inp, game } = this.ctx;
     const c = this.landAt;
     const R = 3.2;
-    world.forEachTarget(c, R, (t, d) => {
+    world.forEachEnemy(c, R, (t, d) => {
       const k = Math.max(0, 1 - d / R);
       const out = _v.subVectors(t.center(_v2), c).setY(0).normalize();
       t.damage(60 + 200 * k, { type: 'impact', dir: out.clone(), color: '#c8c8ff' });
@@ -1846,7 +1887,7 @@ export class MaxElephant extends Shiki {
       fx.spawn(tip, _v.set(Math.cos(a) * sp * 0.6, rnd(4, 9), Math.sin(a) * sp * 0.6), water, rnd(0.03, 0.07), rnd(0.8, 1.4), 0.4, 9.8);
     }
     for (let i = 0; i < 10; i++) fx.fire.smoke(tip, _v.randomDirection().multiplyScalar(2).setY(2), { size0: 0.3, size1: 1.5, life: 1.6, shade: 1, lit: 0, opacity: 0.25, rise: -0.5, drag: 1.5 });
-    world.forEachTarget(this.landAt, 6, (t, d) => {
+    world.forEachEnemy(this.landAt, 6, (t, d) => {
       const out = _v.subVectors(t.center(_v2), this.landAt).setY(0).normalize();
       t.impulse?.(out.multiplyScalar(5 * (1 - d / 7)).add(_v3.set(0, 2, 0)), 2);
       t.damage(12, { type: 'impact', color: '#a8dcff' });
@@ -1906,7 +1947,7 @@ export class PiercingOx extends Shiki {
         P.addScaledVector(this.dir, step);
         this.dist += step;
         // 진로 위의 모든 것을 들이받는다
-        for (const t of world.targets()) {
+        for (const t of world.enemies()) {
           if (this.hit.has(t) || t.heldBy) continue;
           const c = t.center(_v);
           const rel = _v2.subVectors(c, P).setY(0);
@@ -2897,7 +2938,7 @@ export class Mahoraga extends Shiki {
       return;
     }
     let hitAny = false;
-    for (const t of world.targets()) {
+    for (const t of world.enemies()) {
       if (t.heldBy || t === this.tgt) continue;
       const c = t.center(new THREE.Vector3());
       if (!inArc(c)) continue;

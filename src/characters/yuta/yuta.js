@@ -28,7 +28,7 @@ const LOVE = new THREE.Color(0xff5ab0);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const ease = (k) => k * k * (3 - 2 * k);
 
-export const YUTA_MODELS = ['wpn_yuta_sword', 'wpn_yuta_sheath', 'curse_rika'];
+export const YUTA_MODELS = ['wpn_yuta_sword', 'wpn_yuta_sheath', 'curse_rika', 'item_megaphone'];
 
 // ───────────────── 카타나 ─────────────────
 function swordMesh(color = null) {
@@ -150,6 +150,104 @@ class Katana {
     this.ctx.scene.remove(this.group, this.trailMesh);
     this.trailMesh.geometry.dispose();
     this.trailMesh.material.dispose();
+  }
+}
+
+// ───────────────── 주언 확성기 ─────────────────
+//  모델: 손잡이가 아래(원점 = 손잡이 끝), 나팔이 -Z, 입에 대는 곳이 +Z (원래 크기 약 8.7)
+//  외친 손에 쥐어진다: 손잡이를 쥐고 나팔은 손끝(컨트롤러는 가리키는) 방향
+const MEGA_S = 0.046;
+class Megaphone {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.g = new THREE.Group();
+    this.g.visible = false;
+    this.t = 0;
+    this.on = 0;
+    ctx.scene.add(this.g);
+  }
+
+  _build() {
+    if (this.inner || !getModel('item_megaphone')) return !!this.inner;
+    const m = getModel('item_megaphone').clone(true);
+    const meshes = [];
+    m.traverse((o) => o.isMesh && meshes.push(o));
+    meshes.forEach((o) => {
+      const src = o.material;
+      o.material = new THREE.MeshToonMaterial({ color: src.color ?? 0xffffff, map: src.map ?? null });
+      o.castShadow = true;
+      const ol = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ color: 0x060606, side: THREE.BackSide }));
+      ol.scale.setScalar(1.03);
+      o.add(ol);
+    });
+    m.scale.setScalar(MEGA_S);
+    // 손잡이 가운데가 원점(손바닥)에 오게
+    m.position.set(0, -1.8 * MEGA_S, 0);
+    this.inner = m;
+    this.g.add(m);
+    return true;
+  }
+
+  /** 손(side)에 쥐고 dur 초 동안 외친다 */
+  shout(side = 'right', dur = 1.3) {
+    if (!this._build()) return false;
+    this.side = side;
+    this.t = dur;
+    return true;
+  }
+
+  /** 나팔 끝 위치 */
+  bell(out = new THREE.Vector3()) {
+    this.g.updateMatrixWorld(true);
+    return out.set(0, 3.8 * MEGA_S, -3.8 * MEGA_S).applyMatrix4(this.g.matrixWorld);
+  }
+
+  update(dt) {
+    this.t -= dt;
+    this.on = THREE.MathUtils.clamp(this.on + (this.t > 0 ? dt * 10 : -dt * 6), 0, 1);
+    this.g.visible = this.on > 0.01;
+    if (!this.g.visible) return;
+    const inp = this.ctx.input;
+    const h = inp[this.side ?? 'right'];
+    // 손에 쥔다: 나팔 축 = 손끝 방향(컨트롤러·데스크톱은 가리키는 방향), 손잡이는 아래로
+    const fwd = _v.copy(h.source === 'hand' ? h.fingersDir : h.dir);
+    if (!h.active || fwd.lengthSq() < 1e-4) fwd.copy(inp.headDir);
+    fwd.normalize();
+    const up = _v2.set(0, 1, 0).addScaledVector(fwd, -fwd.y);
+    if (up.lengthSq() < 1e-4) up.set(0, 0, 1);
+    up.normalize();
+    const x = _v3.crossVectors(up, fwd.clone().negate()).normalize();
+    this.g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, up, fwd.clone().negate()));
+    this.g.position.copy(h.active ? h.palm : _v.copy(inp.head).add(_v2.set(0.2, -0.3, -0.3).applyQuaternion(inp.headQuat)));
+    const e = this.on * this.on * (3 - 2 * this.on);
+    this.g.scale.setScalar(Math.max(0.01, e) * (1 + Math.max(0, this.t - 1.0) * 0.6)); // 외치는 순간 들썩
+  }
+
+  /** 나팔 앞에서 퍼지는 소리 고리 */
+  rings() {
+    const fx = this.ctx.fx;
+    const inp = this.ctx.input;
+    this.update(0);
+    const from = this.bell(new THREE.Vector3());
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.g.quaternion);
+    const q = this.g.quaternion.clone();
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.012, 6, 40), new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+      ring.quaternion.copy(q);
+      ring.visible = false;
+      fx.addTransient(ring, 0.9 + i * 0.15, (k, dt) => {
+        const kk = Math.max(0, (k * (0.9 + i * 0.15) - i * 0.15) / 0.9);
+        ring.visible = kk > 0;
+        ring.position.copy(from).addScaledVector(dir, kk * 6);
+        ring.scale.setScalar(1 + kk * 7);
+        ring.material.opacity = 0.9 * (1 - kk);
+        void dt;
+      }, () => ring.geometry.dispose());
+    }
+  }
+
+  dispose() {
+    this.ctx.scene.remove(this.g);
   }
 }
 
@@ -614,6 +712,7 @@ export class Yuta extends Caster {
     this.charge = { on: false, t: 0, s: null };
     this._keys = {};
     this.mouthCover = 0;
+    this.mega = new Megaphone(ctx);
     this.shell = new ShellDomain(ctx, {
       radius: 18,
       wall: `vec3 n = normalize(vP);
@@ -681,7 +780,7 @@ export class Yuta extends Caster {
         { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '주먹을 쥐면 칼이 쥐어진다 → 휘둘러 벤다 (칼끝이 빠를수록 깊게)\n아주 세게 휘두르면 칼날의 주력이 터져 검기가 날아간다 · 손을 펴면 칼을 거둔다' },
         { head: '리카 현현', demo: 'yuta.rika', color: '#c8a0ff', text: '왼손 주먹(반지)을 입술에 0.5초 → 리카 완전현현, 곁에서 싸운다 (1분)\n왼손 검지로 적을 가리키면 그 적에게 · 다시 하면 돌려보낸다' },
         { head: '순애빔', demo: 'yuta.beam', color: '#ff7ac0', text: '리카 완전현현 중에: 두 손바닥을 마주 보게 모았다가 앞으로 밀기\n리카의 입에서 주력의 고출력 지향 방출 (오래 모을수록 굵다)' },
-        { head: '주언 「動くな」', demo: 'yuta.speech', color: '#ffe080', text: '편 손바닥으로 입을 가렸다가 떼며 앞으로 내밀기 → 바라본 적들이 3초 동안 멈춘다' },
+        { head: '주언 「動くな」', demo: 'yuta.speech', color: '#ffe080', text: '편 손바닥으로 입을 가렸다가 떼며 앞으로 내밀기 → 그 손에 확성기가 쥐어지고 외친다\n바라본 적들이 3초 동안 멈춘다 (특급은 절반)' },
         { head: '반전술식', color: '#9fffb0', text: '가만히 있어도 체력이 천천히 차오른다' },
         { head: '영역전개 「真贋相愛」', demo: 'yuta.domain', color: '#ffd0a0', text: '손날을 펴 세우고 손등을 앞으로, 다른 손은 주먹을 쥐어 턱 앞에 1.2초\n(수인표처럼 편 손 옆에 만 손을 붙여도 OK)\n모방한 술식(해 · 주언 · 야곱의 사다리)이 깃든 칼이 날아든다 · 메뉴에서도 발동' },
       ];
@@ -732,6 +831,7 @@ export class Yuta extends Caster {
       this.cds.rika = 6;
     }
     this.list = this.list.filter((o) => o.update(dt));
+    this.mega.update(dt);
     if (this.runDomain(this.shell, dt)) this._domainTick(dt);
     this.aura.update(dt);
   }
@@ -748,7 +848,7 @@ export class Yuta extends Caster {
     const nearFace = h.palm.distanceTo(inp.head) < 0.2;
     // 칼: 주먹 (입 근처에서 반지에 입 맞출 땐 제외)
     let want = ctrl ? h.btn.grip && h.side === 'right' : desk ? h.side === 'right' && inp.keyDown('KeyE') : h.gesture === 'fist' && !(h.side === 'left' && nearFace);
-    if (this.charge.on) want = false;
+    if (this.charge.on || (this.mega.t > 0 && this.mega.side === h.side)) want = false;
     const speed = S.update(dt, desk ? { ...h, source: 'controller', dir: _v.copy(inp.headDir).add(_v2.set(0, 0.2, 0)).normalize() } : h, want);
     if (want && speed > 2.6) this._slash(S, speed);
     // 아주 세게 휘두르면 검기
@@ -783,9 +883,9 @@ export class Yuta extends Caster {
       if (cover) this.mouthCover = Math.min(1, this.mouthCover + dt * 3);
       else if (this.mouthCover > 0.6 && h.palm.distanceTo(mouth) > 0.18 && h.vel.dot(inp.headDir) > 0.8) {
         this.mouthCover = 0;
-        this.speech();
+        this.speech(h.side);
       } else if (!cover && h.palm.distanceTo(mouth) > 0.3) this.mouthCover = Math.max(0, this.mouthCover - dt * 2);
-    } else if (ctrl && h.side === 'right' && h.pressed('a')) this.speech();
+    } else if (ctrl && h.side === 'right' && h.pressed('a')) this.speech('right');
   }
 
   _slash(S, speed) {
@@ -858,12 +958,14 @@ export class Yuta extends Caster {
     this.ctx.ui.manga({ top: '完全顕現', main: '里香', ruby: 'りか', color: '#c8a0ff', big: true });
   }
 
-  speech() {
+  speech(side = 'right') {
     if ((this.cds.speech ?? 0) > 0 || !this.spend(20)) return;
     this.cds.speech = 4;
     const { input: inp, world, ui, fx, sfx } = this.ctx;
     ui.manga({ main: '動くな', ruby: 'うごくな', color: '#ffe080' });
     sfx.play('chant', { vol: 0.9, rate: 0.8 });
+    // 이누마키의 주언 — 확성기를 입에 대고 외친다
+    if (this.mega.shout(side, 1.3)) this.mega.rings();
     fx.shockwave(_v.copy(inp.head).setY(0.05), 0xffe080, 6, 0.5, { opacity: 0.4 });
     let n = 0;
     for (const t of world.enemies()) {
@@ -1001,6 +1103,7 @@ export class Yuta extends Caster {
     this.cancelDomain();
     this.shell.dispose?.();
     this.rika?.dispose();
+    this.mega.dispose();
     if (this.swords) for (const s of ['left', 'right']) this.swords[s].dispose();
     if (this.charge.s) this.ctx.scene.remove(this.charge.s);
     for (const o of this.list) o.g && this.ctx.scene.remove(o.g);

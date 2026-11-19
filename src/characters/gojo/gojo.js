@@ -97,7 +97,7 @@ export class Gojo {
         { head: '술식반전 「赫」 — 척력', demo: 'gojo.red', color: '#ff7a7a', text: '검지만 펴서 충전 → 앞으로 찌르거나 손을 펴면 발사' },
         { head: '창 ↔ 혁 전환 · 취소', demo: 'gojo.switch', color: '#ffffff', text: '창 상태에서 검지만 → 혁 / 혁 상태에서 검지+중지 → 창 · 주먹을 쥐면 사라짐' },
         { head: '허식 「茈」 — 소멸', demo: 'gojo.purple', color: '#c89bff', text: '수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 펴기\n→ 왼쪽의 창과 오른쪽의 혁이 다가와 합쳐져 茈 완성 → 손을 펴거나 앞으로 밀면 발사 · 주먹은 취소' },
-        { head: '영역전개 「無量空処」', demo: 'gojo.domain', color: '#e8f0ff', text: '검지·중지만 펴서 얼굴 앞에 세우고 6초 유지 (1초째부터 영창)\n전개 중 같은 자세 1.5초 → 해제 · 설정에서 손동작 끄기 / 메뉴에서 발동' },
+        { head: '영역전개 「無量空処」', demo: 'gojo.domain', color: '#e8f0ff', text: '검지·중지를 꼬아서 얼굴 앞에 세우고 6초 유지 (수인표 · 1초째부터 영창)\n전개 중 같은 자세 1.5초 → 해제 · 설정에서 손동작 끄기 / 메뉴에서 발동' },
         { head: '무하한 · 육안 · 잡기 · 흑섬', demo: 'gojo.infinity', color: '#9fe8ff', text: '무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 0.5초 가리기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률' },
       ];
     }
@@ -182,11 +182,10 @@ export class Gojo {
     const outward = h.dir.dot(_v) > 0.25;
     const nearFace = h.palm.distanceTo(inp.head) < 0.42;
     // 영역전개 수인 (설정에서 끌 수 있음)
-    //  · 검지·중지만 펴서(또는 꼬아서) 얼굴 앞에 세우고 6초 유지 — 1초째부터 영창 음성
+    //  · 검지·중지를 꼬아서 얼굴 앞에 세우고 6초 유지 — 1초째부터 영창 음성
     const inFront = _v.dot(_v3.copy(inp.headDir).setY(0).normalize()) > 0.2;
     if (this.ctx.settings.domainGesture && nearFace && inFront) {
-      if (g === 'crossed' && h.dir.y > 0.3) I.sign = 1;
-      else if (g === 'two' && h.dir.y > 0.6) I.sign = 1;
+      if (g === 'crossed' && h.dir.y > 0.3) I.sign = 1; // 수인표: 검지·중지를 꼬아 세운다
     }
     // 창: 두 손가락으로 앞을 가리키고 0.2초 (얼굴 근처·위를 가리키면 무시)
     I.blue = g === 'two' && gt >= 0.2 && outward && !nearFace && h.dir.y < 0.6 && dist > 0.3;

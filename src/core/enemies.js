@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { Dummy } from './dummy.js';
 import { GiantScissors } from '../characters/geto/vfx.js';
+import { TransfiguredWorm } from './transfigured.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -400,6 +401,28 @@ const M_TOUCH = {
   },
   fist: { L: 0.3, R: 0 },
 };
+const M_LAUNCH = {
+  name: '개조인간 발사', range: [2.2, 12], cd: 6, w: 1.6, dur: 1.1,
+  pose: (T, e, k) => {
+    // 입에서 개조인간을 끄집어내 → 앞으로 던진다
+    const pull = sm(0, 0.35, k) * (1 - sm(0.45, 0.6, k));
+    const throwK = sm(0.45, 0.6, k) * (1 - sm(0.8, 1, k));
+    T.shR = [-2.0 * pull - 1.5 * throwK, 0, 0.5 * pull];
+    T.elR = [-2.0 * pull - 0.2 * throwK, 0, 0];
+    T.head[0] += -0.25 * pull;
+    T.chest[0] += -0.15 * pull + 0.35 * throwK;
+  },
+  tick: (e, k, m) => {
+    if (!m.hit && k > 0.52) {
+      m.hit = true;
+      const from = handPos(e, 'R', new THREE.Vector3()).addScaledVector(fwdOf(e, _v2), 0.3);
+      const w = new TransfiguredWorm(e.world.ctx, from, { owner: 'enemy', dir: fwdOf(e, new THREE.Vector3()).add(_v.set(0, 0.25, 0)), src: e, dmg: e.dmg(18), length: 3.0 * e.scale, speed: 10 });
+      if (w.ok) e.fxs.push(w);
+      e.world.ctx.sfx.whoosh(from, 0.8, 0.8);
+    }
+  },
+  fist: { L: 0.3, R: 0.6 },
+};
 
 // 죠고: 불
 const J_FIREBALL = {
@@ -551,7 +574,7 @@ const K_SLASH = {
 // 기술 묶음 · 버릇
 const KITS = {
   bagmask: { moves: [JAB, CROSS, HOOK, KICK, COMBO], stance: 'boxer', keep: [0, 1.0] },
-  mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH], stance: 'loose', keep: [0, 1.4] },
+  mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH, M_LAUNCH], stance: 'loose', keep: [0, 1.4] },
   jogo: { moves: [J_FIREBALL, J_ERUPT, J_INSECTS, J_FLAME], stance: 'volcano', keep: [3.5, 8] },
   fingerBearer: { moves: [COMBO, SLAM, LUNGE, KICK], stance: 'beast', keep: [0, 1.1] },
   kuchisake: { moves: [K_SNIP, K_SLASH, LUNGE], stance: 'creep', keep: [0, 1.3] },

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
+import { TransfiguredWorm } from '../../core/transfigured.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -351,6 +352,7 @@ export class Mahito extends Caster {
         { head: '칼날 팔', demo: 'mahito.blade', color: '#e8e2d8', text: '손날을 세운 채(손바닥을 옆으로) 0.35초 → 손이 칼날로 바뀐다 → 휘둘러 베기\n주먹을 쥐거나 다른 손 모양을 하면 되돌아온다' },
         { head: '드릴 팔', demo: 'mahito.drill', color: '#c8c0bc', text: '주먹을 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르면 꿰뚫는다' },
         { head: '늘어나는 팔', demo: 'mahito.stretch', color: '#c8c0bc', text: '검지로 앞을 빠르게 찌르면 팔이 7m까지 늘어나 때리고 끌어당긴다' },
+        { head: '개조인간 발사', demo: 'mahito.launch', color: '#c8c4bc', text: '주먹을 입에 0.25초 (몸속의 개조인간을 꺼낸다) → 앞으로 던지면\n벌레 같은 개조인간이 몸을 늘이며 날아가 바라본 적을 물어뜯는다' },
         { head: '다중혼 「撥体」', demo: 'mahito.repel', color: '#b8a8a4', text: '두 손바닥을 가슴 앞에서 맞대 0.4초 → 두 손을 앞으로 밀면 영혼 덩어리가 튀어나간다' },
         { head: '영역전개 「自閉円頓裹」', demo: 'mahito.domain', color: '#9fd8ff', text: '두 손 검지 끝을 맞대고 엄지 끝도 맞대 손가락을 위로 (마름모) 1.2초\n안의 모든 영혼에 무위전변이 필중 · 메뉴에서도 발동' },
       ];
@@ -359,12 +361,12 @@ export class Mahito extends Caster {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
         { head: '무위전변', color: '#7ad8ff', text: 'E: 1.6m 안의 조준한 대상을 만진다' },
-        { head: '몸 변형', color: '#e8e2d8', text: '1 칼날 베기 · 2 드릴 찌르기 · 3 늘어나는 팔 · 4 다중혼 발체 · Q 1.2초 영역전개' },
+        { head: '몸 변형', color: '#e8e2d8', text: '1 칼날 베기 · 2 드릴 찌르기 · 3 늘어나는 팔 · 4 다중혼 발체 · 5 개조인간 발사 · Q 1.2초 영역전개' },
       ];
     }
     return [
       { head: '무위전변', color: '#7ad8ff', text: '그립을 쥐지 않은 손을 대상에 대고 트리거' },
-      { head: '몸 변형', color: '#e8e2d8', text: '오른쪽 그립: 칼날 팔 (휘두르기) · 왼쪽 그립: 드릴 팔 (찌르기) · A: 늘어나는 팔 · 양쪽 그립을 모으고 밀기: 발체' },
+      { head: '몸 변형', color: '#e8e2d8', text: '오른쪽 그립: 칼날 팔 (휘두르기) · 왼쪽 그립: 드릴 팔 (찌르기) · A: 늘어나는 팔 · X: 개조인간 발사 · 양쪽 그립을 모으고 밀기: 발체' },
       { head: '영역전개', color: '#9fd8ff', text: '양쪽 스틱을 눌러 1.2초' },
     ];
   }
@@ -401,6 +403,7 @@ export class Mahito extends Caster {
       this.arms[s].update(dt, inp[s]);
     }
     this.effects = this.effects.filter((e) => e.update(dt));
+    this.worms = (this.worms ?? []).filter((w) => w.update(dt));
     this.twists = this.twists.filter((t) => t.update(dt));
     if (this.runDomain(this.shell, dt)) this._domainTick(dt);
     this.aura.update(dt);
@@ -419,7 +422,7 @@ export class Mahito extends Caster {
     const knife = ctrl ? h.side === 'right' && h.btn.grip : g === 'open' && Math.abs(h.palmNormal.y) < 0.55 && h.speed < 1.0;
     if (!F.form && this.held(h.side + 'blade', knife, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
     // 드릴: 주먹을 앞으로 겨눈다
-    const aimFist = ctrl ? h.side === 'left' && h.btn.grip : g === 'fist' && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0;
+    const aimFist = ctrl ? h.side === 'left' && h.btn.grip : g === 'fist' && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0 && h.palm.distanceTo(inp.head) > 0.22;
     if (!F.form && this.held(h.side + 'drill', aimFist, dt, ctrl ? 0.05 : 0.35)) F.set('drill');
     if (F.form && !F.k) this.aura.set(h.side, 0.6);
     // 휘두르기 / 찌르기
@@ -447,7 +450,44 @@ export class Mahito extends Caster {
     }
     if (this.held(h.side + 'touch', !!touching, dt, ctrl ? 0.05 : 0.2)) this.transfigure(touching, h);
     if (touching) this.aura.set(h.side, 0.3 + this.holdK(h.side + 'touch', 0.2) * 0.7);
-    void inp;
+    // 개조인간 발사: 주먹을 입에 대 0.25초 (몸속의 개조인간을 꺼낸다) → 앞으로 던진다
+    const mouth = _v.copy(inp.head).add(_v2.set(0, -0.09, 0)).addScaledVector(inp.headDir, 0.05);
+    const ak = h.side + 'pull';
+    if (ctrl) {
+      if (h.side === 'left' && h.pressed('a')) this.launchWorm(h.palm, inp.headDir);
+    } else {
+      if (this.held(ak, g === 'fist' && h.palm.distanceTo(mouth) < 0.14, dt, 0.25)) {
+        this.cds[ak + 'Armed'] = 1.5;
+        h.pulse?.(0.4, 40);
+        this.ctx.sfx.play('grab', { at: h.palm, vol: 0.5, rate: 1.4 });
+      }
+      if ((this.cds[ak + 'Armed'] ?? 0) > 0) {
+        this.cds[ak + 'Armed'] -= dt;
+        this.aura.set(h.side, 0.5);
+        if (Math.random() < 0.3) this.ctx.fx.spawn(h.palm, _v2.set(0, 0.2, 0), SOUL, 0.03, 0.3, 1, 0);
+        if (h.palm.distanceTo(mouth) > 0.2 && h.vel.dot(inp.headDir) > 2.0) {
+          this.cds[ak + 'Armed'] = 0;
+          this.launchWorm(h.palm, h.vel.clone().normalize().add(inp.headDir).normalize());
+        }
+      }
+    }
+  }
+
+  /** 개조인간을 쏜다 */
+  launchWorm(from, dir) {
+    if ((this.cds.worm ?? 0) > 0 || !this.spend(12)) return;
+    this.cds.worm = 0.6;
+    const inp = this.ctx.input;
+    const t = this.gazeTarget(inp.head, inp.headDir, 0.35, 25, false) ?? this.gazeTarget(from, dir, 0.4, 25, false);
+    const w = new TransfiguredWorm(this.ctx, from.clone().addScaledVector(dir, 0.15), { owner: 'player', target: t, dir, dmg: 70 });
+    if (!w.ok) {
+      this.energy += 12;
+      this.ctx.ui.callout('개조인간 모델을 불러오는 중…');
+      return;
+    }
+    (this.worms ??= []).push(w);
+    this.ctx.ui.manga({ main: '改造人間', ruby: 'かいぞうにんげん', color: '#c8c4bc', dur: 0.8 });
+    this.ctx.sfx.whoosh(from, 0.8, 0.9);
   }
 
   /** 영혼을 만졌다 */
@@ -617,6 +657,7 @@ export class Mahito extends Caster {
     }
     if (press('Digit3')) this._stretch(inp.right);
     if (press('Digit4')) this.bodyRepel();
+    if (press('Digit5')) this.launchWorm(inp.head.clone().addScaledVector(inp.headDir, 0.4).add(_v2.set(0.15, -0.2, 0)), inp.headDir.clone());
   }
 
   dispose() {
@@ -626,6 +667,7 @@ export class Mahito extends Caster {
       this.forms[s].dispose();
       this.arms[s].dispose();
     }
+    for (const w of this.worms ?? []) w.dispose();
     this.aura.dispose();
   }
 }

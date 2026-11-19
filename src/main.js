@@ -122,7 +122,7 @@ const loading = preload(['dummy', 'white_room', 'shrine']).then(() => {
   btnDesk0.disabled = false;
   // 적 주령 모델은 뒤에서 받는다 (받기 전에 부르면 더미 모양으로 나온다)
   preloadChars(ENEMY_MODELS);
-  preload(['wpn_yuta_sword', 'wpn_yuta_sheath', 'curse_rika']); // 유타 칼 · 리카
+  preload(['wpn_yuta_sword', 'wpn_yuta_sheath', 'curse_rika', 'item_megaphone', 'curse_transfigured']); // 유타 칼·리카·확성기 · 개조인간
 });
 
 // 폰트(한글·일본어)를 미리 받아둔다

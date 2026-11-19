@@ -40,6 +40,7 @@ export const CHAR_MODELS = {
   worm: { file: 'curse_worm' },
   dragon: { file: 'curse_rainbow_dragon' },
   inventory: { file: 'curse_inventory' },
+  transfigured: { file: 'curse_transfigured' }, // 개조인간 (마히토가 쏘는 것)
 };
 
 export function preloadChars(keys) {

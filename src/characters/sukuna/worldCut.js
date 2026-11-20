@@ -1,7 +1,7 @@
 // 세계를 가르는 해 — 차원 참격 연출
 //  ① 휘두른 자리에 세계를 가르는 참격 선(검은 칼날 + 흰 빛 테두리)이 화면을 가로지르고
-//  ② 그 선을 따라 파란 차원 균열이 벌어져 화면을 물들인다. 균열의 톱니 윤곽은 연한 하늘색으로 빛나며
-//     벌어질수록 두꺼워진다
+//  ② 그 선을 따라 파란 차원 균열이 한두 프레임 번쩍 벌어져 화면을 물들인다. 균열의 톱니 윤곽은
+//     연한 하늘색으로 빛나며 벌어질수록 두꺼워진다
 //  ③ 임팩트 프레임(히로아카식): 한두 프레임 동안 세상이 흑백으로 뒤집히고, 배경·물체가 하얗게
 //     번지며 중심에서 바깥으로 방사형으로 늘어진다 (색수차 테두리)  ← 이 순간 실제로 베인다
 //  ④ 가는 절단선만 남아 점선으로 흩어지고
@@ -17,16 +17,15 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 // 타임라인 (초)
 const T = {
-  blueIn: 0.06, // 파란 균열 띠 시작
-  open: 0.2, // 파란 균열이 거의 다 벌어지는 때
-  invert: 0.23, // 임팩트 프레임 = 실제 절단 순간
-  invertEnd: 0.28,
+  blueIn: 0.18, // 파란 균열 (딱 BLUE_FRAMES 프레임) → 바로 이어서 임팩트 프레임 = 실제 절단 순간
+  impactDur: 0.05, // 임팩트 프레임 길이
   lineEnd: 0.62, // 남은 절단선이 다 흩어짐
   split: 0.5, // 충격파 + 세계 어긋남
   heal: 6.5, // 제자리로 돌아오기 시작
   end: 7.1,
 };
 
+const BLUE_FRAMES = 2; // 파란 균열이 보이는 렌더 프레임 수 (주사율과 무관하게 한두 프레임만 번쩍)
 const LINE_DIST = 12; // 참격 선을 그리는 거리 (m)
 const SLAB = 1.6; // 단면을 붉게 채우는 깊이 (m)
 
@@ -593,39 +592,43 @@ export class WorldCut {
     const t = a.t;
     const { fx, sfx } = this.ctx;
     this.tintU.uT.value += dt;
-    // ①④ 참격 선: 순식간에 화면 끝까지 뻗고, 절단 뒤에는 가늘어지며 사라진다
-    const grow = 1 - Math.pow(1 - Math.min(1, t / 0.09), 3);
-    let thick = 0.55;
-    let op = 1;
-    if (t >= T.invertEnd) {
-      const k = Math.min(1, (t - T.invertEnd) / (T.lineEnd - T.invertEnd));
-      thick = 0.4 * (1 - k * 0.7);
-      op = 1 - k * k;
-    }
-    this.blade.scale.set(6 + 144 * grow, thick, 1);
-    this.blade.material.opacity = op;
-    this.blade.visible = t < T.lineEnd && !(t >= T.invert && t < T.invertEnd);
-    // ② 파란 차원 균열: 선에서부터 벌어져 화면을 물들인다. 벌어질수록 윤곽선이 두꺼워진다
-    const tintOn = t >= T.blueIn && t < T.invert;
-    this.tint.visible = this.tintEdge.visible = tintOn;
-    if (tintOn) {
-      const k = Math.min(1, (t - T.blueIn) / (T.open - T.blueIn));
-      const open = k * k * (3 - 2 * k);
-      this.tintU.uW.value = 0.004 + 0.56 * Math.pow(open, 1.4) + Math.max(0, t - T.open) * 0.6;
+    // ② 파란 차원 균열: 딱 BLUE_FRAMES 프레임. 첫 프레임은 반쯤, 마지막 프레임은 다 벌어져 화면을 덮는다
+    let tintOn = false;
+    if (a.blueF === undefined && t >= T.blueIn) a.blueF = 0;
+    if (a.blueF !== undefined && a.blueF < BLUE_FRAMES) {
+      a.blueF++;
+      tintOn = true;
+      const open = a.blueF / BLUE_FRAMES;
+      this.tintU.uW.value = 0.08 + 0.52 * open;
       this.tintU.uAmt.value = 1;
-      this.edgeU.uOW.value = 0.005 + open * 0.075;
-    }
+      this.edgeU.uOW.value = 0.02 + open * 0.06; // 벌어질수록 윤곽선이 두꺼워진다
+    } else if (a.blueF >= BLUE_FRAMES && a.impactT === undefined) a.impactT = t; // 균열 바로 다음 프레임부터 임팩트
+    this.tint.visible = this.tintEdge.visible = tintOn;
     // ③ 임팩트 프레임
-    const invOn = t >= T.invert && t < T.invertEnd;
+    const impEnd = a.impactT !== undefined ? a.impactT + T.impactDur : Infinity;
+    const invOn = a.impactT !== undefined && t < impEnd;
     this.impact.visible = invOn;
-    if (invOn) this.impactU.uK.value = 0.22 + ((t - T.invert) / (T.invertEnd - T.invert)) * 0.2;
-    if (!a.cut && t >= T.invert) {
+    if (invOn) this.impactU.uK.value = 0.22 + ((t - a.impactT) / T.impactDur) * 0.2;
+    if (!a.cut && a.impactT !== undefined) {
       a.cut = true;
       a.onCut?.();
       fx.flash(a.o.clone().addScaledVector(a.travel, 4), 0xffffff, 14, 0.35, 40);
       sfx.play('slash', { at: a.o, vol: 1, rate: 0.55 });
       sfx.play('black_flash', { vol: 0.5, rate: 0.7 });
     }
+    // ①④ 참격 선: 순식간에 화면 끝까지 뻗고, 절단 뒤에는 가늘어지며 사라진다
+    const grow = 1 - Math.pow(1 - Math.min(1, t / 0.09), 3);
+    let thick = 0.55;
+    let op = 1;
+    const fadeFrom = Math.min(impEnd, T.lineEnd - 0.1);
+    if (t >= fadeFrom) {
+      const k = Math.min(1, (t - fadeFrom) / (T.lineEnd - fadeFrom));
+      thick = 0.4 * (1 - k * 0.7);
+      op = 1 - k * k;
+    }
+    this.blade.scale.set(6 + 144 * grow, thick, 1);
+    this.blade.material.opacity = op;
+    this.blade.visible = t < T.lineEnd && !invOn;
     // ⑤⑥ 충격파 + 세계 어긋남
     if (!a.splitDone && t >= T.split) {
       a.splitDone = true;

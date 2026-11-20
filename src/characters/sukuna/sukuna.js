@@ -7,6 +7,12 @@
 //  · 흑섬 / 반전술식: 공통 시스템
 import * as THREE from 'three';
 import { SlashLines, makeCrescent, FireArrow } from './vfx.js';
+
+/** 세계를 가르는 해: PC(렌더 타깃 화면 효과 · 세계 어긋남) / 단독 기기(이전의 가벼운 연출). 설정이 없으면 기기로 정한다 */
+export const IS_STANDALONE = typeof navigator !== 'undefined' && /OculusBrowser|Quest|Pico|Wolvic|MobileVR/i.test(navigator.userAgent);
+export function worldCutPC(settings) {
+  return settings.worldCutPC ?? !IS_STANDALONE;
+}
 import { scorchTexture, emberTexture } from '../../core/toon.js';
 import { HandAura } from '../../core/handAura.js';
 import { MalevolentShrine } from './domainShrine.js';
@@ -687,11 +693,44 @@ export class Sukuna {
       }
       h.pulse?.(1, 250);
     };
-    this.worldCut.start({ o, travel, along, n, onCut: cut });
+    if (worldCutPC(this.ctx.settings)) this.worldCut.start({ o, travel, along, n, onCut: cut });
+    else {
+      // 단독(퀘스트 브라우저)용: 화면 너머로 뻗는 거대한 칼날 + 빛의 막 (렌더 타깃을 쓰지 않아 가볍다)
+      cut();
+      this._liteWorldCut(o, travel, along, n);
+    }
     sfx.slash(o, 0.65);
     sfx.whoosh(o, 0.8, 0.6);
     ui.manga({ top: '世界を断つ', main: '解', ruby: 'カイ', color: '#ffffff', sub: '세계를 가르는 참격' });
     h.pulse?.(0.5, 80);
+  }
+
+  /** 이전 연출: 휘두른 방향으로 화면을 가로지르는 거대한 칼날이 앞으로 뻗어 나가며 공간을 가른다 */
+  _liteWorldCut(o, travel, along, n) {
+    const { fx } = this.ctx;
+    for (let i = 0; i < 7; i++) {
+      const d = 2.5 + i * i * 1.6;
+      this.lines.add(_v.copy(o).addScaledVector(travel, d), along, n, 3 + d * 1.25, 0.012 + d * 0.004, 0.45 + i * 0.07, 0xffffff, 0.03);
+    }
+    const big = makeCrescent(1);
+    big.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(along, n, travel));
+    big.position.copy(o).addScaledVector(travel, 1.5);
+    fx.addTransient(big, 0.6, (k) => {
+      const d = 1.5 + k * 60;
+      big.position.copy(o).addScaledVector(travel, d);
+      big.scale.set(1 + d * 0.9, 1 + d * 0.07, 1 + d * 0.2);
+      big.children.forEach((m, j) => (m.material.opacity = (j ? 0.6 : 1) * (k < 0.7 ? 1 : (1 - k) / 0.3)));
+    }, () => big.children.forEach((m) => m.material.dispose()));
+    this._sheetGeo ??= new THREE.PlaneGeometry(1, 1);
+    const sheet = new THREE.Mesh(this._sheetGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    sheet.position.copy(o).addScaledVector(travel, 45);
+    sheet.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(travel, along, n));
+    sheet.scale.set(90, 120, 1);
+    fx.addTransient(sheet, 0.35, (k) => {
+      sheet.material.opacity = 0.18 * Math.sin(k * Math.PI);
+    }, () => sheet.material.dispose());
+    fx.flash(o, 0xffffff, 12, 0.3, 30);
+    this.ctx.sfx.rumble(1.2, 0.5);
   }
 
   _scar(pos, dir, width, length, color = 0x1a0000) {

@@ -1,5 +1,8 @@
 // VR UI: 타이틀(메인 메뉴) · 옵션 패널 · 손목 HUD · 만화풍 기술명 · 데미지 숫자 · 피격 효과
 import { CTRL_HELP } from './ctrlHands.js';
+import { worldCutPC } from '../characters/sukuna/sukuna.js';
+// 기본값이 기기에 따라 정해지는 설정
+const optVal = (S, k) => (k === 'worldCutPC' ? worldCutPC(S) : !!S[k]);
 import * as THREE from 'three';
 import { CHARACTERS } from '../characters/index.js';
 import { BACKGROUNDS } from './env/backgrounds.js';
@@ -376,10 +379,10 @@ export class UI {
         ['ctrlHands', '컨트롤러 손 모양'], ['cooldowns', '스킬 쿨타임'],
       ];
       const cid = this.ctx.character?.id;
-      if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건']);
+      if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건'], ['worldCutPC', '세계참 PC 연출']);
       if (cid === 'megumi') toggles.push(['mahoragaTamed', '마허라 조복됨'], ['dogTotality', '옥견 혼 (白 파괴됨)'], ['mahoragaRitual', '마허라 소환 연출']);
       g.fillText('옵션', 50, 345);
-      toggles.forEach(([k, l], i) => p.button(50 + (i % 4) * 330, 365 + Math.floor(i / 4) * 100, 315, 86, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 25, accent: '#2e6a9a' }));
+      toggles.forEach(([k, l], i) => p.button(50 + (i % 4) * 330, 365 + Math.floor(i / 4) * 100, 315, 86, `${l}  ${optVal(S, k) ? 'ON' : 'OFF'}`, 'opt:' + k, { active: optVal(S, k), size: 25, accent: '#2e6a9a' }));
       if (this.ctx.character?.castDomain) p.button(910, 735, 440, 90, `${this.ctx.character.domainLabel ?? '영역전개'} 발동`, 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
       g.fillStyle = '#ffffff';
       g.font = `700 32px ${FONT}`;
@@ -526,7 +529,7 @@ export class UI {
       ctx.character?.castDomain?.();
     }
     else if (k === 'opt') {
-      S[v] = !S[v];
+      S[v] = !optVal(S, v);
       if (v === 'locomotion') ctx.input.locomotion = S.locomotion;
       if (v === 'shadows') ctx.env.applyShadows();
     } else if (k === 'h') {

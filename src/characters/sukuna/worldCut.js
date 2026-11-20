@@ -5,7 +5,7 @@
 //  ③ 임팩트 프레임(히로아카식): 한두 프레임 동안 세상이 흑백으로 뒤집히고, 배경·물체가 하얗게
 //     번지며 중심에서 바깥으로 방사형으로 늘어진다 (색수차 테두리)  ← 이 순간 실제로 베인다
 //  ④ 가는 절단선만 남아 점선으로 흩어지고
-//  ⑤ 절단 평면을 따라 동심원 충격파 고리가 퍼지며
+//  ⑤ 절단 평면을 따라 투명한 충격파가 퍼지며 뒤 배경을 일그러뜨리고(굴절), 지나간 바닥에서 먼지가 인다
 //  ⑥ 절단면 위쪽 세계(배경 건물·벽)가 통째로 미끄러져 어긋난다. 잘린 단면은 붉게 빛난다
 //     잠시 뒤 어긋난 세계는 제자리로 돌아온다
 import * as THREE from 'three';
@@ -142,6 +142,45 @@ void main() {
   float k = uK * (0.35 + 1.1 * pow(n1(ang * 9.0 + uSeed), 2.0) + 0.3 * n1(ang * 41.0 + uSeed));
   vec3 col = vec3(smear(uv, d, k * 1.05), smear(uv, d, k), smear(uv, d, k * 0.95));
   gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+// ⑤ 충격파: 절단 평면을 따라 납작하게 퍼지는 투명한 압력 껍질. 껍질을 비스듬히 볼수록(가장자리)
+//    뒤 배경이 바깥쪽으로 굴절돼 일그러진다 (아지랑이). 앞쪽 가장자리엔 응결된 듯 옅은 흰빛
+const shockVert = /* glsl */ `
+varying vec3 vN;
+varying vec3 vV;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vN = normalize(normalMatrix * normal);
+  vV = -mv.xyz;
+  gl_Position = projectionMatrix * mv;
+}
+`;
+const shockFrag = /* glsl */ `
+uniform sampler2D uTex;
+uniform vec2 uRes, uVp;
+uniform float uStr, uSheen;
+varying vec3 vN;
+varying vec3 vV;
+void main() {
+  vec3 N = normalize(vN);
+  if (!gl_FrontFacing) N = -N;
+  float f = 1.0 - abs(dot(N, normalize(vV)));
+  float prof = pow(f, 3.0);
+  float a = smoothstep(0.004, 0.06, prof * uStr * 40.0);
+  if (a < 0.01) discard;
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 off = N.xy * uVp * 2.0 * uStr * prof;
+  vec3 col;
+  col.r = texture2D(uTex, uv + off * 1.04).r;
+  col.g = texture2D(uTex, uv + off).g;
+  col.b = texture2D(uTex, uv + off * 0.96).b;
+  // 압축된 공기의 옅은 흰 막 (가장자리일수록)
+  col = mix(col, vec3(1.0), uSheen * pow(f, 6.0));
+  gl_FragColor = vec4(col, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }
 `;
 
@@ -450,43 +489,34 @@ export class WorldCut {
     this.impact.frustumCulled = false;
     this.impact.visible = false;
     ctx.camera.add(this.tint, this.tintEdge, this.impact);
-    this._preRender = () => this._renderImpactSource();
+    this._preRender = () => this._renderSources();
     (ctx.beforeRender ??= []).push(this._preRender);
-    // ⑤ 충격파 고리 (관 모양 고리 + 빨강·청록으로 어긋난 테두리)
-    this.ringGeo = new THREE.TorusGeometry(1, 0.03, 10, 128);
-    this.rings = [];
-    const specs = [
-      { delay: 0, R: 46, thick: 0.45, dur: 0.85 },
-      { delay: 0.04, R: 30, thick: 0.6, dur: 0.75 },
-      { delay: 0.1, R: 70, thick: 0.35, dur: 1.0 },
-      { delay: 0.16, R: 20, thick: 0.8, dur: 0.7 },
-    ];
-    for (const s of specs) {
-      const g = new THREE.Group();
-      const mk = (color, sc, op, order) => {
-        const m = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, fog: false }));
-        m.scale.set(sc, sc, 1);
-        m.userData.op = op;
-        m.renderOrder = order;
-        g.add(m);
-        return m;
-      };
-      // 색수차: 안쪽 테두리는 빨강, 바깥은 청록이 살짝 비어져 나온다
-      const red = mk(0xff2a4a, 0.975, 0.28, 20);
-      const cyan = mk(0x22d8ff, 1.025, 0.28, 20);
-      const main = mk(0x4a4a50, 1, 0.5, 21);
-      g.visible = false;
-      ctx.scene.add(g);
-      this.rings.push({ g, main, parts: [main, red, cyan], ...s });
-    }
+    // ⑤ 충격파 껍질: 본 파동 + 약한 뒤따르는 파동. 배경은 반 해상도 렌더 타깃에서 가져와 굴절시킨다
+    this.shockRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true });
+    this.shockGeo = new THREE.SphereGeometry(1, 64, 32);
+    this.shocks = [
+      { delay: 0, R: 75, dur: 1.15, str: 0.06, sheen: 0.22 },
+      { delay: 0.14, R: 50, dur: 1.0, str: 0.03, sheen: 0.1 },
+    ].map((sp) => {
+      const u = { uTex: { value: this.shockRT.texture }, uRes: this.impactU.uRes, uVp: this.impactU.uVp, uStr: { value: 0 }, uSheen: { value: 0 } };
+      const m = new THREE.Mesh(this.shockGeo, new THREE.ShaderMaterial({ vertexShader: shockVert, fragmentShader: shockFrag, uniforms: u, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      m.renderOrder = 30;
+      m.frustumCulled = false;
+      m.visible = false;
+      ctx.scene.add(m);
+      return { m, u, ...sp };
+    });
+    this._chipCol = new THREE.Color(0x3a3634);
   }
 
-  // 임팩트 프레임이 켜진 프레임에만: 장면을 렌더 타깃에 한 번 더 그린다 (XR 이면 두 눈이 나란히)
-  _renderImpactSource() {
-    if (!this.impact.visible) return;
+  // 화면 효과가 켜진 프레임에만 장면을 렌더 타깃에 한 번 더 그린다 (XR 이면 두 눈이 나란히)
+  //  · 임팩트 프레임: 원래 해상도 (윤곽을 또렷하게)
+  //  · 충격파: 반 해상도 (굴절된 배경은 살짝 흐린 편이 아지랑이처럼 자연스럽다)
+  _renderSources() {
+    const shockOn = this.shocks.some((x) => x.m.visible);
+    if (!this.impact.visible && !shockOn) return;
     const r = this.ctx.renderer;
     r.getDrawingBufferSize(this._size);
-    if (this.rt.width !== this._size.x || this.rt.height !== this._size.y) this.rt.setSize(this._size.x, this._size.y);
     this.impactU.uRes.value.copy(this._size);
     // ndc 1 만큼이 uv 로 얼마인지 (XR: 한 눈이 화면 절반)
     const vp = this.impactU.uVp.value.set(0.5, 0.5);
@@ -494,12 +524,23 @@ export class WorldCut {
       const v = r.xr.getCamera().cameras[0]?.viewport;
       if (v) vp.set((v.z / this._size.x) * 0.5, (v.w / this._size.y) * 0.5);
     }
-    this.impact.visible = false;
+    if (this.impact.visible) {
+      this._renderInto(this.rt, this._size.x, this._size.y, [this.impact]);
+    } else if (shockOn) {
+      this._renderInto(this.shockRT, Math.max(1, Math.round(this._size.x / 2)), Math.max(1, Math.round(this._size.y / 2)), this.shocks.map((x) => x.m));
+    }
+  }
+
+  _renderInto(rt, w, h, hide) {
+    const r = this.ctx.renderer;
+    if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+    const vis = hide.map((m) => m.visible);
+    for (const m of hide) m.visible = false;
     const prev = r.getRenderTarget();
-    r.setRenderTarget(this.rt);
+    r.setRenderTarget(rt);
     r.render(this.ctx.scene, this.ctx.camera);
     r.setRenderTarget(prev);
-    this.impact.visible = true;
+    hide.forEach((m, i) => (m.visible = vis[i]));
   }
 
   /**
@@ -539,7 +580,7 @@ export class WorldCut {
     this.active = null;
     this.blade.visible = false;
     this.tint.visible = this.tintEdge.visible = this.impact.visible = false;
-    for (const r of this.rings) r.g.visible = false;
+    for (const x of this.shocks) x.m.visible = false;
     this.split?.dispose();
     this.split = null;
   }
@@ -551,7 +592,6 @@ export class WorldCut {
     a.t += dt;
     const t = a.t;
     const { fx, sfx } = this.ctx;
-    const bright = fx.brightBg;
     this.tintU.uT.value += dt;
     // ①④ 참격 선: 순식간에 화면 끝까지 뻗고, 절단 뒤에는 가늘어지며 사라진다
     const grow = 1 - Math.pow(1 - Math.min(1, t / 0.09), 3);
@@ -586,45 +626,85 @@ export class WorldCut {
       sfx.play('slash', { at: a.o, vol: 1, rate: 0.55 });
       sfx.play('black_flash', { vol: 0.5, rate: 0.7 });
     }
-    // ⑤⑥ 충격파 고리 + 세계 어긋남
+    // ⑤⑥ 충격파 + 세계 어긋남
     if (!a.splitDone && t >= T.split) {
       a.splitDone = true;
       this.split?.activate();
-      const center = a.o.clone().addScaledVector(a.travel, 16);
-      _q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), a.n);
-      const head = this.ctx.input.head;
-      for (const r of this.rings) {
-        _v.subVectors(head, center);
-        r.dCam = _v.addScaledVector(a.nUp, -_v.dot(a.nUp)).length(); // 고리 중심에서 머리까지 (평면 위로 잰 거리)
-        r.g.position.copy(center);
-        r.g.quaternion.copy(_q);
-        r.g.visible = false;
+      // 충격파 중심: 정면 14m 의 절단 평면 위. 평면 방향으로 납작한 껍질
+      a.center = a.o.clone().addScaledVector(a.travel, 14);
+      a.e1 = a.travelH.clone();
+      a.e2 = new THREE.Vector3().crossVectors(a.nUp, a.e1).normalize();
+      a.e1.crossVectors(a.e2, a.nUp).normalize(); // 평면 안의 정면
+      a.dustR = 0;
+      _q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), a.nUp);
+      for (const x of this.shocks) {
+        x.m.position.copy(a.center);
+        x.m.quaternion.copy(_q);
       }
-      sfx.play('wind_burst', { vol: 0.9, rate: 0.6 });
-      sfx.rumble(1.4, 0.6);
+      sfx.explosion(a.center, 1.6);
+      sfx.play('wind_burst', { vol: 0.9, rate: 0.55 });
+      sfx.rumble(1.6, 0.7);
+      this.ctx.input.left?.pulse?.(0.7, 220);
+      this.ctx.input.right?.pulse?.(0.9, 260);
     }
     if (a.splitDone) {
       const ts = t - T.split;
       let any = false;
-      for (const r of this.rings) {
-        const k = (ts - r.delay) / r.dur;
+      for (const x of this.shocks) {
+        const k = (ts - x.delay) / x.dur;
         if (k < 0 || k >= 1) {
-          r.g.visible = false;
-          if (k < 1) any = true;
+          x.m.visible = false;
+          if (k < 0) any = true;
           continue;
         }
         any = true;
-        r.g.visible = true;
-        const e = 1 - Math.pow(1 - k, 3);
-        const rad = 1.5 + e * r.R;
-        r.g.scale.set(rad, rad, rad * r.thick);
-        // 고리가 머리 곁을 지나갈 때는 시야를 덮지 않게 옅게
-        const near = THREE.MathUtils.smoothstep(Math.abs(rad - r.dCam), 1.5, 9);
-        const fade = Math.pow(1 - k, 1.4) * (0.2 + 0.8 * near);
-        r.main.material.color.setHex(bright ? 0x4a4a50 : 0xdfe8ff);
-        for (const p of r.parts) p.material.opacity = p.userData.op * fade;
+        x.m.visible = true;
+        // 처음엔 아주 빠르게, 퍼질수록 느려진다 (폭풍파 감속)
+        const e = 1 - Math.pow(1 - k, 2.6);
+        const rad = 0.5 + e * x.R;
+        x.m.scale.set(rad, rad, rad * 0.32);
+        const fade = Math.pow(1 - k, 1.6) * Math.min(1, k * 12);
+        x.u.uStr.value = x.str * fade;
+        x.u.uSheen.value = x.sheen * fade;
+        if (x === this.shocks[0]) this._dust(a, rad, dt, fade);
       }
       if (!any && t > T.lineEnd) this.active = null;
+    }
+  }
+
+  // 충격파 앞머리가 지나간 바닥에서 먼지가 일고, 절단 높이에서 잔 파편이 튄다
+  _dust(a, rad, dt, fade) {
+    const fx = this.ctx.fx;
+    const head = this.ctx.input.head;
+    const from = a.dustR;
+    a.dustR = rad;
+    if (fade < 0.08 || rad <= from) return;
+    const n = Math.min(14, Math.ceil((rad - from) * 1.6));
+    for (let i = 0; i < n; i++) {
+      const th = (Math.random() - 0.5) * Math.PI * 1.7; // 정면 쪽 위주
+      const r = from + Math.random() * (rad - from);
+      const dir = _v.copy(a.e1).multiplyScalar(Math.cos(th)).addScaledVector(a.e2, Math.sin(th));
+      const p = a.center.clone().addScaledVector(dir, r);
+      const dh = Math.hypot(p.x - head.x, p.z - head.z);
+      if (dh < 2.5 || dh > 70) continue;
+      const B = this.ctx.env.bounds;
+      if (B && (p.x < B.minX - 1 || p.x > B.maxX + 1 || p.z < B.minZ - 1 || p.z > B.maxZ + 1)) continue; // 벽 너머엔 먼지가 없다
+      const out = dir.clone().setY(0).normalize();
+      // 바닥을 쓸며 낮게 퍼지는 먼지 (실사풍 연기 빌보드)
+      if (Math.random() < 0.55) {
+        const g = p.clone().setY(0.2 + Math.random() * 0.25);
+        const v = out.clone().multiplyScalar(2.5 + Math.random() * 4).add(new THREE.Vector3(0, 0.2 + Math.random() * 0.6, 0));
+        const sz = 1 + dh * 0.02;
+        fx.fire.smoke(g, v, {
+          size0: 0.35 * sz, size1: (1.6 + Math.random() * 1.6) * sz, life: 1.6 + Math.random() * 1.2,
+          shade: 0.65 + Math.random() * 0.25, opacity: 0.26, rise: 0.25, drag: 2.2,
+        });
+      }
+      // 절단 높이의 잔 파편
+      if (Math.random() < 0.35) {
+        const vc = out.multiplyScalar(4 + Math.random() * 6).add(new THREE.Vector3(0, 1 + Math.random() * 3, 0));
+        fx.spawnDark(p, vc, this._chipCol, 0.05 + Math.random() * 0.08, 1 + Math.random() * 0.6, 0.4, -9);
+      }
     }
   }
 
@@ -638,6 +718,11 @@ export class WorldCut {
     const i = hooks ? hooks.indexOf(this._preRender) : -1;
     if (i >= 0) hooks.splice(i, 1);
     this.rt.dispose();
-    for (const r of this.rings) scene.remove(r.g);
+    for (const x of this.shocks) {
+      scene.remove(x.m);
+      x.m.material.dispose();
+    }
+    this.shockGeo.dispose();
+    this.shockRT.dispose();
   }
 }

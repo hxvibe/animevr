@@ -44,7 +44,7 @@ const rig = new THREE.Group();
 rig.add(camera);
 scene.add(rig);
 
-const ctx = { renderer, scene, camera, rig, settings };
+const ctx = { renderer, scene, camera, rig, settings, beforeRender: [] }; // beforeRender: 본 렌더 직전에 불리는 함수들 (화면 효과용 사전 렌더)
 ctx.sfx = new Sfx();
 ctx.sfx.preloadSfx();
 ctx.sfx.preloadClips({
@@ -262,6 +262,7 @@ renderer.setAnimationLoop(() => {
   _up.set(0, 1, 0).applyQuaternion(inp.headQuat);
   ctx.sfx.updateListener(inp.head, inp.headDir, _up);
   inp.endFrame();
+  for (const f of ctx.beforeRender) f();
   renderer.render(scene, camera);
 });
 

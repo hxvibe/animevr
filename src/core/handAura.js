@@ -4,33 +4,46 @@
 // 컨트롤러면 손 메시가 없으므로 컨트롤러를 감싸는 타원체로 대신한다.
 import * as THREE from 'three';
 
-const vert = /* glsl */ `
-#include <common>
-#include <skinning_pars_vertex>
-uniform float uInflate;
-uniform float uFlame;
-uniform float uTime;
-varying vec3 vWN;
-varying vec3 vWP;
+// 2026-11 새 디자인: 손에서 위로 핥아 오르는 셀 셰이딩 불꽃 — 주력이 넘쳐 흐르는 느낌
+//   · 위를 향한 면의 정점을 노이즈만큼 위로 끌어올려 불꽃 혀를 만든다 (흐르며 바뀐다)
+//   · 세로로 늘인 노이즈로 군데군데 잘라 낸 갈래 → 먹선 · 색 · 하얗게 달아오른 속을 단계로 칠한다
+//   · 바깥 번짐(가산) + 먹선(뒷면, 같은 갈래 모양보다 조금 크게) + 본체(앞면)
+const NOISE = /* glsl */ `
 float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float n3(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(mix(h3(i), h3(i+vec3(1,0,0)), f.x), mix(h3(i+vec3(0,1,0)), h3(i+vec3(1,1,0)), f.x), f.y),
              mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)), f.x), mix(h3(i+vec3(0,1,1)), h3(i+vec3(1,1,1)), f.x), f.y), f.z);
-}
+}`;
+
+const vert = /* glsl */ `
+#include <common>
+#include <skinning_pars_vertex>
+uniform float uInflate;
+uniform float uFlame;
+uniform float uLick;
+uniform float uTime;
+uniform float uK;
+varying vec3 vWN;
+varying vec3 vWP;
+varying float vLift;
+${NOISE}
 void main() {
   #include <skinbase_vertex>
   #include <begin_vertex>
   #include <beginnormal_vertex>
   #include <skinnormal_vertex>
   #include <skinning_vertex>
-  // 월드 공간(m)에서 부풀린다: 모델 크기와 관계없이 일정한 두께
   vec4 wp = modelMatrix * vec4(transformed, 1.0);
   vec3 wn = normalize(mat3(modelMatrix) * objectNormal);
-  // 위로 흘러가는 일렁임 (불꽃처럼 위쪽 면이 더 출렁인다)
-  float n = n3(wp.xyz * 28.0 + vec3(0.0, -uTime * 2.6, uTime * 0.7));
-  float up = 0.6 + 0.4 * max(0.0, wn.y);
-  wp.xyz += wn * (uInflate + uFlame * n * up);
+  float n = n3(wp.xyz * 26.0 + vec3(0.0, -uTime * 3.0, uTime * 0.6));
+  // 불꽃 혀: 위를 향한 면일수록, 노이즈가 높은 곳일수록 위로 길게 (세기가 셀수록 길다)
+  float tongue = n3(wp.xyz * vec3(11.0, 5.0, 11.0) + vec3(0.0, -uTime * 2.2, 0.0));
+  float upF = clamp(wn.y * 0.5 + 0.6, 0.0, 1.0);
+  float lick = pow(tongue, 2.2) * upF * uLick * (0.4 + 0.6 * uK);
+  wp.xyz += wn * (uInflate + uFlame * n);
+  wp.y += lick;
+  vLift = clamp(lick / max(uLick, 1e-4), 0.0, 1.0);
   vWN = wn;
   vWP = wp.xyz;
   gl_Position = projectionMatrix * viewMatrix * wp;
@@ -46,35 +59,35 @@ uniform vec3 uInner;
 uniform vec3 uLine;
 varying vec3 vWN;
 varying vec3 vWP;
-float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-float n3(vec3 p) {
-  vec3 i = floor(p); vec3 f = fract(p); f = f*f*(3.0-2.0*f);
-  return mix(mix(mix(h3(i), h3(i+vec3(1,0,0)), f.x), mix(h3(i+vec3(0,1,0)), h3(i+vec3(1,1,0)), f.x), f.y),
-             mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)), f.x), mix(h3(i+vec3(0,1,1)), h3(i+vec3(1,1,1)), f.x), f.y), f.z);
-}
+varying float vLift;
+${NOISE}
 void main() {
-  // 세기가 낮을 땐 군데군데만 보이다가 점점 빈틈없이 감싼다
-  float spot = n3(vWP * 14.0 + vec3(0.0, -uTime * 1.5, 0.0));
-  if (spot > uK * 1.35 + 0.05) discard;
+  // 세로로 늘인 흐르는 노이즈 → 갈래진 불꽃 (끝으로 갈수록 가늘고 듬성듬성)
+  float f = n3(vWP * vec3(30.0, 13.0, 30.0) + vec3(0.0, -uTime * 4.2, uTime * 0.5)) * 0.75 + n3(vWP * 70.0 + vec3(0.0, -uTime * 6.0, 0.0)) * 0.25;
+  float cut = mix(0.3, 0.62, vLift) + (1.0 - uK) * 0.4;
+  if (uPass > 0.5 && uPass < 1.5) cut -= 0.07; // 먹선: 같은 갈래보다 조금 넓게
+  if (uPass < 0.5) cut -= 0.12;
+  if (f < cut) discard;
+  float e = f - cut;
   float facing = abs(dot(normalize(vWN), normalize(cameraPosition - vWP)));
   float fres = 1.0 - facing;
-  float flow = n3(vWP * 30.0 + vec3(0.0, -uTime * 3.2, uTime));
   if (uPass < 0.5) {
-    gl_FragColor = vec4(uGlow * (0.25 + 0.35 * fres) * uK, 1.0);
+    gl_FragColor = vec4(uGlow * (0.18 + 0.4 * fres) * uK, 1.0);
     return;
   }
   if (uPass < 1.5) {
-    gl_FragColor = vec4(uLine, 0.95 * min(1.0, uK * 1.6));
+    gl_FragColor = vec4(uLine, min(1.0, uK * 1.6));
     return;
   }
-  // 가장자리는 빛나는 띠, 가운데는 어둡게 비친다
-  float band = smoothstep(0.35 - flow * 0.2, 0.72, fres);
-  vec3 col = mix(uInner, uGlow, band);
-  col = mix(col, uHot, smoothstep(0.78, 0.95, fres + flow * 0.12) * 0.7);
+  // 셀 단계: 가장자리 = 색, 깊은 곳 = 달아오른 빛, 손에 붙은 아래쪽은 어둡게 비치는 속
+  vec3 col = uGlow;
+  col = mix(col, uHot, step(0.2, e) * (0.55 + 0.45 * vLift));
+  col = mix(col, uInner, step(0.55, facing) * (1.0 - vLift) * 0.75);
   // 띠 위의 먹 얼룩
-  float speck = step(0.8, n3(vWP * 70.0 + vec3(0.0, -uTime * 2.0, 0.0))) * step(0.3, band);
-  col = mix(col, uLine, speck * 0.85);
-  float a = mix(0.28, 0.95, band) * min(1.0, uK * 1.3);
+  float speck = step(0.83, n3(vWP * 80.0 + vec3(0.0, -uTime * 2.5, 0.0)));
+  col = mix(col, uLine, speck * 0.8);
+  // 손을 마주 보는 가운데는 비쳐 손이 보이고, 가장자리·불꽃 혀는 진하게
+  float a = mix(0.18, 0.95, max(smoothstep(0.3, 0.75, fres), vLift)) * (0.6 + 0.4 * step(0.08, e)) * min(1.0, uK * 1.4);
   gl_FragColor = vec4(col, a);
 }`;
 
@@ -84,6 +97,9 @@ export const HAND_AURA_COLORS = {
 };
 
 const _ctrlGeo = new THREE.SphereGeometry(1, 24, 16);
+const _sp = new THREE.Vector3();
+const _sp2 = new THREE.Vector3();
+const _spC = new THREE.Color();
 
 export class HandAura {
   constructor(ctx, colors = 'crimson') {
@@ -113,17 +129,27 @@ export class HandAura {
       new THREE.ShaderMaterial({
         vertexShader: vert,
         fragmentShader: frag,
-        uniforms: { ...u, uPass: { value: pass }, uInflate: { value: inflate }, uFlame: { value: flame } },
+        uniforms: { ...u, uPass: { value: pass }, uInflate: { value: inflate }, uFlame: { value: flame }, uLick: { value: opts.lick ?? 0.05 } },
         transparent: true,
         depthWrite: false,
         fog: false,
         toneMapped: false,
         ...opts,
       });
+    const strip = (o) => {
+      const { lick, ...rest } = o;
+      void lick;
+      return rest;
+    };
+    const mk = (pass, inflate, flame, o) => {
+      const m = make(pass, inflate, flame, strip(o));
+      m.uniforms.uLick.value = o.lick;
+      return m;
+    };
     return [
-      make(0, 0.03, 0.016, { blending: THREE.AdditiveBlending, side: THREE.BackSide }),
-      make(1, 0.0165, 0.012, { side: THREE.BackSide }),
-      make(2, 0.011, 0.012, { side: THREE.FrontSide }),
+      mk(0, 0.026, 0.012, { blending: THREE.AdditiveBlending, side: THREE.BackSide, lick: 0.13 }),
+      mk(1, 0.015, 0.009, { side: THREE.BackSide, lick: 0.12 }),
+      mk(2, 0.01, 0.009, { side: THREE.FrontSide, lick: 0.115 }),
     ];
   }
 
@@ -135,6 +161,15 @@ export class HandAura {
 
   _handMesh(side) {
     const inp = this.ctx.input;
+    // 컨트롤러 손(가상 손)
+    if (inp[side]?.emulated) {
+      const H = inp.ctrlHands?.hands?.[side];
+      let sk = null;
+      H?.root.traverse((o) => {
+        if (!sk && o.isSkinnedMesh && !o.userData.aura) sk = o;
+      });
+      return H?.root.visible ? sk : null;
+    }
     for (const slot of inp.slots ?? []) {
       const m = slot.models?.[side];
       if (!m || !m.group.visible || slot.inputSource?.handedness !== side) continue;
@@ -206,6 +241,12 @@ export class HandAura {
       const sk = on && h.source === 'hand' ? this._handMesh(side) : null;
       if (sk && sk !== s.src) this._attach(s, sk);
       if (s.layers) for (const m of s.layers) m.visible = !!sk && on;
+      // 불티: 손에서 위로 흩날린다
+      if (sk && on && s.k > 0.25 && Math.random() < s.k * 0.5) {
+        const fx = this.ctx.fx;
+        _sp.copy(h.palm).add(_sp2.set((Math.random() - 0.5) * 0.08, (Math.random() - 0.3) * 0.08, (Math.random() - 0.5) * 0.08));
+        fx.spawn?.(_sp, _sp2.set((Math.random() - 0.5) * 0.15, 0.35 + Math.random() * 0.4, (Math.random() - 0.5) * 0.15), _spC.setHex(Math.random() < 0.6 ? this.C.glow : this.C.hot), 0.012 + Math.random() * 0.012, 0.35 + Math.random() * 0.3, 0, 0);
+      }
       // 컨트롤러: 타원체로 감싼다
       const useCtrl = on && h.source === 'controller';
       if (useCtrl || s.ctrl) {

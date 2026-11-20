@@ -10,6 +10,7 @@ import { SlashLines, makeCrescent, FireArrow } from './vfx.js';
 import { scorchTexture, emberTexture } from '../../core/toon.js';
 import { HandAura } from '../../core/handAura.js';
 import { MalevolentShrine } from './domainShrine.js';
+import { WorldCut } from './worldCut.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -37,12 +38,12 @@ export class Sukuna {
     this.bow = null;
     this.used = { kai: false, hachi: false };
     this.shrine = new MalevolentShrine(ctx);
+    this.worldCut = new WorldCut(ctx);
     this.domain = { sign: 0, cd: 0, t: 0, duration: 20, hitT: new Map(), cutSfx: 0 };
     this._mangaCd = { kai: 0, hachi: 0 };
     this._deskSlashT = 0;
     this.scarGeo = new THREE.PlaneGeometry(1, 1);
     this.scarGeo.rotateX(-Math.PI / 2);
-    this.sheetGeo = new THREE.PlaneGeometry(1, 1);
   }
 
   _hs() {
@@ -132,6 +133,7 @@ export class Sukuna {
     this.lines.update(dt, this.ctx.input.head);
     this.handAura.update(dt);
     this.shrine.update(dt);
+    this.worldCut.update(dt);
   }
 
   _slashBlockedFor(h) {
@@ -646,71 +648,50 @@ export class Sukuna {
   }
 
   // ───────────────── 세계를 가르는 해 ─────────────────
+  // 연출은 worldCut.js: 먹선 → 파란 차원 균열 → 화면 반전 순간에 절단 → 충격파 고리 + 위쪽 세계가 어긋남
   _worldSlash(h, swipe) {
-    const { input: inp, world, fx, sfx, ui } = this.ctx;
+    const { input: inp, world, sfx, ui } = this.ctx;
     if (!this.spend(45)) return;
     const travel = inp.headDir.clone();
     const along = swipe.clone().addScaledVector(travel, -swipe.dot(travel));
     if (along.lengthSq() < 1e-3) along.set(0, 1, 0);
     along.normalize();
     const n = new THREE.Vector3().crossVectors(travel, along).normalize();
-    const o = h.source === 'desktop' ? inp.head.clone() : h.palm.clone();
+    // 데스크톱은 눈높이보다 조금 아래를 벤다 (단면이 위에서 보이도록)
+    const o = h.source === 'desktop' ? inp.head.clone().addScaledVector(UP, -0.3) : h.palm.clone();
     const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, o);
-    for (const t of world.targets()) {
-      const c = t.center(new THREE.Vector3());
-      const rel = _v.subVectors(c, o);
-      const fwd = rel.dot(travel);
-      if (fwd < -0.5 || fwd > 90) continue;
-      const r = (t.kind === 'dummy' ? 0.6 * t.scale : t.radius + 0.2);
-      if (Math.abs(plane.distanceToPoint(c)) > r) continue;
-      const cut = new THREE.Plane().setFromNormalAndCoplanarPoint(n, plane.projectPoint(c, new THREE.Vector3()));
-      t.damage(99999, { type: 'slash', plane: cut, push: n.clone().multiplyScalar(0.5) });
-    }
-    for (const pc of [...world.slicer.pieces]) {
-      if (Math.abs(plane.distanceToPoint(pc.pivot.position)) < pc.radius && pc.localPlanes.length < 3) world.slicer.sliceAgain(pc, plane.clone(), { sep: 1 });
-    }
-    // 연출: 휘두른 방향(along)으로 화면을 가로지르는 거대한 칼날이 앞으로 뻗어 나가며 공간을 가른다
-    for (let i = 0; i < 7; i++) {
-      const d = 2.5 + i * i * 1.6;
-      this.lines.add(_v.copy(o).addScaledVector(travel, d), along, n, 3 + d * 1.25, 0.012 + d * 0.004, 0.45 + i * 0.07, 0xffffff, 0.03);
-    }
-    const big = makeCrescent(1);
-    big.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(along, n, travel));
-    big.position.copy(o).addScaledVector(travel, 1.5);
-    fx.addTransient(big, 0.6, (k) => {
-      const d = 1.5 + k * 60;
-      big.position.copy(o).addScaledVector(travel, d);
-      big.scale.set(1 + d * 0.9, 1 + d * 0.07, 1 + d * 0.2);
-      big.children.forEach((m, j) => (m.material.opacity = (j ? 0.6 : 1) * (k < 0.7 ? 1 : (1 - k) / 0.3)));
-    }, () => big.children.forEach((m) => m.material.dispose()));
-    const sheet = new THREE.Mesh(this.sheetGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-    const mid = o.clone().addScaledVector(travel, 45);
-    sheet.position.copy(mid);
-    sheet.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(travel, along, n));
-    sheet.scale.set(90, 120, 1);
-    fx.addTransient(sheet, 0.35, (k) => {
-      sheet.material.opacity = 0.18 * Math.sin(k * Math.PI);
-    });
-    // 바닥과의 교선에 흉터
-    const groundDir = new THREE.Vector3().crossVectors(n, UP);
-    if (groundDir.lengthSq() > 0.05) {
-      groundDir.normalize();
-      // 평면과 바닥(y=0)의 교선 위 한 점
-      const p0 = o.clone();
-      const ny = n.y;
-      const horiz = new THREE.Vector3(n.x, 0, n.z);
-      if (horiz.lengthSq() > 1e-4) {
-        const off = (ny * o.y) / horiz.lengthSq();
-        p0.addScaledVector(horiz, off).setY(0);
-        if (groundDir.dot(travel) < 0) groundDir.negate();
-        this._scar(p0.clone().addScaledVector(groundDir, 40), groundDir, 0.18, 80, 0x2a0000);
+    // 휘두른 손 앞의 짧은 칼날 (즉각 반응)
+    this.lines.add(_v.copy(o).addScaledVector(travel, 0.7), along, n, 1.3, 0.012, 0.2, 0xffffff, 0.03);
+    const cut = () => {
+      for (const t of world.targets()) {
+        const c = t.center(new THREE.Vector3());
+        const rel = _v.subVectors(c, o);
+        const fwd = rel.dot(travel);
+        if (fwd < -0.5 || fwd > 90) continue;
+        const r = (t.kind === 'dummy' ? 0.6 * t.scale : t.radius + 0.2);
+        if (Math.abs(plane.distanceToPoint(c)) > r) continue;
+        const cp = new THREE.Plane().setFromNormalAndCoplanarPoint(n, plane.projectPoint(c, new THREE.Vector3()));
+        t.damage(99999, { type: 'slash', plane: cp, push: n.clone().multiplyScalar(0.5) });
       }
-    }
-    fx.flash(o, 0xffffff, 12, 0.3, 30);
+      for (const pc of [...world.slicer.pieces]) {
+        if (Math.abs(plane.distanceToPoint(pc.pivot.position)) < pc.radius && pc.localPlanes.length < 3) world.slicer.sliceAgain(pc, plane.clone(), { sep: 1 });
+      }
+      // 바닥과의 교선에 흉터
+      const groundDir = new THREE.Vector3().crossVectors(n, UP);
+      const horiz = new THREE.Vector3(n.x, 0, n.z);
+      if (groundDir.lengthSq() > 0.05 && horiz.lengthSq() > 1e-4) {
+        groundDir.normalize();
+        const p0 = o.clone().addScaledVector(horiz, (n.y * o.y) / horiz.lengthSq()).setY(0);
+        if (groundDir.dot(travel) < 0) groundDir.negate();
+        this._scar(p0.addScaledVector(groundDir, 40), groundDir, 0.18, 80, 0x2a0000);
+      }
+      h.pulse?.(1, 250);
+    };
+    this.worldCut.start({ o, travel, along, n, onCut: cut });
     sfx.slash(o, 0.65);
-    sfx.rumble(1.2, 0.5);
+    sfx.whoosh(o, 0.8, 0.6);
     ui.manga({ top: '世界を断つ', main: '解', ruby: 'カイ', color: '#ffffff', sub: '세계를 가르는 참격' });
-    h.pulse?.(1, 250);
+    h.pulse?.(0.5, 80);
   }
 
   _scar(pos, dir, width, length, color = 0x1a0000) {
@@ -901,6 +882,7 @@ export class Sukuna {
     this.handAura.dispose();
     for (const s of this.scars) if (s.ember) scene.remove(s.ember);
     this.shrine.dispose();
+    this.worldCut.dispose();
     this.ctx.world.domain = null;
   }
 }

@@ -97,11 +97,11 @@ export const DEMOS = {
     [1.0, { L: P([-0.05, -0.34, -0.3], [0.3, 0.2, -1], [1, 0, 0], 'fist'), R: P([0.05, -0.34, -0.3], [-0.3, 0.2, -1], [-1, 0, 0], 'fist') }],
     [2.2, { L: P([-0.05, -0.34, -0.3], [0.3, 0.2, -1], [1, 0, 0], 'fist'), R: P([0.05, -0.34, -0.3], [-0.3, 0.2, -1], [-1, 0, 0], 'fist') }],
   ]),
-  // 영역전개: 두 주먹을 가슴 아래(명치~배 앞)에서 맞댄다
+  // 영역전개: 팔을 앞으로 뻗어 허리 아래에서 두 주먹을 맞댄다
   'megumi.domain': demo([
-    [0.6, { L: P([-0.12, -0.6, -0.27], [0.35, 0.1, -1], [1, 0, 0], 'fist'), R: P([0.12, -0.6, -0.27], [-0.35, 0.1, -1], [-1, 0, 0], 'fist') }],
-    [1.0, { L: P([-0.05, -0.6, -0.27], [0.35, 0.1, -1], [1, 0, 0], 'fist'), R: P([0.05, -0.6, -0.27], [-0.35, 0.1, -1], [-1, 0, 0], 'fist') }],
-    [2.4, { L: P([-0.05, -0.6, -0.27], [0.35, 0.1, -1], [1, 0, 0], 'fist'), R: P([0.05, -0.6, -0.27], [-0.35, 0.1, -1], [-1, 0, 0], 'fist') }],
+    [0.6, { L: P([-0.13, -0.78, -0.4], [0.3, 0.15, -1], [1, 0, 0], 'fist'), R: P([0.13, -0.78, -0.4], [-0.3, 0.15, -1], [-1, 0, 0], 'fist') }],
+    [1.0, { L: P([-0.055, -0.78, -0.42], [0.3, 0.15, -1], [1, 0, 0], 'fist'), R: P([0.055, -0.78, -0.42], [-0.3, 0.15, -1], [-1, 0, 0], 'fist') }],
+    [2.4, { L: P([-0.055, -0.78, -0.42], [0.3, 0.15, -1], [1, 0, 0], 'fist'), R: P([0.055, -0.78, -0.42], [-0.3, 0.15, -1], [-1, 0, 0], 'fist') }],
   ]),
   // ── 노바라 ──
   'nobara.hammer': demo([
@@ -321,7 +321,7 @@ export const DEMOS = {
 };
 
 // ───────────────── 손 모델 ─────────────────
-class DemoHand {
+export class DemoHand {
   constructor(src, side, mat) {
     this.side = side;
     this.root = new THREE.Group();
@@ -334,7 +334,7 @@ class DemoHand {
       if (o.isSkinnedMesh) mesh = o;
     });
     if (mesh) {
-      mesh.material = mat;
+      if (mat) mesh.material = mat;
       mesh.frustumCulled = false;
       mesh.renderOrder = 60;
     }
@@ -423,12 +423,12 @@ class DemoHand {
 
 // 자세 보간
 const lerpA = (a, b, k) => a.map((x, i) => x + (b[i] - x) * k);
-function resolve(p, side) {
+export function resolve(p, side) {
   const base = p ?? (side === 'left' ? REST_L : REST_R);
   const S = SHAPES[base.k] ?? SHAPES.relax;
   return { p: base.p, f: base.f, n: base.n, c: S.c, s: S.s, o: S.o, thumbUp: base.thumbUp ?? 0 };
 }
-function mix(a, b, k) {
+export function mix(a, b, k) {
   const e = k * k * (3 - 2 * k);
   return { p: lerpA(a.p, b.p, e), f: lerpA(a.f, b.f, e), n: lerpA(a.n, b.n, e), c: lerpA(a.c, b.c, e), s: a.s + (b.s - a.s) * e, o: a.o + (b.o - a.o) * e, thumbUp: a.thumbUp + (b.thumbUp - a.thumbUp) * e };
 }
@@ -454,11 +454,10 @@ export class HandDemo {
     eyes.position.set(0, 0.02, -0.02);
     void torso;
     this.stage.add(head, eyes);
-    const loader = new GLTFLoader();
-    Promise.all(['left', 'right'].map((s) => loader.loadAsync(BASE + s + '.glb')))
-      .then(([l, r]) => {
-        this.L = new DemoHand(l.scene, 'left', mat);
-        this.R = new DemoHand(r.scene, 'right', mat);
+    loadHandModels()
+      .then(({ left: l, right: r }) => {
+        this.L = new DemoHand(l, 'left', mat);
+        this.R = new DemoHand(r, 'right', mat);
         this.stage.add(this.L.root, this.R.root);
         this.ready = true;
       })
@@ -495,4 +494,24 @@ export class HandDemo {
       (side === 'left' ? this.L : this.R).apply(mix(pa, pb, k));
     }
   }
+}
+
+/** 시연의 "수인을 다 맺은" 자세 (마지막 쉬기 바로 앞 키) — side: 'left' | 'right'. 없으면 null */
+export function demoPose(id, side) {
+  const D = DEMOS[id];
+  if (!D) return null;
+  const key = side === 'left' ? 'L' : 'R';
+  if (!D.uses[key]) return null;
+  const k = D.keys[D.keys.length - 2][1][key];
+  return k ? resolve(k, side) : null;
+}
+
+let _handSrc = null;
+/** 퀘스트 손 모델 (왼/오) — 한 번만 불러온다 */
+export function loadHandModels() {
+  if (!_handSrc) {
+    const loader = new GLTFLoader();
+    _handSrc = Promise.all(['left', 'right'].map((s) => loader.loadAsync(BASE + s + '.glb'))).then(([l, r]) => ({ left: l.scene, right: r.scene }));
+  }
+  return _handSrc;
 }

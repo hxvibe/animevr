@@ -41,6 +41,7 @@ export class Geto {
     this.free = []; // 쓰러뜨려 생긴 주령구 (아직 삼키지 않음)
     this.flying = []; // 던진 주령구 · 돌아오는 주령구
     this.tray = { open: 0, orbs: new Map(), spin: 0 };
+    this._aim = { left: null, right: null };
     this.held = { left: null, right: null }; // 손에 쥔 주령구 { kind: 'stock'|'free', id, orb, ... }
     this.uz = { state: 'idle', t: 0, n: 0, sphere: null, ext: null, tint: new THREE.Color(0x6a3aa0), tick: 0 };
     this.shots = [];
@@ -286,8 +287,32 @@ export class Geto {
     return h.gesture === 'fist' || h.gesture === 'pinch' || h.pinching || (h.source === 'controller' && h.btn.grip);
   }
 
+  /** 손으로 가리킨 쓰러진 주령의 주령구 (10m 안, 겨눈 선에서 25cm·12° 안) */
+  _aimFree(h) {
+    const o = h.rayPos;
+    const d = h.rayDir;
+    let best = null;
+    let bestS = Infinity;
+    for (const f of this.free) {
+      if (f.state === 'swallow' || f.state === 'held') continue;
+      const to = _v3.subVectors(f.orb.position, o);
+      const along = to.dot(d);
+      if (along < 0.3 || along > 10) continue;
+      const lat = Math.sqrt(Math.max(0, to.lengthSq() - along * along));
+      if (lat > Math.max(0.25, along * Math.tan(0.21))) continue;
+      const s = lat / along;
+      if (s < bestS) {
+        bestS = s;
+        best = f;
+      }
+    }
+    return best;
+  }
+
   _updateHands(dt) {
     const inp = this.ctx.input;
+    // 쥐는 순간엔 손 모양이 바뀌며 겨눈 선이 흔들리므로, 직전 프레임에 겨눈 것을 쓴다
+    this._aimPrev = { ...this._aim };
     for (const h of [inp.left, inp.right]) {
       if (!h.active || h.uiBlock) continue;
       const closed = this._closed(h);
@@ -296,13 +321,20 @@ export class Geto {
       else this._closedR = closed;
       const H = this.held[h.side];
       const grabAt = h.source === 'hand' ? _v.copy(h.palm).lerp(h.indexTip, 0.4) : h.palm;
+      // 멀리 있는 주령구 겨누기: 손바닥을 펴고 손끝(컨트롤러는 앞쪽)으로 주령구를 가리키면 빛난다 → 쥐면 날아온다
+      const aim = !H && !closed ? this._aimFree(h) : null;
+      if (this._aim[h.side] && this._aim[h.side] !== aim) this._aim[h.side].orb.scale.setScalar(1);
+      this._aim[h.side] = aim;
+      if (aim) aim.orb.scale.setScalar(1.35 + Math.sin(this.time * 14) * 0.15);
       if (!H && closed && !was) {
-        // 1) 쓰러뜨린 주령의 주령구
-        const f = this.free.find((x) => x.state !== 'swallow' && x.state !== 'held' && x.orb.position.distanceTo(grabAt) < 0.13);
-        if (f) {
+        // 1) 쓰러뜨린 주령의 주령구 (손 가까이 · 또는 겨눈 것)
+        const near = this.free.find((x) => x.state !== 'swallow' && x.state !== 'held' && x.orb.position.distanceTo(grabAt) < 0.13);
+        const f = near ?? this._aimPrev?.[h.side];
+        if (f && f.state !== 'swallow' && f.state !== 'held') {
           f.state = 'held';
           f.hand = h.side;
-          this.held[h.side] = { kind: 'free', f };
+          f.orb.scale.setScalar(1);
+          this.held[h.side] = { kind: 'free', f, pull: near ? null : { t: 0, from: f.orb.position.clone() } };
           this.ctx.sfx.play('grab', { at: grabAt, vol: 0.5 });
           h.pulse?.(0.4, 30);
           continue;
@@ -321,9 +353,20 @@ export class Geto {
         continue;
       }
       if (!H) continue;
-      // 쥔 주령구는 손을 따라온다
+      // 쥔 주령구는 손을 따라온다 (멀리서 끌어온 건 날아와 손에 붙는다)
       const orb = H.kind === 'free' ? H.f.orb : H.orb;
       orb.position.copy(grabAt).addScaledVector(h.palmNormal, h.source === 'hand' ? 0.035 : 0.02);
+      if (H.pull) {
+        H.pull.t += dt;
+        const k = Math.min(1, H.pull.t / 0.3);
+        const e = k * k * (3 - 2 * k);
+        orb.position.lerpVectors(H.pull.from, orb.position, e);
+        if (k >= 1) {
+          H.pull = null;
+          h.pulse?.(0.5, 40);
+          this.ctx.sfx.play('grab', { at: orb.position, vol: 0.5 });
+        }
+      }
       tickOrb(orb, this.time, 1.3, 1);
       // 입에 가져가면 삼킨다 (거둔 주령구만)
       if (H.kind === 'free') {
@@ -765,7 +808,7 @@ export class Geto {
     if (mode === 'hand') {
       return [
         { head: '주령구 꺼내기 · 부르기', demo: 'geto.tray', color: '#c8a0ff', text: '왼손바닥을 하늘로 펴서 가슴 앞에 → 가진 주령의 주령구가 떠오른다\n오른손으로 하나를 쥐고 던지기 → 떨어진 곳·맞힌 대상에서 주령이 나온다 (그냥 놓으면 바라보는 곳)' },
-        { head: '주령 흡수', demo: 'geto.absorb', color: '#ffd28a', text: '쓰러뜨린 주령은 주령구가 된다 → 손으로 쥐거나, 편 손바닥을 향하고 몸 쪽으로 당겨 끌어오기\n쥔 주령구를 입에 가져가면 삼킨다 → 다음부터 부를 수 있다 (주력 회복)' },
+        { head: '주령 흡수', demo: 'geto.absorb', color: '#ffd28a', text: '쓰러뜨린 주령은 주령구가 된다 → 손으로 쥐거나, 편 손바닥을 향하고 몸 쪽으로 당겨 끌어오기\n멀리 있으면: 편 손의 손끝(컨트롤러는 컨트롤러 앞쪽 = 레이저 방향)으로 주령구를 가리켜 커지며 깜빡이면 쥐기 → 손으로 날아온다\n쥔 주령구를 입에 가져가면 삼킨다 → 다음부터 부를 수 있다 (주력 회복)' },
         { head: '극번 「渦」 소용돌이', demo: 'geto.uzumaki', color: '#b080ff', text: '두 손바닥을 마주 보게 (공을 감싸 쥐듯) → 저급 주령이 모여 검은 구가 커진다\n두 손을 앞으로 밀면 발사 · 2초 넘게 모으면 거둔 특급 주령을 녹여 술식 추출 · 손을 풀면 취소' },
         { head: '체술', demo: 'itadori.punch', color: '#ffffff', text: '주먹으로 치기 · 잡기 (게토는 체술도 1급 이상)' },
       ];
@@ -779,7 +822,7 @@ export class Geto {
     }
     return [
       { head: '주령 고르기 · 부르기', color: '#c8a0ff', text: '왼쪽 트리거: 고르기 · 오른쪽 트리거: 부르기 (바라본 대상)' },
-      { head: '흡수', color: '#ffd28a', text: '주령구를 그립으로 쥐어 입으로 · 컨트롤러로 가리키고 그립 → 끌어오기' },
+      { head: '흡수', color: '#ffd28a', text: '주령구를 그립으로 쥐어 입으로 · 컨트롤러 앞쪽(레이저 방향)으로 주령구를 가리켜 커지며 깜빡이면 그립 → 끌어오기' },
       { head: '극번 「渦」', color: '#b080ff', text: '두 그립을 쥐고 두 손을 모은다 → 앞으로 밀어 발사' },
     ];
   }

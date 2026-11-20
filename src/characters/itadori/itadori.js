@@ -444,6 +444,7 @@ export class Itadori {
         const c = up(L) && up(R) && L.palm.distanceTo(R.palm) < 0.1 && L.palmNormal.dot(R.palmNormal) < -0.3 && mid.distanceTo(inp.head) < 0.6;
         sign = this.ctx.settings.domainGesture && still && c;
       } else if (L.source === 'controller' && R.source === 'controller') sign = L.btn.stick && R.btn.stick;
+      if (this.ctx.settings.domainGesture && inp.ctrlMudra === 'itadori.domain') sign = true;
     }
     if (sign && this.town.state === 'idle' && d.cd <= 0) {
       d.sign += dt;

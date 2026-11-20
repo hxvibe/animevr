@@ -749,6 +749,7 @@ export class Sukuna {
       } else if (L.source === 'controller' && R.source === 'controller') {
         sign = L.btn.stick && R.btn.stick;
       }
+      if (this.ctx.settings.domainGesture && inp.ctrlMudra === 'sukuna.domain') sign = true;
     }
     if (sign && this.shrine.state === 'idle' && d.cd <= 0 && !this.bow) {
       d.sign += dt;

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 import { XRHandMeshModel } from 'three/addons/webxr/XRHandMeshModel.js';
 import { classifyHand, makeGestureResult, JOINT_NAMES } from './gestures.js';
+import { CtrlHands } from './ctrlHands.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -113,6 +114,13 @@ export class Input {
 
     this._setupXR();
     this._setupDesktop();
+    this.ctrlHands = new CtrlHands(this); // 컨트롤러를 손으로 (가상 손 + 같은 수인 판정)
+    this.ctx = null; // main 에서 연결 (설정 · 캐릭터)
+  }
+
+  /** 컨트롤러를 손으로 다룰까 (설정 '컨트롤러 손 모양 조작') */
+  get ctrlAsHand() {
+    return this.ctx?.settings?.ctrlHands !== false && this.ctrlHands.ready;
   }
 
   _setupXR() {
@@ -175,7 +183,7 @@ export class Input {
   _updateHandLoco(dt) {
     for (const h of this.hands) {
       const viz = this._locoViz[h.side];
-      const on = this.locomotion && h.active && h.source === 'hand' && h.gesture === 'thumbsup' && !h.uiBlock;
+      const on = this.locomotion && h.active && h.source === 'hand' && !h.emulated && h.gesture === 'thumbsup' && !h.uiBlock;
       let L = this.handLoco[h.side];
       if (!on) {
         // 잠깐 흐트러진 건 봐준다
@@ -376,10 +384,20 @@ export class Input {
         if (tracked) this._readHand(h, slot, dt);
       }
       else if (src.gamepad) this._readController(h, slot, dt);
+      // 손을 그리면 컨트롤러 모델은 숨긴다
+      slot.grip.visible = !(h.emulated && h.active);
     }
+    // 컨트롤러 손: 두 손을 다 읽은 뒤 수인 맞물림까지 판단하고 관절을 만든다
+    const CH = this.ctrlHands;
+    CH.charId = this.ctx?.character?.id ?? null;
+    if (L.emulated || R.emulated) {
+      CH.build(dt, this._jointPos);
+      for (const h of this.hands) if (h.emulated && h.active) this._fromJoints(h, this._jointPos[h.side], dt, CH.gestureFor(h.side));
+    }
+    for (const h of this.hands) if (!(h.emulated && h.active)) CH.hide(h.side);
 
     // 로코모션 / 스냅 회전 (컨트롤러)
-    if (this.locomotion && L.source === 'controller' && L.active) {
+    if (this.locomotion && (L.source === 'controller' || L.emulated) && L.active) {
       const [x, y] = L.axes;
       if (Math.hypot(x, y) > 0.15) {
         _fwd.copy(this.headDir).setY(0).normalize();
@@ -388,7 +406,7 @@ export class Input {
         this.rig.position.addScaledVector(_fwd, -y * speed).addScaledVector(rightV, x * speed);
       }
     }
-    if (R.source === 'controller' && R.active) {
+    if ((R.source === 'controller' || R.emulated) && R.active) {
       const x = R.axes[0];
       if (Math.abs(x) > 0.7 && this._snapReady) {
         this.snapTurn(x > 0 ? -Math.PI / 6 : Math.PI / 6);
@@ -397,8 +415,8 @@ export class Input {
     }
 
     this._updateHandLoco(dt);
-    if (L.source === 'controller' && (L.pressed('b') || L.pressed('menu'))) this.actions.toggleMenu = true; // Y / 메뉴
-    if (R.source === 'controller' && R.pressed('b')) this.actions.quickSpawn = true; // B
+    if ((L.source === 'controller' || L.emulated) && (L.pressed('b') || L.pressed('menu'))) this.actions.toggleMenu = true; // Y / 메뉴
+    if ((R.source === 'controller' || R.emulated) && R.pressed('b')) this.actions.quickSpawn = true; // B
   }
 
   snapTurn(angle) {
@@ -444,11 +462,49 @@ export class Input {
       h.axes[0] = ax[0] ?? 0;
       h.axes[1] = ax[1] ?? 0;
     }
+    if (this.ctrlAsHand) {
+      // 손으로 다룬다: 손 모양·관절은 두 손을 다 읽은 뒤 CtrlHands 가 만든다
+      h.emulated = true;
+      h.source = 'hand';
+      const touched = (i) => !!(b[i]?.touched || b[i]?.pressed);
+      this.ctrlHands.sense(h, slot, {
+        grip: h.gripValue,
+        trigger: h.triggerValue,
+        triggerTouch: touched(0),
+        thumbTouch: touched(3) || touched(4) || touched(5) || touched(6),
+      });
+      return;
+    }
+    h.emulated = false;
     // 컨트롤러도 대략적인 손 모양을 제공
     const g = h.btn.grip && h.btn.trigger ? 'fist' : h.btn.trigger ? 'point' : h.btn.grip ? 'fist' : 'open';
     this._setGesture(h, g, dt);
     h.pinch = h.btn.trigger;
     h.pinching = h.btn.trigger;
+  }
+
+  /** 컨트롤러 손의 관절 → 손 추적과 같은 값 (forced: 버튼으로 정한 손 모양, null 이면 관절로 판정) */
+  _fromJoints(h, J, dt, forced) {
+    h.joints = J;
+    const g = this._gest[h.side];
+    classifyHand(J, h.side, g);
+    this._setGesture(h, forced ?? g.raw, dt);
+    h.pinch = h.btn.trigger;
+    h.pinchDist = h.btn.trigger ? 0.01 : g.pinchDist;
+    const m = this.rig.matrixWorld;
+    h.pos.copy(g.tip).applyMatrix4(m);
+    h.dir.copy(g.dir).transformDirection(m);
+    h.fingersDir.copy(g.fingersDir).transformDirection(m);
+    h.palm.copy(g.palm).applyMatrix4(m);
+    h.palmNormal.copy(g.palmNormal).transformDirection(m);
+    h.indexTip.copy(J['index-finger-tip']).applyMatrix4(m);
+    // 메뉴 클릭: 트리거
+    h.pinching = h.btn.trigger;
+    const yv = _v.copy(h.palmNormal).negate();
+    const zv = new THREE.Vector3().copy(h.fingersDir).negate();
+    zv.addScaledVector(yv, -zv.dot(yv)).normalize();
+    const xv = new THREE.Vector3().crossVectors(yv, zv);
+    h.quat.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
   }
 
   /**
@@ -488,6 +544,7 @@ export class Input {
       J[n].copy(j.position);
     }
     h.source = 'hand';
+    h.emulated = false;
     h.gamepad = null;
     h.active = true;
     h.joints = J;
@@ -543,6 +600,7 @@ export class Input {
     }
     const place = (h, x) => {
       h.source = 'desktop';
+      h.emulated = false;
       h.active = true;
       h.gamepad = null;
       h.pos.set(x, -0.2, -0.42).applyQuaternion(this.headQuat).add(this.head);

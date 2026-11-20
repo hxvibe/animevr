@@ -605,6 +605,7 @@ export class Mahito extends Caster {
       const rt = R.joints?.['thumb-tip'];
       sign = !!(li && ri && lt && rt) && li.distanceTo(ri) < 0.05 && lt.distanceTo(rt) < 0.06 && li.y - lt.y > 0.03 && L.fingersDir.y > 0.35 && R.fingersDir.y > 0.35 && L.speed < 0.6 && R.speed < 0.6;
     } else if (L.source === 'controller' && R.source === 'controller') sign = L.btn.stick && R.btn.stick;
+    if (this.ctx.settings.domainGesture && inp.ctrlMudra === 'mahito.domain') sign = true;
     if (this.shell.state !== 'idle') return;
     if (this.held('domain', sign, dt, 1.2)) this.castDomain();
     const k = this.holdK('domain', 1.2);

@@ -479,6 +479,7 @@ export class Jogo extends Caster {
     if (inp.mode === 'desktop') dsign = inp.keyDown('KeyQ');
     else if (hands && this.ctx.settings.domainGesture) dsign = L.palm.distanceTo(R.palm) < 0.13 && L.fingersDir.dot(right) > 0.35 && R.fingersDir.dot(right) < -0.35 && L.gesture !== 'fist' && R.gesture !== 'fist' && L.speed < 0.6 && R.speed < 0.6;
     else if (both && L.source === 'controller') dsign = L.btn.stick && R.btn.stick;
+    if (this.ctx.settings.domainGesture && inp.ctrlMudra === 'jogo.domain') dsign = true;
     if (this.shell.state === 'idle' && this.held('domain', dsign, dt, 1.2)) this.castDomain();
     // 연옥: 두 손바닥 마주 보기 → 모으기 → 밀기
     const C = this.charge;

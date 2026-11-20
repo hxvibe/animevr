@@ -142,7 +142,7 @@ export class Megumi {
         { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)' },
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
         { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 높이에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
-        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '두 주먹을 가슴 아래(명치~배 앞)에서 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
+        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 앞으로 뻗어 허리 아래에서 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
         { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
       ];
     }
@@ -248,15 +248,18 @@ export class Megumi {
       return d > 1e-3 && (t.y - m.y) / d > 0.55;
     };
     this._signSide = null;
+    // 컨트롤러 손: 맞물린 수인
+    if (inp.ctrlMudra === 'megumi.domain' && settings.domainGesture) return 'domain';
+    if (inp.ctrlMudra === 'megumi.mahoraga') return 'mahoraga';
     if (L.active && R.active && L.source === 'hand' && R.source === 'hand' && !L.uiBlock && !R.uiBlock) {
       const d = L.palm.distanceTo(R.palm);
       const mid = _v2.addVectors(L.palm, R.palm).multiplyScalar(0.5);
-      // 두 주먹을 맞댄다: 가슴 아래(명치~배 앞)면 영역전개, 가슴 앞이면 마허라
-      //  높이는 눈에서 잰다: 가슴 앞 ≈ 눈 아래 0.2~0.45m, 가슴 아래 ≈ 0.47m 아래
+      // 두 주먹을 맞댄다: 팔을 앞으로 뻗어 허리 아래면 영역전개, 가슴 앞이면 마허라
+      //  높이는 눈에서 잰다: 가슴 앞 ≈ 눈 아래 0.2~0.45m, 허리 ≈ 0.6m 아래
       const fists = fist(L) && fist(R) && d < 0.14 && front(L) > 0.08 && front(R) > 0.08;
       const drop = head.y - mid.y;
-      if (settings.domainGesture && fists && drop > 0.47 && drop < 0.95) return 'domain';
-      if (fists && L.palmNormal.dot(R.palmNormal) > -0.3 && drop > 0.12 && drop <= 0.47 && mid.distanceTo(head) < 0.75) return 'mahoraga';
+      if (settings.domainGesture && fists && drop > 0.6 && drop < 1.15 && front(L) > 0.26 && front(R) > 0.26) return 'domain';
+      if (fists && L.palmNormal.dot(R.palmNormal) > -0.3 && drop > 0.12 && drop <= 0.5 && mid.distanceTo(head) < 0.75) return 'mahoraga';
       // 관우 (그림): 한 손 검지를 뿔처럼 세우고, 다른 손을 그 아래에 받친다
       const horn = (H, B) => (H.gesture === 'point' || H.gesture === 'two') && H.dir.y > 0.45 && nf(B) && H.palm.y - B.palm.y > 0.02 && Math.hypot(H.palm.x - B.palm.x, H.palm.z - B.palm.z) < 0.15 && front(H) > 0.12;
       if (horn(L, R) || horn(R, L)) return 'ox';

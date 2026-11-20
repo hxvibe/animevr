@@ -1,4 +1,5 @@
 // VR UI: 타이틀(메인 메뉴) · 옵션 패널 · 손목 HUD · 만화풍 기술명 · 데미지 숫자 · 피격 효과
+import { CTRL_HELP } from './ctrlHands.js';
 import * as THREE from 'three';
 import { CHARACTERS } from '../characters/index.js';
 import { BACKGROUNDS } from './env/backgrounds.js';
@@ -372,12 +373,13 @@ export class UI {
       const toggles = [
         ['hud', '손목 HUD'], ['skillNames', '기술명 표시'], ['damageNumbers', '데미지 숫자'],
         ['invincible', '플레이어 무적'], ['locomotion', '이동 (스틱·엄지척)'], ['domainGesture', `${this.ctx.character?.domainLabel ?? '영역전개'} 손동작`], ['shadows', '그림자'],
+        ['ctrlHands', '컨트롤러 손 모양'], ['cooldowns', '스킬 쿨타임'],
       ];
       const cid = this.ctx.character?.id;
       if (cid === 'sukuna') toggles.push(['kaminoRule', '카미노 원작 조건']);
-      if (cid === 'megumi') toggles.push(['mahoragaTamed', '마허라 조복됨'], ['dogTotality', '옥견 혼 (白 파괴됨)']);
+      if (cid === 'megumi') toggles.push(['mahoragaTamed', '마허라 조복됨'], ['dogTotality', '옥견 혼 (白 파괴됨)'], ['mahoragaRitual', '마허라 소환 연출']);
       g.fillText('옵션', 50, 345);
-      toggles.forEach(([k, l], i) => p.button(50 + (i % 3) * 430, 365 + Math.floor(i / 3) * 105, 410, 88, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 28, accent: '#2e6a9a' }));
+      toggles.forEach(([k, l], i) => p.button(50 + (i % 4) * 330, 365 + Math.floor(i / 4) * 100, 315, 86, `${l}  ${S[k] ? 'ON' : 'OFF'}`, 'opt:' + k, { active: !!S[k], size: 25, accent: '#2e6a9a' }));
       if (this.ctx.character?.castDomain) p.button(910, 735, 440, 90, `${this.ctx.character.domainLabel ?? '영역전개'} 발동`, 'castDomain', { size: 32, bg: 'rgba(110,60,200,0.5)' });
       g.fillStyle = '#ffffff';
       g.font = `700 32px ${FONT}`;
@@ -400,7 +402,14 @@ export class UI {
     const anyHand = this.ctx.input.hands.some((h) => h.source === 'hand');
     const cur = anyHand ? 'hand' : this.ctx.input.mode === 'desktop' ? 'desktop' : 'controller';
     const mode = this.help.view ?? cur;
-    const lines = ch ? [...ch.helpLines(mode)] : [];
+    let lines = ch ? [...ch.helpLines(mode)] : [];
+    // 컨트롤러를 손으로 쓰면: 손 추적과 같은 수인 + 버튼으로 손가락 만드는 법
+    if (mode === 'controller' && this.ctx.settings.ctrlHands !== false && ch) {
+      lines = [
+        { head: '컨트롤러 = 손', color: '#ffffff', text: '트리거 = 검지 · 그립 = 중지·약지·새끼 · 엄지는 스틱/버튼에 대면 접힘, 떼면 폄\n아무것도 안 누름 = 편 손 · 그립+트리거 = 주먹 · 그립만 = 검지 · 그립만+엄지 뗌 = 두 손가락 · 트리거만 = 집기\n손 추적과 같은 손 모양·위치로 기술이 나간다. Y 메뉴 · B 더미 소환 · 왼쪽 스틱 이동 · 오른쪽 스틱 회전' },
+        ...ch.helpLines('hand').map((l) => (l.demo && CTRL_HELP[l.demo] ? { ...l, text: l.text + '\n' + CTRL_HELP[l.demo] } : l)),
+      ];
+    }
     if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', demo: 'common.loco', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기\n오른손 엄지 척 → 옆으로 밀면 30° 회전' });
     return { lines, mode, cur };
   }

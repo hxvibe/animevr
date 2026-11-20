@@ -187,6 +187,10 @@ export class Gojo {
     if (this.ctx.settings.domainGesture && nearFace && inFront) {
       if (g === 'crossed' && h.dir.y > 0.3) I.sign = 1; // 수인표: 검지·중지를 꼬아 세운다
     }
+    // 컨트롤러 손: 검지를 얼굴 앞에 세우면 꼰 손가락으로 맞물린다
+    if (this.ctx.settings.domainGesture && h.emulated && inp.ctrlMudra === 'gojo.domain' && inp.ctrlHands.state[h.side].mudra) {
+      I.sign = 1;
+    }
     // 창: 두 손가락으로 앞을 가리키고 0.2초 (얼굴 근처·위를 가리키면 무시)
     I.blue = g === 'two' && gt >= 0.2 && outward && !nearFace && h.dir.y < 0.6 && dist > 0.3;
     // 혁: 검지만 펴고 0.2초

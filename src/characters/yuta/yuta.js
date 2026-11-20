@@ -1002,6 +1002,7 @@ export class Yuta extends Caster {
       const wiki = (knife(L) && chinFist(R)) || (knife(R) && chinFist(L));
       dsign = (wiki || (near && ((flatUp(L) && curled(R)) || (flatUp(R) && curled(L))))) && L.speed < 0.6 && R.speed < 0.6;
     } else if (both && L.source === 'controller') dsign = L.btn.stick && R.btn.stick;
+    if (this.ctx.settings.domainGesture && inp.ctrlMudra === 'yuta.domain') dsign = true;
     if (this.shell.state === 'idle' && this.held('domain', dsign, dt, 1.2)) this.castDomain();
     // 순애빔: 두 손바닥 마주 보기 → 밀기
     const C = this.charge;

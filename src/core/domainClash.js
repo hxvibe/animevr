@@ -10,10 +10,12 @@
 //      (두 손바닥을 앞으로 밀어 주력을 쏟으면 내 쪽으로 기운다)
 //  · 밀려난 쪽: 영역이 깨지고 술식이 타 버린다. 플레이어가 밀려나면 필중을 그대로 맞는다
 import * as THREE from 'three';
+import { CLASH_U, CLASH_GLSL, clashSideJS } from './clashBoundary.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = THREE.MathUtils.clamp;
 
@@ -45,7 +47,9 @@ export const PLAYER_DOMAINS = {
   megumi: { ref: 55, name: '嵌合暗翳庭', color: '#6f86ff' },
 };
 
-const OVERWHELM = 24; // 완성도가 이만큼 넘게 차이 나면 '압도' (곧바로 밀려난다)
+const OVERWHELM = 24;
+
+ // 완성도가 이만큼 넘게 차이 나면 '압도' (곧바로 밀려난다)
 
 /** 지금 플레이어 캐릭터의 영역 상태 */
 export function playerDomain(ctx) {
@@ -164,13 +168,14 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
 const DOME_FRAG = /* glsl */ `
-uniform float uOpen; uniform vec4 uClip; uniform float uCrack; uniform vec3 uRim;
+uniform float uOpen; uniform float uCrack; uniform vec3 uRim;
 varying vec3 vW; varying vec3 vL;
 ${NOISE}
 ${LOOKS}
+${CLASH_GLSL}
 void main() {
-  // 경계(영역 싸움): 플레이어 쪽 반공간은 그리지 않는다
-  float side = dot(vW, uClip.xyz) - uClip.w;
+  // 경계(영역 싸움): 플레이어 영역 쪽은 그리지 않는다
+  float side = uClashOn > 0.5 ? clashSide(vW) : 1.0;
   if (side < 0.0) discard;
   vec3 d = normalize(vL);
   vec3 col;
@@ -181,7 +186,7 @@ void main() {
     col = wallLook(d);
   }
   // 경계 가까이는 두 영역이 맞부딪혀 빛난다
-  col += uRim * smoothstep(1.2, 0.0, side) * 1.5 * step(0.001, length(uClip.xyz));
+  col += clashSeam(vW, side);
   // 깨질 때: 금이 간다
   if (uCrack > 0.0) {
     float c = smoothstep(0.02, 0.0, abs(fbm(d * 9.0) - 0.5)) * uCrack;
@@ -192,18 +197,19 @@ void main() {
   #include <colorspace_fragment>
 }`;
 const FLOOR_FRAG = /* glsl */ `
-uniform float uOpen; uniform vec4 uClip; uniform vec3 uRim; uniform vec3 uCenter; uniform float uR;
+uniform float uOpen; uniform vec3 uRim; uniform vec3 uCenter; uniform float uR;
 varying vec3 vW; varying vec3 vL;
 ${NOISE}
 ${LOOKS}
+${CLASH_GLSL}
 void main() {
-  float side = dot(vW, uClip.xyz) - uClip.w;
+  float side = uClashOn > 0.5 ? clashSide(vW) : 1.0;
   if (side < 0.0) discard;
   vec2 q = vW.xz - uCenter.xz;
   float r = length(q) / uR;
   if (r > 1.0) discard;
   vec3 col = floorLook(q, r);
-  col += uRim * smoothstep(1.0, 0.0, side) * 1.2 * step(0.001, length(uClip.xyz));
+  col += clashSeam(vW, side);
   gl_FragColor = vec4(col * uOpen, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -237,7 +243,7 @@ class EnemyDomainView {
       uTime: { value: 0 },
       uOpen: { value: 0 },
       uType: { value: def.type },
-      uClip: { value: new THREE.Vector4(0, 0, 0, -1) }, // (n, d): dot(p, n) - d < 0 이면 지운다. n=0 이면 끔
+      ...CLASH_U,
       uCrack: { value: 0 },
       uRim: { value: rim },
       uCenter: { value: this.center },
@@ -265,11 +271,6 @@ class EnemyDomainView {
   }
 
   /** 경계 평면: n(수평, 적 쪽을 향함)과 점 p. null 이면 끔 */
-  setClip(n, p) {
-    const c = this.u.uClip.value;
-    if (!n) c.set(0, 0, 0, -1);
-    else c.set(n.x, n.y, n.z, n.dot(p));
-  }
 
   dispose() {
     this.ctx.scene.remove(this.group);
@@ -478,30 +479,76 @@ export class DomainClash {
     const ef = ch?.maxEnergy ? ch.energy / ch.maxEnergy : 0.5;
     const hf = E.caster.maxHp && Number.isFinite(E.caster.maxHp) ? clamp(E.caster.hp / E.caster.maxHp, 0, 1) : 1;
     const eff = C.gap + (ef - 0.5) * 6 - (hf - 0.5) * 10 + this.pushK * 22 - (E.caster.enemyPush ?? 0);
+    // 격돌: 1~2.5초마다 한쪽이 몰아친다 → 경계가 크게 출렁이고 번쩍이며 땅이 울린다
+    C.surgeT = (C.surgeT ?? 1.2) - dt;
+    if (C.surgeT <= 0 && !C.overwhelm) {
+      C.surgeT = rnd(1.0, 2.4);
+      const mine = Math.random() < 0.5 + clamp(eff, -30, 30) / 80 + this.pushK * 0.2;
+      C.D = clamp(C.D + (mine ? 1 : -1) * rnd(0.05, 0.12), -1, 1);
+      C.amp = 4.5;
+      C.flashK = 1;
+      C.flashCol = mine ? pd.color : E.def.color;
+      sfx.play('black_flash', { vol: 0.45, rate: rnd(0.45, 0.65) });
+      sfx.rumble(0.6, 0.45);
+      inp.left.pulse?.(0.6, 80);
+      inp.right.pulse?.(0.6, 80);
+      ui.callout(mine ? '밀어붙였다!' : '밀린다!', { color: mine ? '#c8ffd8' : '#ffb0b0', size: 40, dur: 0.6 });
+    }
     let rate;
     if (C.overwhelm) rate = Math.sign(C.gap) * 0.85;
-    else rate = eff * 0.011 + Math.sin(C.t * 1.7) * 0.03;
+    else rate = eff * 0.011 + Math.sin(C.t * 1.7) * 0.04 + Math.sin(C.t * 4.3) * 0.03;
     C.D = clamp(C.D + rate * dt, -1, 1);
-    // 경계 평면: 플레이어 영역 중심 → 적 영역 중심
-    const pc = pd.center;
-    const ec = E.center;
-    const n = _v.subVectors(ec, pc).setY(0);
-    if (n.lengthSq() < 0.25) n.subVectors(E.caster.root.position, inp.head).setY(0);
-    if (n.lengthSq() < 1e-4) n.set(0, 0, -1);
-    n.normalize();
-    // 경계는 두 영역의 반지름 비율과 우세에 따라 (D>0 이면 적 쪽으로 밀린다)
-    const dist = Math.max(4, _v2.subVectors(ec, pc).setY(0).length());
-    const k0 = pd.radius / (pd.radius + E.def.radius);
-    const k = clamp(k0 + C.D * 0.42, 0.06, 0.94);
-    const bp = _v2.copy(pc).addScaledVector(n, dist * k);
-    // 플레이어가 경계 너머(적 쪽)에 서 있으면 경계를 플레이어 앞으로 밀어 둔다 (내 영역 안에 있게)
-    const ahead = _v3.subVectors(inp.head, bp).setY(0).dot(n);
-    if (ahead > -1.2) bp.addScaledVector(n, ahead + 1.2);
-    E.view.setClip(n, bp);
-    this._setPlayerClip(pd, n, bp);
-    this._placeSeam(bp, n, Math.min(pd.radius, E.def.radius) * 1.3, C);
-    if (Math.random() < 0.5) fx.burst(_v3.copy(bp).add(_v.set(-n.z, 0, n.x).multiplyScalar(rnd(-10, 10))).setY(rnd(0.3, 6)), 3, new THREE.Color(Math.random() < 0.5 ? E.def.color : '#ffffff'), 2, 0.05, 0.4);
-    if (Math.random() < dt * 1.5) sfx.play('zap', { at: bp, vol: 0.3, rate: rnd(0.6, 1) });
+    // 경계: 두 중심 (D>0 이면 경계가 적 쪽으로 밀려간다). 중심이 겹치면 플레이어 → 적 방향으로 벌린다
+    const pc = _v2.copy(pd.center);
+    const ec = _v3.copy(E.center);
+    if (pc.distanceTo(ec) < 4) {
+      const d = _v.subVectors(E.caster.root.position, inp.head).setY(0);
+      if (d.lengthSq() < 1e-3) d.set(0, 0, -1);
+      d.normalize();
+      const m = _v4.addVectors(pc, ec).multiplyScalar(0.5);
+      pc.copy(m).addScaledVector(d, -2);
+      ec.copy(m).addScaledVector(d, 2);
+    }
+    const Lc = Math.hypot(ec.x - pc.x, ec.z - pc.z);
+    // 반지름이 큰 쪽이 기본으로 조금 더 넓다 + 우세만큼 밀린다
+    let bias = (pd.radius - E.def.radius) * 0.3 + C.D * Lc * 0.9;
+    CLASH_U.uClashP.value.set(pc.x, 0, pc.z, bias);
+    CLASH_U.uClashE.value.set(ec.x, 0, ec.z, 1);
+    // 플레이어는 늘 내 영역 안에 (머리가 경계 1.5m 안쪽에 있게)
+    const hs = clashSideJS(inp.head);
+    if (hs > -1.5) {
+      bias += hs + 1.5;
+      CLASH_U.uClashP.value.w = bias;
+    }
+    CLASH_U.uClashOn.value = 1;
+    CLASH_U.uClashT.value += dt * (1 + this.pushK);
+    C.amp = Math.max(1.2, (C.amp ?? 1.2) - dt * 4);
+    CLASH_U.uClashAmp.value = C.amp + this.pushK * 0.8;
+    CLASH_U.uClashColP.value.set(pd.color);
+    CLASH_U.uClashColE.value.set(E.def.color);
+    // 경계를 따라 불똥: 플레이어 중심에서 바깥으로 경계를 찾아 튀긴다
+    const PC = pc.clone();
+    const EC = ec.clone();
+    const sparks = 2 + Math.floor(this.pushK * 3 + (C.flashK ?? 0) * 6);
+    for (let i = 0; i < sparks; i++) {
+      const ang = Math.atan2(EC.x - PC.x, EC.z - PC.z) + rnd(-1.1, 1.1);
+      const dir = _v.set(Math.sin(ang), 0, Math.cos(ang));
+      let lo = 0.3;
+      let hi = 45;
+      if (clashSideJS(_v2.copy(PC).addScaledVector(dir, hi)) < 0) continue;
+      for (let it = 0; it < 12; it++) {
+        const m = (lo + hi) / 2;
+        if (clashSideJS(_v2.copy(PC).addScaledVector(dir, m)) > 0) hi = m;
+        else lo = m;
+      }
+      const at = _v3.copy(PC).addScaledVector(dir, hi).setY(rnd(0.2, 7));
+      fx.burst(at, 3, new THREE.Color(Math.random() < 0.4 ? '#ffffff' : Math.random() < 0.5 ? pd.color : E.def.color), 2.5, 0.05, 0.45);
+    }
+    if (C.flashK > 0) {
+      C.flashK = Math.max(0, C.flashK - dt * 3);
+      if (C.flashK > 0.7) fx.flash(inp.head, new THREE.Color(C.flashCol), 3, 0.15);
+    }
+    if (Math.random() < dt * 2.5) sfx.play('zap', { at: inp.head, vol: 0.25 + this.pushK * 0.2, rate: rnd(0.5, 1) });
     if (C.D >= 1) this._resolve('player', 'pushed');
     else if (C.D <= -1) this._resolve('enemy', 'pushed');
     void world;
@@ -515,8 +562,7 @@ export class DomainClash {
     C.done = true;
     C.winner = winner;
     this._hideSeam();
-    E.view.setClip(null);
-    this._setPlayerClip(C.pd, null);
+    CLASH_U.uClashOn.value = 0;
     if (winner === 'player') {
       ui.manga({ main: '押し勝ち', ruby: '영역을 밀어냈다', color: '#ffffff', big: true });
       ui.callout(`${E.def.label} 붕괴 — 술식이 타 버렸다 · 필중이 다시 먹힌다`, { color: '#a0ffc0', dur: 3 });
@@ -544,11 +590,6 @@ export class DomainClash {
     }
   }
 
-  /** 플레이어 영역(결계 껍질)을 경계에서 자른다 — 지원하는 껍질만 */
-  _setPlayerClip(pd, n, p) {
-    const sh = pd?.shell;
-    if (sh?.setClip) sh.setClip(n ? _v.copy(n).negate() : null, p);
-  }
 
   // ───────── 필중 효과 (플레이어) ─────────
   _sureHit(dt) {
@@ -734,7 +775,7 @@ export class DomainClash {
     if (!E) return;
     E.view.dispose();
     this.enemy = null;
-    if (this.clash) this._setPlayerClip(this.clash.pd, null);
+    CLASH_U.uClashOn.value = 0;
     this.clash = null;
     this._hideSeam();
     this._clearSure(0);
@@ -752,6 +793,7 @@ export class DomainClash {
 
   /** 배경 전환 · 캐릭터 교체 · 적 정리 */
   reset() {
+    CLASH_U.uClashOn.value = 0;
     if (this.enemy) {
       this.enemy.view.dispose();
       this.enemy = null;

@@ -1,6 +1,7 @@
 // 영역전개 공통 껍질: 검은 구가 시전자 둘레로 퍼지며 배경을 지우고, 안쪽을 영역의 풍경으로 채운다.
 //  wall/floor 셰이더와 장식(decorate)·조명만 영역마다 다르게 준다.
 import * as THREE from 'three';
+import { CLASH_U, CLASH_GLSL } from './clashBoundary.js';
 
 export const DOMAIN_NOISE = /* glsl */ `
 float dh(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -36,11 +37,11 @@ export class ShellDomain {
     this.group = new THREE.Group();
     this.group.visible = false;
     ctx.scene.add(this.group);
-    this.uniforms = { uTime: { value: 0 }, uOpen: { value: 0 }, uClip: { value: new THREE.Vector4(0, 0, 0, -1) } }; // uClip: 영역 싸움 경계 (dot(p,n) < d 쪽은 지운다)
+    this.uniforms = { uTime: { value: 0 }, uOpen: { value: 0 }, ...CLASH_U }; // 영역 싸움 경계 (적 영역 쪽은 지운다)
     const mk = (body, side) => new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: VERT,
-      fragmentShader: `uniform float uTime; uniform float uOpen; uniform vec4 uClip; varying vec3 vP; varying vec3 vW; varying vec2 vUv;\n${DOMAIN_NOISE}\n${o.glsl ?? ''}\nvoid main(){ if (dot(vW, uClip.xyz) - uClip.w < 0.0) discard; vec3 col = vec3(0.0); float alpha = 1.0;\n${body}\n gl_FragColor = vec4(col, alpha); }`,
+      fragmentShader: `uniform float uTime; uniform float uOpen; varying vec3 vP; varying vec3 vW; varying vec2 vUv;\n${DOMAIN_NOISE}\n${CLASH_GLSL}\n${o.glsl ?? ''}\nvoid main(){ float clashS = uClashOn > 0.5 ? clashSide(vW) : -1.0; if (clashS > 0.0) discard; vec3 col = vec3(0.0); float alpha = 1.0;\n${body}\n col += clashSeam(vW, clashS); gl_FragColor = vec4(col, alpha); }`,
       side, depthWrite: true, fog: false,
     });
     this.wallMat = mk(o.wall, THREE.BackSide);
@@ -59,13 +60,6 @@ export class ShellDomain {
     this.deco = new THREE.Group();
     this.group.add(this.deco);
     o.decorate?.(this.deco, this);
-  }
-
-  /** 영역 싸움: n 쪽(내 쪽)만 남기고 경계 너머는 지운다. n 이 없으면 끔 */
-  setClip(n, p) {
-    const c = this.uniforms.uClip.value;
-    if (!n) c.set(0, 0, 0, -1);
-    else c.set(n.x, n.y, n.z, n.dot(p));
   }
 
   contains(p) {
@@ -141,7 +135,6 @@ export class ShellDomain {
 
   _hide() {
     this.state = 'idle';
-    this.setClip(null);
     this.group.visible = false;
     const env = this.ctx.env;
     if (this._saved) {

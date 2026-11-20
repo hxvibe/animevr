@@ -26,6 +26,8 @@ export const SIGNS = {
   ox: { label: '관우', kanji: '貫牛', ruby: 'かんぎゅう', cost: 22, cd: 2.5, hold: 0.35 },
   mahoraga: { label: '마허라', kanji: '魔虚羅', ruby: 'まこら', cost: 60, cd: 30, hold: 1.0, top: '布瑠部由良由良' },
 };
+// 영역 음성에서 「嵌合暗翳庭」을 말하기 시작하는 때 (초)
+const CHANT_OPEN = 3.2;
 const ORDER = ['dogs', 'nue', 'toad', 'orochi', 'elephant', 'rabbits', 'ox', 'mahoraga'];
 
 export class Megumi {
@@ -54,6 +56,7 @@ export class Megumi {
     this.lost = new Set(); // 파괴된 식신 (다시 부를 수 없다)
     this.tenShadowsBroken = false; // 조복한 마허라가 파괴되면 십종영법술이 기능을 잃는다
     this.wheel = null; // 법진만 소환
+    this.fadingWheels = []; // 사라지는 중인 법진
     this.slashes = new SlashLines(ctx.scene, 60); // 옥견 혼의 발톱 자국
     const W = ctx.world;
     // 탈토가 나와 있으면 더미들은 토끼를 노리고, 가까이서 싸우는 식신이 있으면 그 식신을 친다
@@ -138,8 +141,8 @@ export class Megumi {
         { head: '蝦蟇 가마 · 脱兎 탈토', demo: ['megumi.toad', 'megumi.rabbits'], color: '#a8b8ff', text: '가마: 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다' },
         { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)' },
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
-        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 앞에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
-        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '가슴 앞에서 두 손을 맞잡아 깍지 끼고 1.2초 (수인표)\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
+        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 높이에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
+        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '두 주먹을 가슴 아래(명치~배 앞)에서 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
         { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
       ];
     }
@@ -163,6 +166,7 @@ export class Megumi {
     let dom = '준비';
     if (this.garden.state === 'active') dom = `전개 중 ${Math.max(0, Math.ceil(d.duration - d.t))}s`;
     else if (this.garden.state !== 'idle') dom = '전개 중';
+    else if (d.chant) dom = '영창 중';
     else if (d.cd > 0) dom = `재사용 ${Math.ceil(d.cd)}s`;
     const names = [...new Set(this.list.filter((s) => s.state !== 'sink').map((s) => s.name.replace(/ [白黒]$/, '')))];
     const rows = [
@@ -198,6 +202,7 @@ export class Megumi {
       if (!s.alive || !s.update(dt)) this.list.splice(i, 1);
     }
     if (this.wheel && !this.wheel.update(dt)) this.wheel = null;
+    this.fadingWheels = this.fadingWheels.filter((w) => w.update(dt));
     this.slashes.update(dt, inp.head);
     this._updateDomain(dt);
     for (let i = this.pending.length - 1; i >= 0; i--) {
@@ -246,11 +251,12 @@ export class Megumi {
     if (L.active && R.active && L.source === 'hand' && R.source === 'hand' && !L.uiBlock && !R.uiBlock) {
       const d = L.palm.distanceTo(R.palm);
       const mid = _v2.addVectors(L.palm, R.palm).multiplyScalar(0.5);
-      // 영역전개 (수인표): 가슴 앞에서 두 손을 맞잡아 손가락을 깍지 낀다 — 손바닥이 서로 마주 본다
-      const clasp = d < 0.075 && L.gesture !== 'open' && R.gesture !== 'open' && L.palmNormal.dot(R.palmNormal) < -0.5 && mid.y < head.y - 0.12 && mid.y > head.y - 0.65 && front(L) > 0.1;
-      if (settings.domainGesture && clasp) return 'domain';
-      // 마허라: 두 주먹을 맞댄다 (그림)
-      if (fist(L) && fist(R) && d < 0.13 && L.palmNormal.dot(R.palmNormal) > -0.3 && mid.y < head.y - 0.12 && mid.distanceTo(head) < 0.75) return 'mahoraga';
+      // 두 주먹을 맞댄다: 가슴 아래(명치~배 앞)면 영역전개, 가슴 앞이면 마허라
+      //  높이는 눈에서 잰다: 가슴 앞 ≈ 눈 아래 0.2~0.45m, 가슴 아래 ≈ 0.47m 아래
+      const fists = fist(L) && fist(R) && d < 0.14 && front(L) > 0.08 && front(R) > 0.08;
+      const drop = head.y - mid.y;
+      if (settings.domainGesture && fists && drop > 0.47 && drop < 0.95) return 'domain';
+      if (fists && L.palmNormal.dot(R.palmNormal) > -0.3 && drop > 0.12 && drop <= 0.47 && mid.distanceTo(head) < 0.75) return 'mahoraga';
       // 관우 (그림): 한 손 검지를 뿔처럼 세우고, 다른 손을 그 아래에 받친다
       const horn = (H, B) => (H.gesture === 'point' || H.gesture === 'two') && H.dir.y > 0.45 && nf(B) && H.palm.y - B.palm.y > 0.02 && Math.hypot(H.palm.x - B.palm.x, H.palm.z - B.palm.z) < 0.15 && front(H) > 0.12;
       if (horn(L, R) || horn(R, L)) return 'ox';
@@ -456,7 +462,10 @@ export class Megumi {
       ui.callout('법진만 소환 — 받는 공격에 적응한다 · 같은 수인으로 마허라', { color: '#ffe0a0', dur: 2 });
       return;
     }
-    if ((this.cds[id] ?? 0) > 0 && !this.domainActive) return;
+    if ((this.cds[id] ?? 0) > 0 && !this.domainActive) {
+      if (id === 'mahoraga') ui.callout(`마허라 재소환 대기 ${Math.ceil(this.cds[id])}s`, { color: '#ffe0a0', size: 38, dur: 1 });
+      return;
+    }
     let target = null;
     if (id === 'orochi' || id === 'elephant' || id === 'toad') {
       target = this.pickTarget(head, 24, true);
@@ -510,7 +519,9 @@ export class Megumi {
     } else if (id === 'mahoraga') {
       const inherit = this.wheel?.alive ? this.wheel.ad.snapshot() : null;
       if (this.wheel) {
+        // 법진은 마허라 머리 위로 옮겨 가며 사라진다 (사라지는 동안에도 계속 갱신해야 장면에서 빠진다)
         this.wheel.dismiss();
+        this.fadingWheels.push(this.wheel);
         this.wheel = null;
       }
       const m = new Mahoraga(this, inherit);
@@ -527,9 +538,9 @@ export class Megumi {
 
   // ───────────────── 영역전개 嵌合暗翳庭 ─────────────────
   castDomain() {
-    const { input: inp, ui, sfx, world } = this.ctx;
-    if (this.garden.state !== 'idle' || this.domain.cd > 0) {
-      ui.callout('영역전개 재사용 대기 중');
+    const { input: inp, ui, sfx } = this.ctx;
+    if (this.garden.state !== 'idle' || this.domain.cd > 0 || this.domain.chant) {
+      if (!this.domain.chant) ui.callout('영역전개 재사용 대기 중');
       return;
     }
     if (this.energy < 50) {
@@ -537,6 +548,22 @@ export class Megumi {
       return;
     }
     this.energy -= 50;
+    // 영창: 「領域展開」 → (숨) → 「嵌合暗翳庭」 을 말하는 순간 그림자 바다가 펼쳐진다
+    const voice = sfx.playClip('megumiDomain', { vol: 1.15 });
+    const lead = voice.duration ? CHANT_OPEN : 0.25;
+    this.domain.chant = { t: 0, lead, voice };
+    this.domainCasting = true; // 영역 싸움: 영창 중에도 전개를 시작한 것으로 본다
+    ui.manga({ main: '領域展開', ruby: 'りょういきてんかい', color: '#6f86ff' });
+    shadowSplash(this.ctx.fx, new THREE.Vector3(inp.head.x, 0, inp.head.z), 1.2, 24);
+    inp.left.pulse?.(0.5, 200);
+    inp.right.pulse?.(0.5, 200);
+  }
+
+  /** 영창이 끝나 실제로 펼친다 */
+  _openGarden() {
+    const { input: inp, ui, sfx, world } = this.ctx;
+    this.domain.chant = null;
+    this.domainCasting = false;
     const center = new THREE.Vector3(inp.head.x, 0, inp.head.z);
     this.garden.start(center);
     this.domain.t = 0;
@@ -555,6 +582,15 @@ export class Megumi {
     const { world, fx, sfx } = this.ctx;
     const G = this.garden;
     const d = this.domain;
+    if (d.chant) {
+      d.chant.t += dt;
+      // 영창 중: 발밑 그림자가 짙어지고 손에 그림자가 감긴다
+      this.aura.set('left', 0.5 + 0.5 * Math.min(1, d.chant.t / d.chant.lead));
+      this.aura.set('right', 0.5 + 0.5 * Math.min(1, d.chant.t / d.chant.lead));
+      if (Math.random() < 0.3) shadowSplash(fx, _v.set(this.ctx.input.head.x + (Math.random() - 0.5) * 1.5, 0, this.ctx.input.head.z + (Math.random() - 0.5) * 1.5), 0.3, 4);
+      if (d.chant.t >= d.chant.lead) this._openGarden();
+      return;
+    }
     if (G.state !== 'active') return;
     d.t += dt;
     if (d.t >= d.duration) {
@@ -567,6 +603,7 @@ export class Megumi {
     d.spikeT -= dt;
     if (d.spikeT > 0) return;
     d.spikeT = 1.8;
+    if (world.sureHitBlocked?.()) return; // 영역 싸움(중첩): 필중 효과가 사라진다
     for (const t of world.targets()) {
       if (t.heldBy) continue;
       const c = t.center(new THREE.Vector3());
@@ -593,6 +630,9 @@ export class Megumi {
   }
 
   cancelDomain() {
+    this.domain.chant?.voice?.stop(0.2);
+    this.domain.chant = null;
+    this.domainCasting = false;
     this.garden.cancel();
     this.ctx.world.domain = null;
   }
@@ -602,6 +642,8 @@ export class Megumi {
     this.list = [];
     this.wheel?.destroy();
     this.wheel = null;
+    for (const w of this.fadingWheels) w.destroy();
+    this.fadingWheels = [];
     this.ctx.scene.remove(this.slashes.mesh);
     this.slashes.mesh.dispose();
     const W = this.ctx.world;

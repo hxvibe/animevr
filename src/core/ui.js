@@ -246,8 +246,8 @@ export class UI {
         g.fillText(c.kanji, x + 30, 530);
       });
     } else if (n > 4) {
-      // 5명 이상: 3열(7명 이상은 4열) 격자. 이름 아래에 대표 기술, 맨 아래에 작품/술식
-      const cols = n > 6 ? 4 : 3;
+      // 5명 이상: 3열(7명 이상은 4열, 9명 이상은 5열 — 두 줄을 넘기면 글씨가 칸에 안 들어간다) 격자
+      const cols = n > 8 ? 5 : n > 6 ? 4 : 3;
       const rows = Math.ceil(n / cols);
       const gap = 20;
       const cw = (W - 180 - gap * (cols - 1)) / cols;
@@ -360,9 +360,11 @@ export class UI {
       p.button(700, 680, 310, 130, '모두 제거', 'clear', { size: 32 });
       p.button(1030, 680, 320, 130, `더미 AI\n${S.dummyAI ? '켜짐' : '꺼짐'}`, 'ai', { size: 30, active: S.dummyAI, accent: '#555' });
       p.button(50, 840, 480, 100, '아레나 초기화', 'resetArena', { size: 30 });
-      g.font = `400 26px ${FONT}`;
+      p.button(560, 840, 450, 100, '적 영역전개 (영역 싸움)', 'edomain', { size: 28, accent: '#3a5ad6' });
+      g.font = `400 24px ${FONT}`;
       g.fillStyle = 'rgba(255,255,255,0.6)';
-      g.fillText('B 버튼 / R 키: 선택한 더미 바로 소환', 560, 900);
+      g.fillText('B 버튼 / R 키: 선택한 더미 바로 소환', 50, 985);
+      g.fillText('마히토 · 죠고 · 고죠는 스스로도 영역을 펼친다 → 같이 펼쳐 맞서기', 560, 985);
     } else if (this.tab === 'settings') {
       g.font = `700 32px ${FONT}`;
       g.fillText('배경', 50, 180);
@@ -493,6 +495,18 @@ export class UI {
     else if (id === 'spawn') {
       ctx.world.spawnDummies(this.spawn.type, this.spawn.hp, this.spawn.count);
       this.showOptions(false);
+    } else if (id === 'edomain') {
+      // 영역을 쓰는 적이 바로 영역전개 (영역 싸움 시험용)
+      const inp = ctx.input;
+      const list = ctx.world.dummies.filter((d) => d.alive && d.def.domain && !d.dying);
+      list.sort((a, b) => a.root.position.distanceTo(inp.head) - b.root.position.distanceTo(inp.head));
+      if (!list.length) this.callout('영역을 쓰는 적(마히토 · 죠고 · 고죠 사토루)을 먼저 소환하세요', { color: '#ffb0b0' });
+      else if (ctx.world.clash.enemy) this.callout('이미 적의 영역이 펼쳐져 있다', { color: '#ffb0b0' });
+      else {
+        list[0].forceDomain = true;
+        if (!ctx.settings.dummyAI) this.callout('더미 AI 가 꺼져 있으면 적이 움직이지 않습니다', { color: '#ffb0b0' });
+        this.showOptions(false);
+      }
     } else if (id === 'clear') {
       ctx.world.clearDummies();
       ctx.world.clearDebris();

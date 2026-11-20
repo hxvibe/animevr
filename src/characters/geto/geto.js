@@ -497,7 +497,12 @@ export class Geto {
     const front = _v2.subVectors(mid, inp.head).dot(inp.headDir);
     if (L.source === 'hand' && R.source === 'hand') {
       if (L.gesture === 'fist' || R.gesture === 'fist') return null;
+      // 왼손바닥을 펴서 주령구를 꺼내 놓고 오른손으로 고르는 중이면 소용돌이가 아니다
+      //  (왼손바닥은 위, 오른손바닥은 아래를 보며 위아래로 겹쳐 → 마주 보는 것으로 잘못 잡혔다)
+      if (this.tray.open > 0.05 || this._trayHand() || this.held.right || this.held.left) return null;
       const lr = _v3.subVectors(R.palm, L.palm).normalize();
+      // 두 손이 옆으로 나란히 (위아래로 겹친 건 제외)
+      if (Math.abs(lr.y) > 0.6) return null;
       // 두 손바닥이 마주 본다 (공을 감싸 쥐듯)
       if (d > 0.1 && d < 0.55 && L.palmNormal.dot(lr) > 0.45 && R.palmNormal.dot(lr) < -0.45 && front > 0.12 && mid.y > inp.head.y - 0.75) return { mid: mid.clone(), d };
       return null;

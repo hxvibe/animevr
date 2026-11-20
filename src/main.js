@@ -53,6 +53,7 @@ ctx.sfx.preloadClips({
   sukunaDomain: 'assets/audio/sukuna_domain_voice.mp3',
   shrineMusic: 'assets/audio/sukuna_domain_music.mp3',
   mahoragaWheel: 'assets/audio/mahoraga_wheel.mp3',
+  megumiDomain: 'assets/audio/megumi_domain_voice.mp3',
 });
 ctx.fx = new Fx(scene, renderer);
 ctx.input = new Input(renderer, rig, camera, renderer.domElement);
@@ -76,6 +77,7 @@ const game = {
   },
   setBackground(id) {
     settings.background = id;
+    ctx.world.clash.reset();
     ctx.grab.releaseAll();
     ctx.character?.cancelDomain?.();
     return ctx.env.setBackground(id);
@@ -126,7 +128,7 @@ const loading = preload(['dummy', 'white_room', 'shrine']).then(() => {
 });
 
 // 폰트(한글·일본어)를 미리 받아둔다
-const JP_CHARS = '術式順転反蒼赫虚茈領域展開無量空処下限六眼黒閃解捌竈開伏魔御廚子世界を断つ龍鱗反発番いの流星あおかむらさきりょうくうしょげんりくがんこくせんカイハチカミノフーガふくまみづしゅんはつつがいせ「」■螺旋丸手裏剣風遁影分身の術多重九喇嘛モードらせんがんしゅりけんふうとんかげぶんしんじゅつたじゅうクラマかめはめ波元気玉瞬間移動超サイヤ人げんきだまどうスーパー呪霊操術虹龍化身玉藻前極ノ番うずまき私キレイ無為転変火山呪力撥体自閉円頓裹じへいえんどんか遍殺即霊体蓋棺鉄囲山がいかんてっちせん隕いん煉獄れんごく火山頭かざんとう火礫蟲完全顕現里香りか純愛砲じゅんあいほう動くなうごく真贋相愛しんがんそうあい嵌合暗翳庭';
+const JP_CHARS = '術式順転反蒼赫虚茈領域展開無量空処下限六眼黒閃解捌竈開伏魔御廚子世界を断つ龍鱗反発番いの流星あおかむらさきりょうくうしょげんりくがんこくせんカイハチカミノフーガふくまみづしゅんはつつがいせ「」■螺旋丸手裏剣風遁影分身の術多重九喇嘛モードらせんがんしゅりけんふうとんかげぶんしんじゅつたじゅうクラマかめはめ波元気玉瞬間移動超サイヤ人げんきだまどうスーパー呪霊操術虹龍化身玉藻前極ノ番うずまき私キレイ無為転変火山呪力撥体自閉円頓裹じへいえんどんか遍殺即霊体蓋棺鉄囲山がいかんてっちせん隕いん煉獄れんごく火山頭かざんとう火礫蟲完全顕現里香りか純愛砲じゅんあいほう動くなうごく真贋相愛しんがんそうあい嵌合暗翳庭芻霊呪法すうれいじゅほう簪かんざし共鳴ともなり法陣ほうじん領域展開の押合中和必中消滅りょういきてんかい';
 Promise.all([
   document.fonts?.load?.(`900 100px ${JFONT.split(',')[0]}`, JP_CHARS),
   document.fonts?.load?.(`700 40px ${JFONT.split(',')[0]}`, JP_CHARS),
@@ -250,9 +252,13 @@ renderer.setAnimationLoop(() => {
     simDt = dt * 0.05;
   }
   if (inp.mode !== 'none' && ctx.character) {
+    // 무량공처의 필중: 몸이 굳어 술식도 주먹도 못 쓴다 (손은 보이지만 캐릭터에겐 없는 것처럼)
+    const para = ctx.world.player.paralyzed && !ctx.ui.menuOpen;
+    if (para) inp.mute(true);
     ctx.character.update(simDt);
     ctx.grab.update(simDt);
     ctx.melee.update(dt);
+    if (para) inp.mute(false);
     ctx.world.update(simDt);
   }
   ctx.env.update(simDt);

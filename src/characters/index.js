@@ -10,6 +10,7 @@ import { Geto } from './geto/geto.js';
 import { Mahito } from './mahito/mahito.js';
 import { Jogo } from './jogo/jogo.js';
 import { Yuta } from './yuta/yuta.js';
+import { Nobara } from './nobara/nobara.js';
 
 export const CHARACTERS = [
   {
@@ -83,5 +84,14 @@ export const CHARACTERS = [
     kanji: '火礫蟲 · 煉獄 · 隕 · 蓋棺鉄囲山',
     color: '#ff7a2a',
     create: (ctx) => new Jogo(ctx),
+  },
+  {
+    id: 'nobara',
+    name: '쿠기사키 노바라',
+    work: '주술회전',
+    technique: '추령주법(芻霊呪法)',
+    kanji: '芻霊呪法 · 簪 · 共鳴り',
+    color: '#ff8a5a',
+    create: (ctx) => new Nobara(ctx),
   },
 ];

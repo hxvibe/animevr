@@ -12,6 +12,8 @@ import * as THREE from 'three';
 import { Dummy } from './dummy.js';
 import { GiantScissors } from '../characters/geto/vfx.js';
 import { TransfiguredWorm } from './transfigured.js';
+import { EnergyOrb } from '../characters/gojo/vfx.js';
+import { ENEMY_DOMAINS, playerDomain } from './domainClash.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -317,6 +319,7 @@ const LUNGE = {
 // 마히토: 무위전변으로 팔을 바꾼다
 const morph = (part) => ({ start: (e) => e.morph(part), end: (e) => e.morph(null) });
 const M_BLADE = {
+  tech: true,
   name: '칼날 팔', range: [0, 1.4], cd: 2.4, w: 2, dur: 0.75, ...morph('ArmsBlades'),
   pose: SWIPE.pose,
   tick: (e, k, m) => {
@@ -331,6 +334,7 @@ const M_BLADE = {
   fist: { L: 0.3, R: 0 },
 };
 const M_DRILL = {
+  tech: true,
   name: '드릴 팔', range: [0.4, 1.7], cd: 3, w: 1.5, dur: 0.8, ...morph('ArmDrill'),
   pose: (T, e, k) => punchPose(T, e, 'R', k, { a: 0.4, b: 0.55, power: 1.2 }),
   tick: (e, k, m) => {
@@ -345,6 +349,7 @@ const M_DRILL = {
   },
 };
 const M_STRETCH = {
+  tech: true,
   name: '늘어나는 팔', range: [1.2, 3.4], cd: 3.5, w: 1.5, dur: 0.9,
   pose: (T, e, k) => punchPose(T, e, 'R', k, { a: 0.35, b: 0.5 }),
   tick: (e, k, m) => {
@@ -360,6 +365,7 @@ const M_STRETCH = {
   fist: { L: 0.4, R: 1 },
 };
 const M_BIGFIST = {
+  tech: true,
   name: '거대한 주먹', range: [0, 1.6], cd: 5, w: 1.2, dur: 1.1,
   pose: (T, e, k) => {
     const up = sm(0, 0.45, k) * (1 - sm(0.45, 0.55, k));
@@ -383,6 +389,7 @@ const M_BIGFIST = {
   fist: { L: 0.4, R: 1 },
 };
 const M_TOUCH = {
+  tech: true,
   name: '무위전변', range: [0, 1.1], cd: 7, w: 0.8, dur: 1.2,
   pose: (T, e, k) => {
     const reach = sm(0.3, 0.75, k) * (1 - sm(0.85, 1, k));
@@ -402,6 +409,7 @@ const M_TOUCH = {
   fist: { L: 0.3, R: 0 },
 };
 const M_LAUNCH = {
+  tech: true,
   name: '개조인간 발사', range: [2.2, 12], cd: 6, w: 1.6, dur: 1.1,
   pose: (T, e, k) => {
     // 입에서 개조인간을 끄집어내 → 앞으로 던진다
@@ -426,6 +434,7 @@ const M_LAUNCH = {
 
 // 죠고: 불
 const J_FIREBALL = {
+  tech: true,
   name: '불덩이', range: [1.5, 15], cd: 2.2, w: 2, dur: 0.7,
   pose: (T, e, k) => {
     const raise = sm(0, 0.5, k) * (1 - sm(0.75, 1, k));
@@ -442,6 +451,7 @@ const J_FIREBALL = {
   fist: { L: 0.4, R: 0 },
 };
 const J_ERUPT = {
+  tech: true,
   name: '분화', range: [2.5, 14], cd: 6, w: 1.4, dur: 1.5,
   start: (e, m) => { m.at = e.world.ctx.input.head.clone().setY(0); },
   pose: (T, e, k) => {
@@ -473,6 +483,7 @@ const J_ERUPT = {
   fist: { L: 0, R: 0 },
 };
 const J_INSECTS = {
+  tech: true,
   name: '불벌레', range: [1.5, 12], cd: 7, w: 1.1, dur: 0.9,
   pose: (T, e, k) => {
     const sweep = sm(0.2, 0.6, k) * (1 - sm(0.8, 1, k));
@@ -490,6 +501,7 @@ const J_INSECTS = {
   fist: { L: 0, R: 0 },
 };
 const J_FLAME = {
+  tech: true,
   name: '화염 방사', range: [0, 3.2], cd: 5, w: 1.4, dur: 1.4,
   pose: (T, e, k) => {
     const on = sm(0, 0.2, k) * (1 - sm(0.85, 1, k));
@@ -571,6 +583,277 @@ const K_SLASH = {
   fist: { L: 0.3, R: 0.9 },
 };
 
+
+// 고죠 사토루: 무하한 — 아오(蒼) · 아카(赫) · 허식 「무라사키(茈)」 · 순간이동 + 체술
+/** 고죠의 구체: 손에서 모았다가 쏜다 (또는 그 자리에서 터진다) */
+class GojoShot {
+  constructor(e, kind, { from, to = null, speed = 0, radius = 0.12, grow = 0, life = 3, onHit, at = null, pull = 0 }) {
+    this.e = e;
+    this.ctx = e.world.ctx;
+    this.orb = new EnergyOrb(this.ctx, kind, radius);
+    this.orb.pos.copy(from);
+    this.ctx.scene.add(this.orb.group);
+    this.kind = kind;
+    this.r = radius;
+    this.grow = grow;
+    this.speed = speed;
+    this.dir = to ? new THREE.Vector3().subVectors(to, from).normalize() : null;
+    this.life = life;
+    this.t = 0;
+    this.onHit = onHit;
+    this.at = at;
+    this.pull = pull;
+    this.ok = true;
+  }
+
+  update(dt) {
+    this.t += dt;
+    const { input: inp, world } = this.ctx;
+    if (this.grow) this.r += this.grow * dt;
+    this.orb.setRadius(this.r);
+    if (this.dir) this.orb.pos.addScaledVector(this.dir, this.speed * dt);
+    this.orb.update(dt, 1);
+    // 아오: 주위를 빨아들인다 (소품·더미)
+    if (this.pull) {
+      world.forEachTarget(this.orb.pos, 3, (t, d, c) => {
+        if (t === this.e || t.heldBy) return;
+        const f = _v.subVectors(this.orb.pos, c).normalize().multiplyScalar(this.pull * dt * 6);
+        if (t.kind === 'prop') t.vel?.add(f);
+        else t.impulse?.(f, 1);
+      });
+    }
+    const bc = inp.bodyCenter(_v3);
+    const hit = this.dir && (this.orb.pos.distanceTo(bc) < this.r + 0.35 || this.orb.pos.distanceTo(inp.head) < this.r + 0.25);
+    if (hit || this.t >= this.life) {
+      this.onHit?.(this, hit);
+      this.dispose();
+      return false;
+    }
+    return true;
+  }
+
+  dispose() {
+    if (!this.ok) return;
+    this.ok = false;
+    this.orb.dispose();
+  }
+}
+
+const gojoAim = (e, out = new THREE.Vector3()) => out.copy(e.world.ctx.input.bodyCenter(out)).add(_v2.set(0, 0.15, 0));
+
+const G_BLUE = {
+  tech: true,
+  name: '術式順転 「蒼」', range: [2, 14], cd: 7, w: 1.4, dur: 0.9,
+  pose: (T, e, k) => {
+    const up = sm(0, 0.35, k) * (1 - sm(0.8, 1, k));
+    T.shR = [-1.45 * up, 0, -0.1];
+    T.elR = [-0.2, 0, 0];
+  },
+  tick: (e, k, m) => {
+    if (m.made || k < 0.45) return;
+    m.made = true;
+    const { ui, sfx, fx } = e.world.ctx;
+    // 플레이어 바로 옆에 끌어당기는 점
+    const at = gojoAim(e).add(_v.set(rnd(-0.6, 0.6), rnd(-0.2, 0.3), rnd(-0.6, 0.6)));
+    ui.manga({ main: '蒼', ruby: 'あお', color: '#5ab4ff' });
+    sfx.play('loop_blue', { at, vol: 0.5 });
+    e.fxs.push(new GojoShot(e, 'blue', {
+      from: at, radius: 0.05, grow: 0.4, life: 0.9, pull: 3,
+      onHit: (s) => {
+        const p = s.orb.pos;
+        fx.implode(p, 40, new THREE.Color(0x6cc4ff), 1.6, 0.35, 0.05);
+        fx.sphereBlast(p, 0x6cc4ff, 1.4, 0.3);
+        sfx.play('zap', { at: p, vol: 0.8, rate: 0.6 });
+        if (p.distanceTo(e.world.ctx.input.bodyCenter(_v3)) < 1.7) e.world.hitPlayer(e.dmg(13), { type: 'impact', src: e });
+      },
+    }));
+  },
+  fist: { L: 0.4, R: 0 },
+};
+const G_RED = {
+  tech: true,
+  name: '術式反転 「赫」', range: [1.5, 16], cd: 8, w: 1.4, dur: 1.0,
+  pose: (T, e, k) => {
+    const up = sm(0, 0.3, k) * (1 - sm(0.85, 1, k));
+    T.shR = [-1.5 * up, 0, -0.05];
+    T.elR = [-0.1, 0, 0];
+    T.chest[1] -= 0.25 * up;
+  },
+  tick: (e, k, m) => {
+    const { ui, sfx, fx } = e.world.ctx;
+    const hand = handPos(e, 'R', new THREE.Vector3()).addScaledVector(fwdOf(e, _v2), 0.15);
+    if (k < 0.55) {
+      if (Math.random() < 0.6) fx.implode(hand, 3, new THREE.Color(0xff3a2a), 0.25, 0.25, 0.02);
+      return;
+    }
+    if (m.made) return;
+    m.made = true;
+    ui.manga({ main: '赫', ruby: 'あか', color: '#ff4a4a' });
+    sfx.play('red_fire', { at: hand, vol: 0.9 });
+    e.fxs.push(new GojoShot(e, 'red', {
+      from: hand, to: gojoAim(e), speed: 17, radius: 0.13, life: 1.8,
+      onHit: (s, hit) => {
+        const p = s.orb.pos;
+        fx.sphereBlast(p, 0xff3a2a, 2.2, 0.35);
+        fx.burst(p, 50, new THREE.Color(0xff5a48), 7, 0.06, 0.5);
+        fx.flash(p, new THREE.Color(0xff3a2a), 8, 0.3);
+        sfx.explosion(p, 1.1);
+        e.world.forEachTarget(p, 2.4, (t, d, c) => {
+          if (t === e) return;
+          t.damage?.(25, { type: 'impact', color: '#ff5a48' });
+          t.impulse?.(_v.subVectors(c, p).normalize().multiplyScalar(9).add(_v2.set(0, 3, 0)), 6);
+        });
+        if (hit || p.distanceTo(e.world.ctx.input.head) < 2.2) e.world.hitPlayer(e.dmg(20), { type: 'impact', src: e });
+      },
+    }));
+  },
+  fist: { L: 0.4, R: 0.2 },
+};
+const G_PURPLE = {
+  tech: true,
+  name: '虚式 「茈」', range: [4, 30], cd: 22, w: 0.9, dur: 2.5, track: true,
+  start: (e, m) => {
+    e.world.ctx.ui.manga({ top: '虚式', main: '茈', ruby: 'むらさき', color: '#b070ff', big: true });
+    m.blue = new EnergyOrb(e.world.ctx, 'blue', 0.08);
+    m.red = new EnergyOrb(e.world.ctx, 'red', 0.08);
+    e.world.ctx.scene.add(m.blue.group, m.red.group);
+    e.world.ctx.sfx.play('charge_rise', { at: e.root.position, vol: 0.9, rate: 0.7 });
+  },
+  pose: (T, e, k) => {
+    // 두 팔을 벌렸다가(蒼·赫) 가운데로 모은다
+    const open = sm(0, 0.25, k) * (1 - sm(0.45, 0.65, k));
+    const join = sm(0.45, 0.65, k) * (1 - sm(0.9, 1, k));
+    T.shR = [-1.2 * (open + join), 0, -0.9 * open + 0.15 * join];
+    T.shL = [-1.2 * (open + join), 0, 0.9 * open - 0.15 * join];
+    T.elR = [-0.2, 0, 0];
+    T.elL = [-0.2, 0, 0];
+  },
+  tick: (e, k, m, dt) => {
+    const ctx = e.world.ctx;
+    const L = handPos(e, 'L', new THREE.Vector3());
+    const R = handPos(e, 'R', new THREE.Vector3());
+    if (m.blue) {
+      m.blue.pos.copy(L);
+      m.red.pos.copy(R);
+      m.blue.update(dt, 1);
+      m.red.update(dt, 1);
+    }
+    if (k > 0.62 && m.blue) {
+      m.blue.dispose();
+      m.red.dispose();
+      m.blue = m.red = null;
+      ctx.fx.flash(_v.addVectors(L, R).multiplyScalar(0.5), new THREE.Color(0xb070ff), 10, 0.4);
+    }
+    if (!m.made && k > 0.8) {
+      m.made = true;
+      const from = _v.addVectors(L, R).multiplyScalar(0.5).addScaledVector(fwdOf(e, _v2), 0.4).clone();
+      // 쏜 순간의 플레이어 자리로 곧게 — 옆으로 피할 수 있다
+      const to = gojoAim(e).clone();
+      ctx.sfx.play('purple_launch', { at: from, vol: 1 });
+      const pr = 0.75;
+      e.fxs.push(new GojoShot(e, 'purple', {
+        from, to, speed: 10, radius: pr, life: 3.2,
+        onHit: (s, hit) => {
+          const p = s.orb.pos;
+          ctx.fx.sphereBlast(p, 0xb070ff, 3, 0.4);
+          ctx.fx.flash(p, new THREE.Color(0xc070ff), 12, 0.4);
+          ctx.sfx.explosion(p, 1.6);
+          if (hit) e.world.hitPlayer(e.dmg(48), { type: 'erase', src: e });
+        },
+      }));
+      // 지나가는 길의 소품은 지워진다
+      const shot = e.fxs[e.fxs.length - 1];
+      const upd = shot.update.bind(shot);
+      shot.update = (d) => {
+        e.world.forEachTarget(shot.orb.pos, pr + 0.3, (t) => {
+          if (t === e) return;
+          t.damage?.(200 * d, { type: 'erase', color: '#c070ff', silent: true });
+        });
+        return upd(d);
+      };
+    }
+  },
+  end: (e, m) => {
+    m.blue?.dispose();
+    m.red?.dispose();
+  },
+  fist: { L: 0.1, R: 0.1 },
+};
+const G_BLINK = {
+  tech: true,
+  name: '순간이동', range: [3.5, 20], cd: 5, w: 1.6, dur: 0.35, track: false,
+  start: (e, m) => {
+    const { fx, sfx, input: inp } = e.world.ctx;
+    const from = e.root.position.clone();
+    fx.burst(from.clone().setY(1), 30, new THREE.Color(0xcfe6ff), 3, 0.04, 0.3);
+    // 플레이어 앞 1.2m, 좌우로 조금
+    const f = _v.copy(inp.headDir).setY(0).normalize();
+    const side = _v2.set(-f.z, 0, f.x).multiplyScalar(rnd(-0.9, 0.9));
+    const to = _v3.copy(inp.head).setY(0).addScaledVector(f, 1.25).add(side);
+    const b = e.world.ctx.env.bounds;
+    if (b) {
+      to.x = THREE.MathUtils.clamp(to.x, b.minX + 0.5, b.maxX - 0.5);
+      to.z = THREE.MathUtils.clamp(to.z, b.minZ + 0.5, b.maxZ - 0.5);
+    }
+    e.root.position.copy(to);
+    e.faceTo(inp.head);
+    fx.burst(to.clone().setY(1), 30, new THREE.Color(0xcfe6ff), 3, 0.04, 0.3);
+    sfx.play('whoosh_2', { at: to, vol: 0.8, rate: 1.4 });
+    // 곧바로 이어서 친다
+    for (const n of ['연타', '스트레이트', '잽']) e.cds[n] = 0;
+    m.done = true;
+  },
+  pose: (T) => {
+    T.chest[0] += 0.1;
+  },
+  fist: { L: 1, R: 1 },
+};
+
+
+// 영역전개: 적마다 다른 수인을 맺었다가 펼친다. 펼친 뒤 영역 싸움이 이어지는 동안엔 수인을 유지하며 버틴다
+function domainSign(T, e, k) {
+  const mdl = e.def.model;
+  if (mdl === 'gojo') {
+    // 오른손을 얼굴 앞으로 들어 검지·중지를 꼰다
+    T.shR = [-2.0 * k, 0, -0.35 * k];
+    T.elR = [-1.9 * k, 0, 0];
+    T.shL = [0.1, 0, e.restZ * 0.8];
+  } else if (mdl === 'jogo') {
+    // 두 손을 가슴 앞에서 겹친다 (지붕)
+    T.shL = [-1.25 * k, 0, 0.45 * k];
+    T.shR = [-1.25 * k, 0, -0.45 * k];
+    T.elL = [-1.5 * k, 0.4 * k, 0];
+    T.elR = [-1.5 * k, -0.4 * k, 0];
+  } else {
+    // 마히토: 두 손을 가슴 앞에 모아 손가락을 맞댄다
+    T.shL = [-1.1 * k, 0, 0.35 * k];
+    T.shR = [-1.1 * k, 0, -0.35 * k];
+    T.elL = [-1.75 * k, 0.3 * k, 0];
+    T.elR = [-1.75 * k, -0.3 * k, 0];
+    T.head[0] += 0.15 * k;
+  }
+}
+const DOMAIN = {
+  name: '영역전개', range: [0, 99], cd: 0, w: 0, dur: 1.5, track: true,
+  start: (e) => {
+    const def = ENEMY_DOMAINS[e.def.model];
+    const { ui, sfx } = e.world.ctx;
+    ui.manga({ main: '領域展開', ruby: 'りょういきてんかい', color: def?.color ?? '#ffffff' });
+    ui.callout(`${e.def.label} — 영역전개! (같이 영역을 펼쳐 맞서라)`, { color: def?.color ?? '#ffffff', dur: 2 });
+    sfx.play('chant', { at: e.root.position, vol: 0.8, rate: e.def.model === 'jogo' ? 0.8 : 1 });
+    // 고죠: 눈가리개를 내린다
+    if (e.def.model === 'gojo') e.unmask?.(true);
+  },
+  pose: (T, e, k) => domainSign(T, e, sm(0, 0.35, k)),
+  tick: (e, k, m) => {
+    if (!m.cast && k > 0.95) {
+      m.cast = true;
+      e.world.clash.cast(e);
+    }
+  },
+  fist: { L: 0.6, R: 0.6 },
+};
+
 // 기술 묶음 · 버릇
 const KITS = {
   bagmask: { moves: [JAB, CROSS, HOOK, KICK, COMBO], stance: 'boxer', keep: [0, 1.0] },
@@ -579,6 +862,7 @@ const KITS = {
   fingerBearer: { moves: [COMBO, SLAM, LUNGE, KICK], stance: 'beast', keep: [0, 1.1] },
   kuchisake: { moves: [K_SNIP, K_SLASH, LUNGE], stance: 'creep', keep: [0, 1.3] },
   cyclops: { moves: [STOMP, SLAM, SWIPE], stance: 'heavy', keep: [0, 1.6] },
+  gojo: { moves: [JAB, CROSS, KICK, COMBO, G_BLUE, G_RED, G_PURPLE, G_BLINK], stance: 'pockets', keep: [0, 1.3] },
 };
 
 // ───────────────── 적 ─────────────────
@@ -598,6 +882,39 @@ export class RiggedEnemy extends Dummy {
     this.pose = Object.fromEntries(ORDER.map((k) => [k, [0, 0, 0]]));
     this.fingers = this.rig ? new FingerRig(this.rig) : null;
     this.scaled = new Set();
+    // 고죠: 처음엔 눈가리개를 한 채 (진지해지면 벗는다)
+    if (this.def.model === 'gojo') this.unmask(false);
+    // 영역전개를 쓰는 적: 처음 펼칠 때까지 (적과 맞붙은 뒤) 몇 초
+    this._domT = rnd(9, 16);
+  }
+
+  /**
+   * 고죠의 눈가리개: on = 내린다(육안이 드러나고 머리가 내려온다)
+   *  모델: '+MaskUp/+HairMaskUp' = 눈가리개를 쓴 채 머리가 솟은 모습, '-MaskDown/-HairMaskDown/-eyelashes' = 눈가리개를 목으로 내린 모습
+   */
+  unmask(on) {
+    if (!this.rig) return;
+    this.rig.show('+MaskUp', !on);
+    this.rig.show('+HairMaskUp', !on);
+    this.rig.show('-eyelashesMaskUp', on);
+    this.rig.show('-MaskDown', on);
+    this.rig.show('-HairMaskDown', on);
+    this.unmasked = on;
+  }
+
+  /** 무하한: 영역의 필중(맞영역에 막히지 않은)이 아니면 닿지 않는다 · 술식이 타 버리면 꺼진다 */
+  get infinityOn() {
+    const W = this.world;
+    return !!this.def.infinity && this.alive && !((this.burnout ?? 0) > W.time) && !W.clash.playerSureHit();
+  }
+
+  get noGrab() {
+    return this.infinityOn;
+  }
+
+  impulse(v, spin) {
+    if (this.infinityOn) return super.impulse?.(v.clone().multiplyScalar(0.05), 0);
+    return super.impulse?.(v, spin);
   }
 
   /** 기본 공격력 × 몸집 */
@@ -621,6 +938,18 @@ export class RiggedEnemy extends Dummy {
   }
 
   damage(amount, info = {}) {
+    if (this.infinityOn && amount > 0 && info.type !== 'domain') {
+      // 무하한: 닿기 직전에 멈춘다 (아주 조금만 들어간다)
+      const W = this.world;
+      const c = this.center(_v);
+      W.ctx.fx.burst(c, 8, new THREE.Color(0xbfe4ff), 1.5, 0.03, 0.25);
+      if ((this._infT ?? 0) < W.time) {
+        this._infT = W.time + 2.5;
+        W.ctx.ui.callout('무하한 — 닿지 않는다 (영역의 필중이라면 뚫는다)', { color: '#bfe4ff', size: 38, dur: 1.4 });
+        W.ctx.sfx.play('shimmer', { at: c, vol: 0.5, rate: 1.4 });
+      }
+      amount *= 0.06;
+    }
     const r = super.damage(amount, info);
     if (r > 0) this.flinch = Math.min(1, this.flinch + 0.5 + amount / 60);
     return r;
@@ -736,6 +1065,15 @@ export class RiggedEnemy extends Dummy {
       T.elL = [-1.9, 0.3, 0];
       T.elR = [-1.9, -0.3, 0];
       if (Math.random() < 0.3) ctx.fx.fire.smoke(this.headPos(_v2).add(_v3.set(0, 0.25 * S, 0)), _v3.set(0, 0.8, 0), { size0: 0.08, size1: 0.35, life: 1.2, shade: 0.3, opacity: 0.5, rise: 0.8 });
+    } else if (st === 'pockets') {
+      // 고죠: 두 손을 주머니에 넣고 느긋하게 (싸울 땐 손을 뺀다)
+      const k = 1 - gK;
+      T.shL = [lerp(T.shL[0], 0.25, k), 0, lerp(T.shL[2], 0.18, k)];
+      T.shR = [lerp(T.shR[0], 0.25, k), 0, lerp(T.shR[2], -0.18, k)];
+      T.elL = [lerp(T.elL[0], -0.55, k), 0, 0];
+      T.elR = [lerp(T.elR[0], -0.55, k), 0, 0];
+      T.chest[0] -= 0.05 * k;
+      T.head[0] -= 0.05 * k;
     } else if (st === 'heavy') {
       T.chest[0] += 0.08 + breathe * 0.03;
       T.shL[0] += breathe * 0.04;
@@ -766,13 +1104,45 @@ export class RiggedEnemy extends Dummy {
       this._applyPose(dt, 8);
       return;
     }
-    // 5) 고르기: 사거리 안의 기술 중에서 무작위 (자주 쓴 건 쉰다)
+    // 4.5) 영역: 내 영역이 플레이어 영역과 맞붙어 있는 동안엔 수인을 유지하며 버틴다
+    const C = W.clash;
+    if (C.enemy?.caster === this && C.neutral) {
+      domainSign(T, e, 1);
+      this.faceToward(head, dt);
+      this.enemyPush = 4 + Math.sin(t * 2.3) * 2;
+      this._applyPose(dt, 10);
+      return;
+    }
+    this.enemyPush = 0;
+    // 영역전개: 플레이어가 영역을 펼치면 맞영역으로 응수, 아니면 맞붙은 지 한참 뒤에
+    const burnt = (this.burnout ?? 0) > W.time;
+    if (this.def.domain && !burnt && C.canCast(this) && dist < 16 * S) {
+      const pd = playerDomain(ctx);
+      let go = !!this.forceDomain;
+      if (pd) {
+        this._react = (this._react ?? rnd(0.5, 1.2)) - dt;
+        if (this._react <= 0) go = true;
+      } else this._react = undefined;
+      if (engaged) this._domT -= dt * (this.hp < this.maxHp * 0.5 ? 2 : 1);
+      if (this._domT <= 0) go = true;
+      if (go) {
+        this.forceDomain = false;
+        this._domT = rnd(30, 45);
+        this._react = undefined;
+        this.cur = { def: DOMAIN, t: 0, hit: false };
+        DOMAIN.start(e, this.cur);
+        this._applyPose(dt, 18);
+        return;
+      }
+    }
+    // 5) 고르기: 사거리 안의 기술 중에서 무작위 (자주 쓴 건 쉰다) · 술식이 타 버렸으면 체술만
     for (const k in this.cds) this.cds[k] -= dt;
     this.decide -= dt;
     this.faceToward(head, dt);
     const [kMin, kMax] = this.kit.keep;
     if (this.decide <= 0 && dist < 16 * S) {
-      const ok = this.kit.moves.filter((mv) => (this.cds[mv.name] ?? 0) <= 0 && dist >= mv.range[0] * S && dist <= mv.range[1] * S + 0.35);
+      const pool = burnt ? (this.kit.moves.some((mv) => !mv.tech) ? this.kit.moves.filter((mv) => !mv.tech) : [JAB, CROSS, KICK]) : this.kit.moves;
+      const ok = pool.filter((mv) => (this.cds[mv.name] ?? 0) <= 0 && dist >= mv.range[0] * S && dist <= mv.range[1] * S + 0.35);
       if (ok.length) {
         let r = Math.random() * ok.reduce((a, mv) => a + mv.w, 0);
         const mv = ok.find((x) => (r -= x.w) <= 0) ?? ok[0];

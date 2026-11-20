@@ -818,7 +818,8 @@ export class Sukuna {
       this.lines.add(p, _v.randomDirection(), _v2.randomDirection(), 1 + Math.random() * 4, 0.02 + Math.random() * 0.03, 0.12, Math.random() < 0.3 ? 0xff5050 : 0xffffff);
       if (Math.random() < 0.3) this._scar(p, _v.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(), 0.04, 1 + Math.random() * 3, 0x200000);
     }
-    // 범위 안 대상에게 해·팔 난사
+    // 범위 안 대상에게 해·팔 난사 (영역 싸움 중첩이면 필중이 사라진다)
+    if (world.sureHitBlocked?.()) return;
     d.cutSfx -= dt;
     for (const t of world.targets()) {
       const tc = t.center(new THREE.Vector3());

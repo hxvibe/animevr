@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Dummy, DUMMY_TYPES } from './dummy.js';
 import { RiggedEnemy } from './enemies.js';
 import { Shatter, Slicer } from './slicer.js';
+import { DomainClash } from './domainClash.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -217,7 +218,8 @@ export class World {
     this.meleeShield = null; // (dummy, fistPos) => bool
     this.domain = null; // { center, radius, freeze }
     this.pieceForce = null;
-    this.player = { hp: 100, maxHp: 100, lastHit: -10 };
+    this.player = { hp: 100, maxHp: 100, lastHit: -10, paralyzed: false };
+    this.clash = new DomainClash(ctx); // 적의 영역전개 · 영역 싸움
     this.onDamage = (d, amount, info) => ctx.ui?.damageNumber(d, amount, info);
     this.onKill = () => this.kills++;
     this.bulletGeo = new THREE.CapsuleGeometry(0.018, 0.12, 3, 6);
@@ -260,7 +262,14 @@ export class World {
     return out;
   }
 
+  /** 영역 싸움 중(중첩)이면 플레이어 영역의 필중 효과가 사라진다 — 영역 효과를 주는 곳에서 확인 */
+  sureHitBlocked(t) {
+    void t;
+    return this.clash.sureHitBlocked();
+  }
+
   clearDummies() {
+    this.clash.reset();
     for (const d of this.dummies) if (d.alive) {
       d.alive = false;
       this.scene.remove(d.root);
@@ -414,7 +423,7 @@ export class World {
     for (const d of this.dummies) {
       if (!d.alive) continue;
       // 영역의 정지 효과 또는 주언(움직이지 마) 같은 속박
-      d.frozen = !!(dom && dom.freeze && d.center(_v).distanceTo(dom.center) < dom.radius) || (d.stunUntil ?? 0) > this.time;
+      d.frozen = !!(dom && dom.freeze && !this.clash.neutral && d.center(_v).distanceTo(dom.center) < dom.radius) || (d.stunUntil ?? 0) > this.time;
       d.update(dt);
       if (this.shield && d.alive && d.state === 'air' && d.vel.lengthSq() > 4) this.shield(d, dt, bc);
     }
@@ -488,6 +497,7 @@ export class World {
       }
     }
 
+    this.clash.update(dt);
     this.slicer.update(dt, this.pieceForce);
     this.shatter.update(dt);
 

@@ -274,7 +274,19 @@ export class Input {
   }
 
   keyDown(code) {
-    return this.keys.has(code);
+    return !this._muted && this.keys.has(code);
+  }
+
+  /** 잠깐 입력을 끊는다 (굳음): 손은 그대로 보이지만 캐릭터는 손·키를 못 읽는다 */
+  mute(on) {
+    if (on) {
+      this._muted = true;
+      this._wasActive = this.hands.map((h) => h.active);
+      for (const h of this.hands) h.active = false;
+    } else {
+      this._muted = false;
+      this.hands.forEach((h, i) => (h.active = this._wasActive?.[i] ?? h.active));
+    }
   }
 
   get mouseLeftPressed() {
@@ -347,18 +359,22 @@ export class Input {
     const R = this.right;
     for (const slot of this.slots) {
       const src = slot.inputSource;
+      const tracked = !!src?.hand && this._handTracked(slot, dt);
       // 손 메시: 지금 이 슬롯에 잡힌 손의 방향에 맞는 메시만 보이고 갱신
+      //  추적이 끊기면 three 는 마지막 자세를 그대로 두므로(손이 허공·머리 옆에 멈춰 남는다) 직접 숨긴다
       for (const hd of ['left', 'right']) {
         const m = slot.models[hd];
-        const on = !!src?.hand && src.handedness === hd;
+        const on = tracked && src.handedness === hd;
         m.group.visible = on;
-        if (on && slot.hand.joints?.wrist) m.mesh.updateMesh();
+        if (on) m.mesh.updateMesh();
       }
       if (!src) continue;
       const h = src.handedness === 'left' ? L : src.handedness === 'right' ? R : null;
       if (!h) continue;
       h.inputSource = src;
-      if (src.hand) this._readHand(h, slot, dt);
+      if (src.hand) {
+        if (tracked) this._readHand(h, slot, dt);
+      }
       else if (src.gamepad) this._readController(h, slot, dt);
     }
 
@@ -433,6 +449,32 @@ export class Input {
     this._setGesture(h, g, dt);
     h.pinch = h.btn.trigger;
     h.pinching = h.btn.trigger;
+  }
+
+  /**
+   * 손이 지금 실제로 추적되고 있는가.
+   *  · 손목 관절 자세가 없으면(joint.visible = false) 끊긴 것
+   *  · 관절 값이 0.25초 넘게 털끝만큼도 변하지 않으면 멈춘 자세가 남은 것 (살아 있는 손은 늘 조금씩 떨린다)
+   *  · 손목이 머리(헤드셋) 안쪽 12cm 이내면 잘못 잡힌 자세 (추적이 끊길 때 머리 근처로 튀기도 한다)
+   */
+  _handTracked(slot, dt) {
+    const j = slot.hand.joints;
+    const w = j?.wrist;
+    const tip = j?.['index-finger-tip'];
+    if (!w || !w.visible || !tip || !tip.visible) {
+      slot._still = 0;
+      return false;
+    }
+    const lw = (slot._lw ??= new THREE.Vector3(1e9, 0, 0));
+    const lt = (slot._lt ??= new THREE.Vector3(1e9, 0, 0));
+    const same = lw.distanceToSquared(w.position) < 1e-12 && lt.distanceToSquared(tip.position) < 1e-12;
+    slot._still = same ? (slot._still ?? 0) + dt : 0;
+    lw.copy(w.position);
+    lt.copy(tip.position);
+    if (slot._still > 0.25) return false;
+    // 관절은 리그 공간 → 머리도 리그 공간으로
+    if (w.position.distanceTo(this.rig.worldToLocal(_v3.copy(this.head))) < 0.12) return false;
+    return true;
   }
 
   _readHand(h, slot, dt) {

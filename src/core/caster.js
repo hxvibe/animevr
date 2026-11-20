@@ -168,6 +168,8 @@ export class Caster {
 
   /** 영역 안의 적 */
   inDomain(shell) {
+    // 영역 싸움(중첩) 중에는 필중 효과가 사라진다
+    if (this.ctx.world.sureHitBlocked?.()) return [];
     return this.ctx.world.targets().filter((t) => t.alive && !t.dying && shell.contains(t.center(_v)));
   }
 }

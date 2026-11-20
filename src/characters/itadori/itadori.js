@@ -498,6 +498,7 @@ export class Itadori {
     d.sure -= dt;
     if (d.sure > 0) return;
     d.sure = 1.4;
+    if (this.ctx.world.sureHitBlocked?.()) return; // 영역 싸움(중첩): 필중 효과가 사라진다
     for (const t of world.targets()) {
       if (t.heldBy || this.cuts.has(t)) continue;
       const c = t.center(new THREE.Vector3());

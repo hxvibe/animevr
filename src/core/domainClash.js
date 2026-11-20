@@ -1,0 +1,763 @@
+// 적의 영역전개 + 영역 싸움(맞영역)
+//
+//  "영역에 대한 가장 효과적인 수단은 이쪽도 영역을 전개하는 것.
+//   동시에 영역이 전개되면 보다 세련된 주술이 그 자리를 제압한다." — 고죠 사토루
+//
+//  · 적(마히토 · 죠고 · 고죠)이 영역을 펼친다 → 안에 있으면 필중 효과가 플레이어에게 떨어진다
+//  · 플레이어도 영역을 펼치면 영역 싸움:
+//      완성도 차이가 크면(압도) 낮은 쪽 영역이 곧바로 밀려나 깨지고,
+//      비슷하면 '중첩' — 서로의 필중 효과가 사라지고, 경계가 밀고 밀리는 줄다리기가 된다
+//      (두 손바닥을 앞으로 밀어 주력을 쏟으면 내 쪽으로 기운다)
+//  · 밀려난 쪽: 영역이 깨지고 술식이 타 버린다. 플레이어가 밀려나면 필중을 그대로 맞는다
+import * as THREE from 'three';
+
+const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = THREE.MathUtils.clamp;
+
+// 적 영역: ref = 완성도(영역·술식의 정교함 · 상성 · 상태를 합친 값)
+export const ENEMY_DOMAINS = {
+  mahito: {
+    name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#7ad8ff', ref: 80, radius: 19, type: 0, dur: 24,
+    lights: { hemi: 0xd0b8c0, ground: 0x3a1820, hemiI: 1.1, sun: 0xffd0d8, sunI: 0.9, fog: 0x2a1018, fogNear: 10, fogFar: 45, exposure: 0.95 },
+  },
+  jogo: {
+    name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 70, radius: 19, type: 1, dur: 24,
+    lights: { hemi: 0xff8040, ground: 0x401008, hemiI: 1.0, sun: 0xff6020, sunI: 1.6, fog: 0x401006, fogNear: 12, fogFar: 60, exposure: 0.9 },
+  },
+  gojo: {
+    name: '無量空処', ruby: 'むりょうくうしょ', label: '무량공처', color: '#6fb8ff', ref: 100, radius: 24, type: 2, dur: 20,
+    lights: { hemi: 0xb8d8ff, ground: 0x101830, hemiI: 1.3, sun: 0xffffff, sunI: 1.0, fog: 0x02040c, fogNear: 25, fogFar: 120, exposure: 1.0 },
+  },
+};
+
+// 플레이어 영역의 완성도 (원작의 서열 · 결계 유무 · 완성형인가를 대략 반영)
+//  메구미의 감합암예정은 미완성이지만, 그래도 완성형 영역을 어느 정도 중화할 수 있었다
+export const PLAYER_DOMAINS = {
+  gojo: { ref: 100, name: '無量空処', color: '#6fb8ff' },
+  sukuna: { ref: 99, name: '伏魔御廚子', color: '#ff3a3a' },
+  yuta: { ref: 88, name: '真贋相愛', color: '#c8a0ff' },
+  mahito: { ref: 80, name: '自閉円頓裹', color: '#7ad8ff' },
+  itadori: { ref: 76, name: '領域展開', color: '#ff5a6e' },
+  jogo: { ref: 70, name: '蓋棺鉄囲山', color: '#ff7a2a' },
+  megumi: { ref: 55, name: '嵌合暗翳庭', color: '#6f86ff' },
+};
+
+const OVERWHELM = 24; // 완성도가 이만큼 넘게 차이 나면 '압도' (곧바로 밀려난다)
+
+/** 지금 플레이어 캐릭터의 영역 상태 */
+export function playerDomain(ctx) {
+  const ch = ctx.character;
+  if (!ch) return null;
+  const sh = ch.shell ?? ch.garden ?? ch.town ?? ch.shrine ?? ch.void;
+  const casting = !!ch.domainCasting;
+  if (!sh && !casting) return null;
+  const st = sh?.state ?? 'idle';
+  const closing = st === 'closing' || st === 'exit' || st === 'sink';
+  const open = st !== 'idle' && !closing;
+  if (!open && !casting) return null;
+  const head = ctx.input.head;
+  const center = open && sh.center ? sh.center : _v3.set(head.x, 0, head.z);
+  return {
+    id: ch.id,
+    open,
+    casting: casting && !open,
+    center: center.clone().setY(0),
+    radius: ctx.world.domain?.radius ?? sh?.radius ?? 16,
+    ref: PLAYER_DOMAINS[ch.id]?.ref ?? 60,
+    name: PLAYER_DOMAINS[ch.id]?.name ?? '領域',
+    color: PLAYER_DOMAINS[ch.id]?.color ?? '#ffffff',
+    shell: sh,
+  };
+}
+
+// ───────────────── 적 영역의 모습 ─────────────────
+const NOISE = /* glsl */ `
+float dh(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float dn(vec3 p) {
+  vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(dh(i), dh(i + vec3(1,0,0)), f.x), mix(dh(i + vec3(0,1,0)), dh(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(dh(i + vec3(0,0,1)), dh(i + vec3(1,0,1)), f.x), mix(dh(i + vec3(0,1,1)), dh(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * dn(p); p *= 2.03; a *= 0.5; } return s; }
+`;
+
+// 영역별 벽/바닥 색. d: 중심에서 본 방향(벽) · q: 바닥 좌표(m)
+const LOOKS = /* glsl */ `
+uniform int uType;
+uniform float uTime;
+vec3 wallLook(vec3 d) {
+  float az = atan(d.z, d.x);
+  if (uType == 0) {
+    // 自閉円頓裹: 거대한 손바닥들이 감싼 안쪽 — 손가락이 정수리로 모이고, 꿰맨 자국
+    float fing = 0.5 + 0.5 * cos(az * 10.0 + sin(d.y * 6.0) * 0.6);
+    float ridge = smoothstep(0.55, 1.0, fing);
+    float n = fbm(d * 5.0 + vec3(0.0, uTime * 0.03, 0.0));
+    vec3 skin = mix(vec3(0.62, 0.52, 0.55), vec3(0.85, 0.74, 0.74), n);
+    skin *= 0.55 + 0.45 * ridge;
+    float gap = smoothstep(0.08, 0.0, fing) * smoothstep(0.95, 0.4, d.y);
+    skin = mix(skin, vec3(0.05, 0.0, 0.02), gap);
+    // 꿰맨 자국
+    float st = abs(fract(az * 3.0 / 6.2832 + d.y * 0.7) - 0.5);
+    float stitch = smoothstep(0.012, 0.0, st) * step(0.5, fract(d.y * 40.0));
+    skin = mix(skin, vec3(0.12, 0.05, 0.06), stitch * 0.9);
+    // 위쪽은 손바닥이 겹쳐 어둡다
+    skin *= mix(1.0, 0.45, smoothstep(0.3, 1.0, d.y));
+    return skin;
+  }
+  if (uType == 1) {
+    // 蓋棺鉄囲山: 화산 속 — 검은 바위 틈으로 용암
+    float n = fbm(d * 9.0 + vec3(0.0, uTime * 0.08, 0.0));
+    float crack = smoothstep(0.485, 0.5, n) * (1.0 - smoothstep(0.5, 0.53, n));
+    float hot = smoothstep(0.62, 0.8, fbm(d * 3.5 - vec3(uTime * 0.05)));
+    vec3 rock = mix(vec3(0.04, 0.03, 0.025), vec3(0.14, 0.09, 0.07), dn(d * 40.0)) * (0.6 + 0.6 * fbm(d * 16.0));
+    vec3 glow = mix(vec3(1.0, 0.25, 0.02), vec3(1.0, 0.85, 0.4), hot);
+    vec3 c = mix(rock, glow * 2.0, max(crack * 1.2, hot * 0.35));
+    float top = smoothstep(0.6, 0.98, d.y);
+    c = mix(c, vec3(1.2, 0.35, 0.05) * (0.6 + 0.4 * dn(d * 9.0 + uTime)), top * 0.7);
+    return c;
+  }
+  // 無量空処: 끝없는 우주 — 별과 정보의 흐름
+  vec3 c = vec3(0.005, 0.01, 0.03);
+  float neb = fbm(d * 2.5 + vec3(uTime * 0.02, 0.0, 0.0));
+  c += vec3(0.08, 0.16, 0.45) * pow(neb, 3.0) * 2.0;
+  vec3 g = floor(d * 160.0);
+  float star = step(0.9965, dh(g));
+  c += vec3(0.9, 0.95, 1.0) * star * (0.6 + 0.4 * sin(uTime * 3.0 + dh(g) * 40.0));
+  float flow = smoothstep(0.985, 1.0, sin(az * 23.0 + d.y * 17.0 + fbm(d * 3.0) * 6.0 - uTime * 5.0)) * smoothstep(0.55, 0.9, fbm(d * 5.0 + uTime * 0.25));
+  c += vec3(0.7, 0.85, 1.0) * flow * 0.45;
+  return c;
+}
+vec3 floorLook(vec2 q, float r) {
+  if (uType == 0) {
+    float n = fbm(vec3(q * 0.6, 1.0));
+    vec3 skin = mix(vec3(0.5, 0.4, 0.43), vec3(0.75, 0.64, 0.64), n);
+    float lines = smoothstep(0.03, 0.0, abs(fract(length(q) * 0.35 + fbm(vec3(q * 0.3, 2.0)) * 0.6) - 0.5));
+    skin = mix(skin, vec3(0.2, 0.08, 0.1), lines * 0.6);
+    return skin * (0.75 + 0.25 * smoothstep(1.0, 0.2, r));
+  }
+  if (uType == 1) {
+    vec3 p = vec3(q.x, 0.0, q.y) * 0.6;
+    float n = fbm(p * 1.3 + vec3(0.0, uTime * 0.15, 0.0));
+    float crack = smoothstep(0.48, 0.5, n) * (1.0 - smoothstep(0.5, 0.54, n));
+    float hot = smoothstep(0.55, 0.75, fbm(p * 0.7 - vec3(uTime * 0.05)));
+    vec3 rock = mix(vec3(0.05, 0.035, 0.03), vec3(0.16, 0.1, 0.08), dn(p * 6.0));
+    vec3 glow = mix(vec3(1.0, 0.25, 0.02), vec3(1.0, 0.85, 0.4), hot);
+    return mix(rock, glow * 2.2, max(crack * 1.4, hot * 0.25));
+  }
+  // 무량공처: 검은 거울 같은 바닥에 빛의 결
+  vec2 g = abs(fract(q * 0.5) - 0.5);
+  float grid = smoothstep(0.02, 0.0, min(g.x, g.y)) * 0.25;
+  float w = smoothstep(0.85, 1.0, sin(length(q) * 2.0 - uTime * 2.5)) * 0.4;
+  return vec3(0.01, 0.015, 0.03) + vec3(0.4, 0.6, 1.0) * (grid + w) * smoothstep(1.0, 0.3, r);
+}
+`;
+
+const DOME_VERT = /* glsl */ `
+varying vec3 vW; varying vec3 vL;
+void main() {
+  vL = position;
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vW = w.xyz;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const DOME_FRAG = /* glsl */ `
+uniform float uOpen; uniform vec4 uClip; uniform float uCrack; uniform vec3 uRim;
+varying vec3 vW; varying vec3 vL;
+${NOISE}
+${LOOKS}
+void main() {
+  // 경계(영역 싸움): 플레이어 쪽 반공간은 그리지 않는다
+  float side = dot(vW, uClip.xyz) - uClip.w;
+  if (side < 0.0) discard;
+  vec3 d = normalize(vL);
+  vec3 col;
+  if (gl_FrontFacing) {
+    // 바깥에서 본 결계: 먹빛 구에 희미한 무늬
+    col = vec3(0.02) + uRim * 0.15 * fbm(d * 6.0 + uTime * 0.1);
+  } else {
+    col = wallLook(d);
+  }
+  // 경계 가까이는 두 영역이 맞부딪혀 빛난다
+  col += uRim * smoothstep(1.2, 0.0, side) * 1.5 * step(0.001, length(uClip.xyz));
+  // 깨질 때: 금이 간다
+  if (uCrack > 0.0) {
+    float c = smoothstep(0.02, 0.0, abs(fbm(d * 9.0) - 0.5)) * uCrack;
+    col = mix(col, vec3(1.0), c);
+  }
+  gl_FragColor = vec4(col * uOpen, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+const FLOOR_FRAG = /* glsl */ `
+uniform float uOpen; uniform vec4 uClip; uniform vec3 uRim; uniform vec3 uCenter; uniform float uR;
+varying vec3 vW; varying vec3 vL;
+${NOISE}
+${LOOKS}
+void main() {
+  float side = dot(vW, uClip.xyz) - uClip.w;
+  if (side < 0.0) discard;
+  vec2 q = vW.xz - uCenter.xz;
+  float r = length(q) / uR;
+  if (r > 1.0) discard;
+  vec3 col = floorLook(q, r);
+  col += uRim * smoothstep(1.0, 0.0, side) * 1.2 * step(0.001, length(uClip.xyz));
+  gl_FragColor = vec4(col * uOpen, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+// 두 영역이 맞닿는 경계: 지지직거리는 빛의 막
+const SEAM_FRAG = /* glsl */ `
+uniform float uTime; uniform vec3 uA; uniform vec3 uB; uniform float uK;
+varying vec3 vW; varying vec3 vL;
+${NOISE}
+void main() {
+  vec2 p = vL.xy;
+  float r = length(p);
+  float edge = smoothstep(1.0, 0.75, r) * smoothstep(-0.02, 0.06, vW.y); // 바닥 아래는 없다
+  float n = fbm(vec3(p * 9.0, uTime * 1.5));
+  float bolt = smoothstep(0.012, 0.0, abs(n - 0.5)) + smoothstep(0.008, 0.0, abs(fbm(vec3(p * 16.0 + 3.0, uTime * 2.3)) - 0.5)) * 0.7;
+  vec3 col = mix(uA, uB, smoothstep(0.3, 0.7, n)) * 0.5 + vec3(0.9, 0.95, 1.0) * bolt;
+  float a = edge * (0.05 + bolt * 0.75) * uK;
+  gl_FragColor = vec4(col, a);
+}`;
+
+class EnemyDomainView {
+  constructor(ctx, def, center) {
+    this.ctx = ctx;
+    this.def = def;
+    this.center = center.clone().setY(0);
+    const rim = new THREE.Color(def.color);
+    this.u = {
+      uTime: { value: 0 },
+      uOpen: { value: 0 },
+      uType: { value: def.type },
+      uClip: { value: new THREE.Vector4(0, 0, 0, -1) }, // (n, d): dot(p, n) - d < 0 이면 지운다. n=0 이면 끔
+      uCrack: { value: 0 },
+      uRim: { value: rim },
+      uCenter: { value: this.center },
+      uR: { value: def.radius },
+    };
+    this.group = new THREE.Group();
+    this.group.position.copy(this.center);
+    this.dome = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: DOME_VERT, fragmentShader: DOME_FRAG, side: THREE.DoubleSide, fog: false }));
+    // 하늘(깊이 안 씀)보다 뒤에 그려 덮고, 몸·소품(먼저 그려 깊이를 남김)에는 가려진다
+    this.dome.renderOrder = 1;
+    this.dome.frustumCulled = false;
+    this.floor = new THREE.Mesh(new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: DOME_VERT, fragmentShader: FLOOR_FRAG, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -16 }));
+    this.floor.position.y = 0.012;
+    this.floor.renderOrder = 1;
+    this.floor.frustumCulled = false;
+    this.group.add(this.dome, this.floor);
+    ctx.scene.add(this.group);
+    this.setSize(0.02);
+  }
+
+  setSize(k) {
+    const r = Math.max(0.05, this.def.radius * k);
+    this.dome.scale.setScalar(r);
+    this.floor.scale.setScalar(r);
+  }
+
+  /** 경계 평면: n(수평, 적 쪽을 향함)과 점 p. null 이면 끔 */
+  setClip(n, p) {
+    const c = this.u.uClip.value;
+    if (!n) c.set(0, 0, 0, -1);
+    else c.set(n.x, n.y, n.z, n.dot(p));
+  }
+
+  dispose() {
+    this.ctx.scene.remove(this.group);
+    this.dome.geometry.dispose();
+    this.dome.material.dispose();
+    this.floor.geometry.dispose();
+    this.floor.material.dispose();
+  }
+}
+
+// ───────────────── 머리에 붙는 효과 (무량공처의 정보 과부하) ─────────────────
+const OVERLOAD_FRAG = /* glsl */ `
+uniform float uTime; uniform float uK;
+varying vec3 vW; varying vec3 vL;
+${NOISE}
+void main() {
+  vec3 d = normalize(vL);
+  float az = atan(d.z, d.x);
+  float streak = smoothstep(0.6, 1.0, sin(az * 60.0 + d.y * 30.0 + uTime * 40.0)) * dn(d * 30.0 + uTime * 9.0);
+  float flash = 0.5 + 0.5 * sin(uTime * 23.0);
+  vec3 col = mix(vec3(0.6, 0.8, 1.0), vec3(1.0), flash) * (streak * 1.4 + 0.25 * flash);
+  gl_FragColor = vec4(col, uK * clamp(streak + 0.35 * flash, 0.0, 1.0));
+}`;
+
+// ───────────────── 영역 싸움 ─────────────────
+export class DomainClash {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.enemy = null; // { def, caster, view, state, t, center, startedAt }
+    this.clash = null; // { D, gap, overwhelm, responder, t }
+    this.pushK = 0;
+    this.sure = { t: 0, para: 0, window: 0 };
+    this.cds = new Map(); // 적 → 다시 펼칠 수 있는 때
+    this.hud = null;
+    this.overload = null;
+  }
+
+  /** 적이 영역을 펼칠 수 있는가 */
+  canCast(e) {
+    if (this.enemy) return false;
+    return (this.cds.get(e) ?? -1) <= this.ctx.world.time;
+  }
+
+  /** 적이 영역전개 (수인을 다 맺은 순간 부른다) */
+  cast(e) {
+    const def = ENEMY_DOMAINS[e.def.model];
+    if (!def || this.enemy) return false;
+    const { ui, sfx, world } = this.ctx;
+    const view = new EnemyDomainView(this.ctx, def, e.root.position);
+    this.enemy = { def, caster: e, view, state: 'opening', t: 0, center: view.center, startedAt: world.time };
+    this.cds.set(e, world.time + 45);
+    ui.manga({ top: '領域展開', main: def.name, ruby: def.ruby, color: def.color, big: true });
+    sfx.rumble(2.2, 0.6);
+    sfx.play('domain_open', { vol: 0.9, rate: def.type === 2 ? 1 : 0.8 });
+    if (def.type === 2) sfx.play('void_open', { vol: 0.6 });
+    this.sure = { t: 1.2, para: 0, window: 0 };
+    // 플레이어가 이미 펼쳐 두었으면 곧바로 영역 싸움 (나중에 펼친 적이 밀고 들어온다)
+    const pd = playerDomain(this.ctx);
+    if (pd) this._startClash(pd, 'enemy');
+    return true;
+  }
+
+  get active() {
+    return !!this.enemy && this.enemy.state !== 'closing' && this.enemy.state !== 'broken';
+  }
+
+  /** 중첩 중: 서로의 필중 효과가 사라진다 */
+  get neutral() {
+    return !!this.clash && !this.clash.done;
+  }
+
+  /** 플레이어 영역의 필중이 막혔는가 (영역 싸움 중) */
+  sureHitBlocked() {
+    return this.neutral;
+  }
+
+  /** 플레이어 영역의 필중이 지금 먹히는가 (무하한을 뚫는다) */
+  playerSureHit() {
+    const pd = playerDomain(this.ctx);
+    return !!pd && pd.open && !this.neutral;
+  }
+
+  _startClash(pd, responder) {
+    const { ui, sfx } = this.ctx;
+    const E = this.enemy;
+    const gap = pd.ref - E.def.ref + (responder === 'player' ? 6 : -6);
+    const overwhelm = Math.abs(gap) >= OVERWHELM;
+    this.clash = { D: 0, gap, overwhelm, responder, t: 0, done: false, pd };
+    ui.manga({ main: '領域の押し合い', ruby: '영역 싸움', color: '#ffffff', big: true });
+    ui.callout(overwhelm ? (gap > 0 ? '압도적인 차이 — 상대 영역을 짓누른다' : '격이 다르다 — 이대로는 밀려난다!') : '중첩 — 서로의 필중 효과가 사라졌다 · 두 손바닥으로 밀어 주력을 쏟아라', { color: '#ffffff', dur: 3 });
+    sfx.play('black_flash', { vol: 0.6, rate: 0.6 });
+    sfx.rumble(1.5, 0.5);
+    this._ensureHud();
+    this._ensureSeam();
+  }
+
+  // ───────── 매 프레임 ─────────
+  update(dt) {
+    const E = this.enemy;
+    if (!E) return;
+    const { world, env, input: inp, fx } = this.ctx;
+    E.t += dt;
+    E.view.u.uTime.value += dt;
+    const V = E.view;
+    // 시전자가 쓰러지면 영역도 무너진다
+    if (E.state !== 'broken' && E.state !== 'closing' && (!E.caster.alive || E.caster.dying)) this._break('caster');
+    if (E.state === 'opening') {
+      const k = Math.min(1, E.t / 1.0);
+      const e = 1 - Math.pow(1 - k, 3);
+      V.setSize(e);
+      V.u.uOpen.value = e;
+      if (k > 0.35) this._takeEnv(true);
+      if (k >= 1) {
+        E.state = 'active';
+        E.t = 0;
+      }
+    } else if (E.state === 'active') {
+      V.setSize(1);
+      V.u.uOpen.value = 1;
+      this._takeEnv(true);
+      if (E.t >= E.def.dur) this._close();
+    } else if (E.state === 'closing') {
+      const k = Math.min(1, E.t / 0.7);
+      V.setSize(1 - k);
+      V.u.uOpen.value = 1 - k;
+      if (k >= 1) return this._end();
+    } else if (E.state === 'broken') {
+      // 금이 가며 산산이 부서진다
+      const k = Math.min(1, E.t / 0.8);
+      V.u.uCrack.value = Math.min(1, k * 3);
+      V.u.uOpen.value = 1 - Math.max(0, (k - 0.4) / 0.6);
+      V.setSize(1 + k * 0.08);
+      if (Math.random() < 0.6) fx.burst(_v.copy(E.center).add(_v2.randomDirection().multiplyScalar(E.def.radius * 0.8)).setY(rnd(0.5, 8)), 6, new THREE.Color(E.def.color), 3, 0.08, 0.6);
+      if (k >= 1) return this._end();
+    }
+
+    // 영역 싸움
+    const pd = playerDomain(this.ctx);
+    if (!this.clash && pd && this.active) this._startClash(pd, 'player');
+    if (this.clash && !this.clash.done) this._tickClash(dt, pd);
+    else this._hideSeam();
+
+    // 필중: 영역 싸움이 없거나 플레이어가 밀려났으면 안에 든 플레이어에게
+    const inside = Math.hypot(inp.head.x - E.center.x, inp.head.z - E.center.z) < E.def.radius * 0.98;
+    if (E.state === 'active' && inside && !this.neutral && !(pd && pd.open && this.clash?.winner === 'player')) this._sureHit(dt);
+    else this._clearSure(dt);
+    this._updateHud();
+    void world;
+    void env;
+  }
+
+  /** 배경을 숨기고 영역의 빛으로 (플레이어 영역이 열려 있으면 그쪽 조명을 둔다) */
+  _takeEnv(on) {
+    const env = this.ctx.env;
+    const E = this.enemy;
+    if (on) {
+      if (!env.hidden) {
+        // 플레이어 영역이 닫히며 배경·조명이 돌아왔다 → 다시 덮고 이 영역의 빛으로
+        env.setHidden(true);
+        E.lit = false;
+      }
+      if (!E.lit && !playerDomain(this.ctx)?.open) {
+        E.lit = true;
+        const L = E.def.lights;
+        env.hemi.color.set(L.hemi);
+        env.hemi.groundColor.set(L.ground);
+        env.hemi.intensity = L.hemiI;
+        env.sun.color.set(L.sun);
+        env.sun.intensity = L.sunI;
+        env.fog.color.set(L.fog);
+        env.fog.near = L.fogNear;
+        env.fog.far = L.fogFar;
+        this.ctx.renderer.toneMappingExposure = L.exposure;
+      }
+    }
+  }
+
+  _tickClash(dt, pd) {
+    const C = this.clash;
+    const E = this.enemy;
+    const { input: inp, world, fx, sfx, ui } = this.ctx;
+    C.t += dt;
+    // 플레이어의 영역이 먼저 닫히면(시간이 다 됐거나 해제) 그대로 밀려난 것
+    if (!pd) {
+      // 비등하게 버티다 끝났으면 둘 다 사그라든다
+      if (C.D > -0.25) this._resolve('draw', 'expired');
+      else this._resolve('enemy', 'expired');
+      return;
+    }
+    C.pd = pd;
+    // 주력 쏟기: 두 손바닥을 앞으로 밀기(손) · 두 트리거(컨트롤러) · F(데스크톱)
+    const ch = this.ctx.character;
+    const L = inp.left;
+    const R = inp.right;
+    const fwd = _v.copy(inp.headDir).setY(0).normalize();
+    const palmPush = (h) => h.active && h.source === 'hand' && h.palmNormal.dot(fwd) > 0.55 && _v2.subVectors(h.palm, inp.head).dot(fwd) > 0.28 && h.gesture !== 'fist';
+    const pushing = (palmPush(L) && palmPush(R)) || (L.source === 'controller' && R.source === 'controller' && L.btn.trigger && R.btn.trigger) || (inp.mode === 'desktop' && inp.keyDown('KeyF'));
+    const canPush = pushing && (ch?.energy ?? 0) > 1;
+    if (canPush) ch.energy = Math.max(0, ch.energy - 11 * dt);
+    this.pushK += ((canPush ? 1 : 0) - this.pushK) * Math.min(1, dt * 5);
+    if (canPush && Math.random() < 0.4) {
+      L.pulse?.(0.25, 20);
+      R.pulse?.(0.25, 20);
+    }
+    // 상태: 주력이 남은 정도 · 적의 체력
+    const ef = ch?.maxEnergy ? ch.energy / ch.maxEnergy : 0.5;
+    const hf = E.caster.maxHp && Number.isFinite(E.caster.maxHp) ? clamp(E.caster.hp / E.caster.maxHp, 0, 1) : 1;
+    const eff = C.gap + (ef - 0.5) * 6 - (hf - 0.5) * 10 + this.pushK * 22 - (E.caster.enemyPush ?? 0);
+    let rate;
+    if (C.overwhelm) rate = Math.sign(C.gap) * 0.85;
+    else rate = eff * 0.011 + Math.sin(C.t * 1.7) * 0.03;
+    C.D = clamp(C.D + rate * dt, -1, 1);
+    // 경계 평면: 플레이어 영역 중심 → 적 영역 중심
+    const pc = pd.center;
+    const ec = E.center;
+    const n = _v.subVectors(ec, pc).setY(0);
+    if (n.lengthSq() < 0.25) n.subVectors(E.caster.root.position, inp.head).setY(0);
+    if (n.lengthSq() < 1e-4) n.set(0, 0, -1);
+    n.normalize();
+    // 경계는 두 영역의 반지름 비율과 우세에 따라 (D>0 이면 적 쪽으로 밀린다)
+    const dist = Math.max(4, _v2.subVectors(ec, pc).setY(0).length());
+    const k0 = pd.radius / (pd.radius + E.def.radius);
+    const k = clamp(k0 + C.D * 0.42, 0.06, 0.94);
+    const bp = _v2.copy(pc).addScaledVector(n, dist * k);
+    // 플레이어가 경계 너머(적 쪽)에 서 있으면 경계를 플레이어 앞으로 밀어 둔다 (내 영역 안에 있게)
+    const ahead = _v3.subVectors(inp.head, bp).setY(0).dot(n);
+    if (ahead > -1.2) bp.addScaledVector(n, ahead + 1.2);
+    E.view.setClip(n, bp);
+    this._setPlayerClip(pd, n, bp);
+    this._placeSeam(bp, n, Math.min(pd.radius, E.def.radius) * 1.3, C);
+    if (Math.random() < 0.5) fx.burst(_v3.copy(bp).add(_v.set(-n.z, 0, n.x).multiplyScalar(rnd(-10, 10))).setY(rnd(0.3, 6)), 3, new THREE.Color(Math.random() < 0.5 ? E.def.color : '#ffffff'), 2, 0.05, 0.4);
+    if (Math.random() < dt * 1.5) sfx.play('zap', { at: bp, vol: 0.3, rate: rnd(0.6, 1) });
+    if (C.D >= 1) this._resolve('player', 'pushed');
+    else if (C.D <= -1) this._resolve('enemy', 'pushed');
+    void world;
+    void ui;
+  }
+
+  _resolve(winner, why) {
+    const C = this.clash;
+    const E = this.enemy;
+    const { ui, sfx, world, fx } = this.ctx;
+    C.done = true;
+    C.winner = winner;
+    this._hideSeam();
+    E.view.setClip(null);
+    this._setPlayerClip(C.pd, null);
+    if (winner === 'player') {
+      ui.manga({ main: '押し勝ち', ruby: '영역을 밀어냈다', color: '#ffffff', big: true });
+      ui.callout(`${E.def.label} 붕괴 — 술식이 타 버렸다 · 필중이 다시 먹힌다`, { color: '#a0ffc0', dur: 3 });
+      const e = E.caster;
+      if (e.alive) {
+        e.burnout = world.time + 10;
+        e.stunUntil = Math.max(e.stunUntil ?? 0, world.time + 2.5);
+        e.damage(e.maxHp && Number.isFinite(e.maxHp) ? e.maxHp * 0.15 : 60, { type: 'impact', color: '#ffffff' });
+      }
+      this._break('clash');
+    } else if (winner === 'draw') {
+      ui.callout('두 영역이 함께 사그라들었다', { color: '#ffffff', dur: 2.5 });
+      this._close();
+    } else {
+      // 플레이어 영역이 밀려나 깨진다 → 필중을 그대로 맞는다
+      if (why === 'pushed') {
+        ui.manga({ main: '押し負け', ruby: '영역이 밀려났다', color: '#ff8080', big: true });
+        ui.callout('영역이 밀려났다 — 필중을 맞는다!', { color: '#ff9090', dur: 3 });
+        this.ctx.character?.cancelDomain?.();
+        world.hitPlayer(38, { type: 'domain', src: E.caster });
+        fx.flash(this.ctx.input.head, new THREE.Color(E.def.color), 8, 0.4);
+        sfx.play('shatter', { vol: 0.9, rate: 0.7 });
+      } else ui.callout('내 영역이 먼저 닫혔다 — 상대 영역만 남았다', { color: '#ffb0b0', dur: 2.5 });
+      this.sure.t = 0.6;
+    }
+  }
+
+  /** 플레이어 영역(결계 껍질)을 경계에서 자른다 — 지원하는 껍질만 */
+  _setPlayerClip(pd, n, p) {
+    const sh = pd?.shell;
+    if (sh?.setClip) sh.setClip(n ? _v.copy(n).negate() : null, p);
+  }
+
+  // ───────── 필중 효과 (플레이어) ─────────
+  _sureHit(dt) {
+    const E = this.enemy;
+    const S = this.sure;
+    const { world, ui, fx, input: inp } = this.ctx;
+    const P = world.player;
+    S.t -= dt;
+    if (E.def.type === 0) {
+      // 무위전변: 영혼에 손이 닿는다
+      if (S.t <= 0) {
+        S.t = 2.2;
+        if (!S.told) {
+          S.told = true;
+          ui.callout('필중 — 무위전변이 영혼을 만진다 (맞영역으로 막아라)', { color: '#a8e8ff', dur: 2.5 });
+        }
+        world.hitPlayer(16, { type: 'soul', src: E.caster });
+        fx.burst(inp.head.clone().add(_v.set(0, -0.3, 0)), 20, new THREE.Color(0x9ad8ff), 2, 0.04, 0.5);
+      }
+    } else if (E.def.type === 1) {
+      // 개관철위산: 들어온 것은 모두 탄다
+      if (S.t <= 0) {
+        S.t = 0.5;
+        if (!S.told) {
+          S.told = true;
+          ui.callout('필중 — 몸이 타들어 간다 (맞영역으로 막아라)', { color: '#ffb080', dur: 2.5 });
+        }
+        world.hitPlayer(3.5, { type: 'fire', src: E.caster });
+      }
+      if (Math.random() < 0.5) fx.fire?.flame?.(_v.copy(inp.head).add(_v2.set(rnd(-0.5, 0.5), -1.2, rnd(-0.5, 0.5))), _v3.set(0, 2, 0), { size0: 0.2, size1: 0.6, life: 0.5 });
+    } else {
+      // 무량공처: 끝없는 정보가 쏟아져 몸이 굳는다 (굳었다 → 잠깐 풀림 → 다시)
+      if (S.para > 0) {
+        S.para -= dt;
+        P.paralyzed = true;
+        if (S.para <= 0) {
+          S.window = 1.8;
+          P.paralyzed = false;
+        }
+      } else if (S.window > 0) {
+        S.window -= dt;
+        P.paralyzed = false;
+      } else {
+        S.para = 2.3;
+        P.paralyzed = true;
+        world.hitPlayer(6, { type: 'void', src: E.caster });
+        if (!S.told) {
+          S.told = true;
+          ui.callout('필중 — 무한한 정보가 쏟아진다! 풀린 틈에 영역을 펼쳐라', { color: '#c0e0ff', dur: 3 });
+        }
+      }
+      this._overloadFx(dt, S.para > 0 ? 1 : 0.15);
+      return;
+    }
+    this._overloadFx(dt, 0);
+  }
+
+  _clearSure(dt) {
+    this.ctx.world.player.paralyzed = false;
+    this.sure.para = 0;
+    this._overloadFx(dt, 0);
+  }
+
+  _overloadFx(dt, want) {
+    if (!this.overload && want <= 0) return;
+    if (!this.overload) {
+      const u = { uTime: { value: 0 }, uK: { value: 0 } };
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 16), new THREE.ShaderMaterial({ uniforms: u, vertexShader: DOME_VERT, fragmentShader: OVERLOAD_FRAG, side: THREE.BackSide, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+      m.renderOrder = 999;
+      m.frustumCulled = false;
+      this.ctx.camera.add(m);
+      this.overload = { m, u };
+    }
+    const O = this.overload;
+    O.u.uTime.value += dt;
+    O.u.uK.value += (want - O.u.uK.value) * Math.min(1, dt * 8);
+    O.m.visible = O.u.uK.value > 0.01;
+  }
+
+  // ───────── 경계막 ─────────
+  _ensureSeam() {
+    if (this.seam) return;
+    const u = { uTime: { value: 0 }, uA: { value: new THREE.Color() }, uB: { value: new THREE.Color() }, uK: { value: 0 } };
+    const m = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.ShaderMaterial({ uniforms: u, vertexShader: DOME_VERT, fragmentShader: SEAM_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
+    m.frustumCulled = false;
+    m.renderOrder = 5;
+    this.ctx.scene.add(m);
+    this.seam = { m, u };
+  }
+
+  _placeSeam(p, n, r, C) {
+    this._ensureSeam();
+    const S = this.seam;
+    S.m.visible = true;
+    S.m.position.copy(p).setY(0);
+    S.m.quaternion.setFromUnitVectors(_v3.set(0, 0, 1), n);
+    S.m.scale.setScalar(r);
+    S.u.uTime.value += 1 / 60;
+    S.u.uA.value.set(C.pd?.color ?? '#ffffff');
+    S.u.uB.value.set(this.enemy.def.color);
+    S.u.uK.value = 0.6 + 0.4 * Math.abs(Math.sin(C.t * 9));
+  }
+
+  _hideSeam() {
+    if (this.seam) this.seam.m.visible = false;
+  }
+
+  // ───────── 영역 싸움 막대 (머리 앞) ─────────
+  _ensureHud() {
+    if (this.hud) return;
+    const c = document.createElement('canvas');
+    c.width = 1024;
+    c.height = 200;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.121), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+    m.position.set(0, 0.2, -0.75);
+    m.renderOrder = 998;
+    this.ctx.camera.add(m);
+    this.hud = { c, g: c.getContext('2d'), tex, m, last: '' };
+  }
+
+  _updateHud() {
+    const H = this.hud;
+    if (!H) return;
+    const C = this.clash;
+    const on = !!C && !C.done && !!this.enemy;
+    H.m.visible = on;
+    if (!on) return;
+    const key = `${C.D.toFixed(3)}|${this.pushK.toFixed(2)}`;
+    if (key === H.last) return;
+    H.last = key;
+    const g = H.g;
+    const W = 1024;
+    g.clearRect(0, 0, W, 200);
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.beginPath();
+    g.roundRect(0, 0, W, 200, 24);
+    g.fill();
+    const mine = C.pd?.color ?? '#9fb2ff';
+    const theirs = this.enemy.def.color;
+    const x0 = 40;
+    const w = W - 80;
+    const mid = x0 + w * (0.5 + C.D * 0.5);
+    g.fillStyle = mine;
+    g.fillRect(x0, 100, mid - x0, 50);
+    g.fillStyle = theirs;
+    g.fillRect(mid, 100, x0 + w - mid, 50);
+    g.fillStyle = '#ffffff';
+    g.fillRect(mid - 4, 90, 8, 70);
+    g.font = "900 44px 'Noto Serif JP', 'Noto Sans KR', serif";
+    g.textAlign = 'left';
+    g.fillText(C.pd?.name ?? '', x0, 70);
+    g.textAlign = 'right';
+    g.fillText(this.enemy.def.name, x0 + w, 70);
+    g.textAlign = 'center';
+    g.font = "700 30px 'Noto Sans KR', sans-serif";
+    g.fillStyle = this.pushK > 0.3 ? '#ffffff' : 'rgba(255,255,255,0.75)';
+    g.fillText(C.overwhelm ? (C.gap > 0 ? '압도' : '격이 다르다') : this.pushK > 0.3 ? '주력을 쏟는 중!' : '중첩 · 필중 상쇄', W / 2, 70);
+    H.tex.needsUpdate = true;
+  }
+
+  // ───────── 끝내기 ─────────
+  _break(why) {
+    const E = this.enemy;
+    if (!E || E.state === 'broken') return;
+    E.state = 'broken';
+    E.t = 0;
+    this.ctx.sfx.play('shatter', { vol: 1, rate: 0.6 });
+    this.ctx.sfx.rumble(1.2, 0.5);
+    if (why === 'caster') this.ctx.ui.callout(`시전자가 쓰러져 ${E.def.label}이(가) 무너진다`, { color: '#ffffff', dur: 2 });
+  }
+
+  _close() {
+    const E = this.enemy;
+    E.state = 'closing';
+    E.t = 0;
+  }
+
+  /** 적 영역을 완전히 치운다 (배경을 되돌린다) */
+  _end() {
+    const E = this.enemy;
+    if (!E) return;
+    E.view.dispose();
+    this.enemy = null;
+    if (this.clash) this._setPlayerClip(this.clash.pd, null);
+    this.clash = null;
+    this._hideSeam();
+    this._clearSure(0);
+    if (this.overload) this.overload.m.visible = false;
+    if (this.hud) this.hud.m.visible = false;
+    // 플레이어 영역이 열려 있지 않으면 배경·조명을 되돌린다
+    const pd = playerDomain(this.ctx);
+    if (!pd) {
+      const env = this.ctx.env;
+      env.setHidden(false);
+      env.restore();
+      env.applyShadows();
+    }
+  }
+
+  /** 배경 전환 · 캐릭터 교체 · 적 정리 */
+  reset() {
+    if (this.enemy) {
+      this.enemy.view.dispose();
+      this.enemy = null;
+    }
+    this.clash = null;
+    this._hideSeam();
+    this.ctx.world.player.paralyzed = false;
+    if (this.overload) this.overload.m.visible = false;
+    if (this.hud) this.hud.m.visible = false;
+  }
+}

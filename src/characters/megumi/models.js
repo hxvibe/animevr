@@ -153,6 +153,15 @@ export class BoneRig {
     this.touched.add(b);
   }
 
+  /** 뼈 자신의 (바인드) 로컬 축으로 돌린다 — 바퀴처럼 자기 축이 기울어 있는 뼈 */
+  rotLocal(name, axis, angle) {
+    const b = this.bones[name];
+    if (!b || !angle) return;
+    _q.setFromAxisAngle(axis, angle);
+    b.quaternion.multiply(_q);
+    this.touched.add(b);
+  }
+
   scale(name, s) {
     const b = this.bones[name];
     if (!b) return;
@@ -164,6 +173,117 @@ export class BoneRig {
   pos(name, out = new THREE.Vector3()) {
     const b = this.bones[name];
     return b ? b.getWorldPosition(out) : null;
+  }
+}
+
+// ───────────────── 흔들리는 뼈 사슬 (머리카락·꼬리·장식) ─────────────────
+const _sa = new THREE.Vector3();
+const _sb = new THREE.Vector3();
+const _sq = new THREE.Quaternion();
+const _sq2 = new THREE.Quaternion();
+const _sc = new THREE.Vector3();
+/**
+ * 뼈 사슬을 질점(점) 사슬로 흉내 낸다 (베를레 적분 + 길이 구속).
+ *  · 매 프레임 지금 자세(코드로 준 회전까지)의 사슬 모양을 "목표"로 삼아 stiff 만큼 끌려가고,
+ *  · 몸이 움직이면 관성으로 늦게 따라오며 출렁이고, 중력으로 처진다.
+ *  · 결과 모양에 맞게 뼈를 차례로 돌린다. BoneRig.begin() 이 다음 프레임에 쉬는 자세로 되돌린다
+ * 자세를 다 준 뒤(R.rot 다음), 모델의 월드 행렬이 갱신된 상태에서 update 를 부른다
+ */
+export class SpringChain {
+  constructor(rig, names, { stiff = 0.12, damp = 0.9, gravity = 4, colliders = [] } = {}) {
+    this.rig = rig;
+    this.bones = names.map((n) => rig.get(n)).filter(Boolean);
+    // 마지막 뼈의 끝: _end 자식이 있으면 그 위치, 없으면 앞 뼈 길이만큼 연장
+    const last = this.bones[this.bones.length - 1];
+    this.tipLocal = last ? (last.children.find((c) => c.isBone)?.position.clone() ?? new THREE.Vector3(0, 0.3, 0)) : null;
+    this.n = this.bones.length + 1;
+    this.p = Array.from({ length: this.n }, () => new THREE.Vector3());
+    this.prev = Array.from({ length: this.n }, () => new THREE.Vector3());
+    this.t = Array.from({ length: this.n }, () => new THREE.Vector3());
+    this.stiff = stiff;
+    this.damp = damp;
+    this.gravity = gravity;
+    this.colliders = colliders; // [{ bone, r(월드 m), off? }]
+    this.inited = false;
+  }
+
+  reset() {
+    this.inited = false;
+  }
+
+  /** 지금 자세(FK)의 사슬 점 위치 */
+  _targets() {
+    const B = this.bones;
+    B[0].parent.updateWorldMatrix(true, false);
+    for (const b of B) b.updateMatrixWorld(false);
+    for (let i = 0; i < B.length; i++) B[i].getWorldPosition(this.t[i]);
+    this.t[B.length].copy(this.tipLocal).applyMatrix4(B[B.length - 1].matrixWorld);
+  }
+
+  update(dt, gScale = 1) {
+    const B = this.bones;
+    if (B.length === 0 || dt <= 0) return;
+    for (const b of B) this.rig.touched.add(b);
+    this._targets();
+    const { p, prev, t } = this;
+    if (!this.inited) {
+      for (let i = 0; i < this.n; i++) {
+        p[i].copy(t[i]);
+        prev[i].copy(t[i]);
+      }
+      this.inited = true;
+    }
+    // 프레임이 길면 쪼갠다 (안정)
+    const steps = Math.max(1, Math.ceil(dt / (1 / 60)));
+    const h = dt / steps;
+    const dampK = Math.pow(this.damp, h * 60);
+    const stiffK = 1 - Math.pow(1 - this.stiff, h * 60);
+    for (let s = 0; s < steps; s++) {
+      p[0].copy(t[0]);
+      prev[0].copy(t[0]);
+      for (let i = 1; i < this.n; i++) {
+        _sa.subVectors(p[i], prev[i]).multiplyScalar(dampK);
+        prev[i].copy(p[i]);
+        p[i].add(_sa);
+        p[i].y -= this.gravity * gScale * h * h;
+        // 지금 자세 쪽으로 (끝으로 갈수록 덜 끌린다 → 끝이 더 출렁인다)
+        const k = stiffK * (1 - 0.55 * (i / (this.n - 1)));
+        p[i].lerp(t[i], k);
+      }
+      // 길이 구속 (뿌리부터) + 몸 충돌
+      for (let it = 0; it < 2; it++) {
+        for (let i = 1; i < this.n; i++) {
+          const L = t[i].distanceTo(t[i - 1]);
+          _sa.subVectors(p[i], p[i - 1]);
+          const d = _sa.length() || 1e-6;
+          p[i].copy(p[i - 1]).addScaledVector(_sa, L / d);
+          for (const c of this.colliders) {
+            c.bone.getWorldPosition(_sb);
+            if (c.off) _sb.add(c.off);
+            _sa.subVectors(p[i], _sb);
+            const dd = _sa.length();
+            if (dd < c.r && dd > 1e-6) p[i].copy(_sb).addScaledVector(_sa, c.r / dd);
+          }
+        }
+      }
+    }
+    // 점 사슬 모양대로 뼈를 차례로 돌린다
+    for (let i = 0; i < B.length; i++) {
+      const b = B[i];
+      b.parent.updateWorldMatrix(false, false);
+      b.updateMatrixWorld(false);
+      const from = _sa.copy(i + 1 < B.length ? B[i + 1].position : this.tipLocal).applyMatrix4(b.matrixWorld);
+      b.getWorldPosition(_sb);
+      from.sub(_sb).normalize();
+      const to = _sc.subVectors(p[i + 1], _sb).normalize();
+      if (!Number.isFinite(to.x) || to.lengthSq() < 0.5) continue;
+      _sq.setFromUnitVectors(from, to); // 월드 회전 변화
+      b.getWorldQuaternion(_sq2);
+      _sq.multiply(_sq2); // 새 월드 회전
+      b.parent.getWorldQuaternion(_sq2).invert();
+      b.quaternion.copy(_sq2.multiply(_sq));
+      b.updateMatrixWorld(false);
+    }
   }
 }
 

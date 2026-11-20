@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Bolts } from '../../core/fx.js';
 import { dummyTemplate, DUMMY_TYPES } from '../../core/dummy.js';
 import { shadowSplash } from './vfx.js';
-import { makeShiki, AX, SHIKI_MODELS, quadGait, tailFollow } from './models.js';
+import { makeShiki, AX, SHIKI_MODELS, quadGait, tailFollow, SpringChain } from './models.js';
 import { getModel } from '../../core/assets.js';
 
 const _v = new THREE.Vector3();
@@ -2416,6 +2416,9 @@ export class Adaptation {
  * 법진만 소환 (조복을 마친 뒤, 스쿠나의 운용법): 술사 머리 위에 법진만 떠서 술사가 받는 공격에 대신 적응한다.
  * 같은 수인을 한 번 더 맺으면 그 적응을 그대로 이어받은 마허라가 나온다
  */
+const _UP = new THREE.Vector3(0, 1, 0);
+const _FLAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+
 export class MahoragaWheel {
   constructor(owner) {
     this.owner = owner;
@@ -2427,7 +2430,7 @@ export class MahoragaWheel {
     this.ad = new Adaptation();
     this.angle = 0;
     this.target = 0;
-    this.mesh = makeWheel(this.ctx, 1.1);
+    this.mesh = makeWheel(this.ctx, 0.8);
     this.ctx.scene.add(this.mesh);
     this.ctx.fx.flash(this.ctx.input.head, new THREE.Color(0xffe0a0), 3, 0.3, 4);
     wheelSound(this.ctx.sfx, this.ctx.input.head);
@@ -2457,13 +2460,19 @@ export class MahoragaWheel {
     }
     if (this.ad.spin) this.target += dt * 2.5;
     this.angle = damp(this.angle, this.target, 6, dt);
-    this.mesh.position.copy(inp.head).add(_v.set(0, 0.42 + Math.sin(this.t * 1.5) * 0.015, 0));
-    // 정면(머리 방향)을 보는 수직 바퀴
-    this.mesh.rotation.set(0, Math.atan2(inp.headDir.x, inp.headDir.z), 0);
-    this.mesh.rotateZ(-this.angle);
+    // 머리 위에 눕힌 바퀴 (후광처럼): 적응할 때마다 수직축으로 한 칸(45°)씩 돈다
+    //  머리를 기울여도 바퀴는 수평을 지키고, 따라올 때 살짝 늦게 흔들린다
+    const want = _v.copy(inp.head).add(_v2.set(0, 0.36 + Math.sin(this.t * 1.5) * 0.012, 0));
+    if (!this._placed) {
+      this.mesh.position.copy(want);
+      this._placed = true;
+    } else this.mesh.position.lerp(want, Math.min(1, dt * 18));
+    const yaw = Math.atan2(inp.headDir.x, inp.headDir.z);
+    this.mesh.quaternion.setFromAxisAngle(_UP, yaw - this.angle).multiply(_FLAT);
     if (this.state === 'sink') {
       const k = Math.min(1, this.t / 0.4);
-      this.mesh.scale.setScalar(1.1 * (1 - k));
+      this.mesh.position.y += k * 0.25;
+      this.mesh.scale.setScalar(0.8 * (1 - k));
       if (k >= 1) {
         this.destroy();
         return false;
@@ -2486,6 +2495,8 @@ export class MahoragaWheel {
     this.mesh.userData.mat.dispose();
   }
 }
+
+const RING_AXLE = new THREE.Vector3(0, 0.714, 0.7).normalize();
 
 export class Mahoraga extends Shiki {
   constructor(owner, inherit = null) {
@@ -2527,6 +2538,16 @@ export class Mahoraga extends Shiki {
       const pj = () => ({ rotation: new THREE.Euler() });
       this.J = { hips: pj(), spine: pj(), head: pj(), shL: pj(), elL: pj(), shR: pj(), elR: pj(), hpL: pj(), knL: pj(), hpR: pj(), knR: pj() };
       this.mats = [];
+      // 머리 뒤 꼬리: 등에 닿으면 밀려나도록 가슴·허리에 구를 둔다
+      const R = this.M.rig;
+      const u = this.M.scale;
+      this.tail = new SpringChain(R, ['backhead_A', 'backhead_B', 'backhead_C', 'backhead_D', 'backhead_E', 'backhead_F', 'backhead_G', 'backhead_H', 'backhead_I'], {
+        stiff: 0.11,
+        damp: 0.92,
+        gravity: 3.5,
+        colliders: [{ bone: R.get('chest'), r: 0.5 * u }, { bone: R.get('spine'), r: 0.45 * u }, { bone: R.get('hip'), r: 0.48 * u }],
+      });
+      this.tailT = 0;
     } else {
       const g = buildGiant(this.ctx);
       this.SC = 2.4;
@@ -2715,10 +2736,12 @@ export class Mahoraga extends Shiki {
     const J = this.J;
     const G = this.G;
     R.begin();
-    R.rot('ring', AX.Z, -this.wheelAngle);
-    // 뒤통수의 긴 뿔(바인드에선 뒤로 곧게 뻗어 있다)은 등 뒤로 늘어뜨리고, 몸 흔들림에 늦게 출렁인다
-    R.rot('backhead_A', AX.X, -1.25 + G.hairLag * 0.6);
-    for (const n of ['backhead_B', 'backhead_C', 'backhead_D', 'backhead_E']) R.rot(n, AX.X, -0.12 + G.hairLag * 0.25);
+    // 법진: 바퀴 면이 뼈 로컬 (0, 0.714, 0.700) 쪽을 보고 기울어 있다 → 그 축(바퀴 굴대)으로 돌려야 제자리에서 돈다
+    R.rotLocal('ring', RING_AXLE, -this.wheelAngle);
+    // 뒤통수의 긴 꼬리(바인드에선 뒤로 곧게 뻗어 있다): 등 뒤로 늘어뜨린 모양을 기본으로 두고,
+    // 흔들림은 아래 SpringChain 이 몸·머리 움직임에 늦게 따라오며 출렁이게 만든다
+    R.rot('backhead_A', AX.X, -1.25);
+    for (const n of ['backhead_B', 'backhead_C', 'backhead_D', 'backhead_E', 'backhead_F', 'backhead_G']) R.rot(n, AX.X, -0.1 + Math.sin(this.tailT * 1.3 - n.charCodeAt(9) * 0.7) * 0.025);
     // 골반: 걸음마다 앞으로 나간 다리 쪽으로 비틀리고, 들린 다리 쪽이 처진다
     R.rot('hip', AX.Y, J.hips.rotation.y);
     R.rot('hip', AX.Z, G.roll);
@@ -2750,7 +2773,12 @@ export class Mahoraga extends Shiki {
 
   update(dt) {
     const alive = this._update(dt);
-    if (alive && this.M) this._applyRig();
+    if (alive && this.M) {
+      this.tailT = (this.tailT ?? 0) + dt;
+      this._applyRig();
+      this.root.updateMatrixWorld(true);
+      this.tail?.update(dt, this.body.scale.x * this.M.scale);
+    }
     return alive;
   }
 

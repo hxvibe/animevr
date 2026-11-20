@@ -592,7 +592,6 @@ class GojoShot {
     this.ctx = e.world.ctx;
     this.orb = new EnergyOrb(this.ctx, kind, radius);
     this.orb.pos.copy(from);
-    this.ctx.scene.add(this.orb.group);
     this.kind = kind;
     this.r = radius;
     this.grow = grow;
@@ -653,8 +652,10 @@ const G_BLUE = {
     if (m.made || k < 0.45) return;
     m.made = true;
     const { ui, sfx, fx } = e.world.ctx;
-    // 플레이어 바로 옆에 끌어당기는 점
-    const at = gojoAim(e).add(_v.set(rnd(-0.6, 0.6), rnd(-0.2, 0.3), rnd(-0.6, 0.6)));
+    // 플레이어 앞(고죠 쪽)으로 1m, 옆으로 조금 비켜 끌어당기는 점이 생긴다
+    const P0 = gojoAim(e);
+    const toE = _v.subVectors(e.root.position, P0).setY(0).normalize();
+    const at = P0.clone().addScaledVector(toE, 1.0).add(_v2.set(-toE.z, 0, toE.x).multiplyScalar(rnd(-0.5, 0.5)));
     ui.manga({ main: '蒼', ruby: 'あお', color: '#5ab4ff' });
     sfx.play('loop_blue', { at, vol: 0.5 });
     e.fxs.push(new GojoShot(e, 'blue', {
@@ -714,9 +715,8 @@ const G_PURPLE = {
   name: '虚式 「茈」', range: [4, 30], cd: 22, w: 0.9, dur: 2.5, track: true,
   start: (e, m) => {
     e.world.ctx.ui.manga({ top: '虚式', main: '茈', ruby: 'むらさき', color: '#b070ff', big: true });
-    m.blue = new EnergyOrb(e.world.ctx, 'blue', 0.08);
-    m.red = new EnergyOrb(e.world.ctx, 'red', 0.08);
-    e.world.ctx.scene.add(m.blue.group, m.red.group);
+    m.blue = new EnergyOrb(e.world.ctx, 'blue', 0.12);
+    m.red = new EnergyOrb(e.world.ctx, 'red', 0.12);
     e.world.ctx.sfx.play('charge_rise', { at: e.root.position, vol: 0.9, rate: 0.7 });
   },
   pose: (T, e, k) => {

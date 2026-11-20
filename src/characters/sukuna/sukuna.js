@@ -6,6 +6,7 @@
 //  · 영역전개 「伏魔御廚子(복마어주자)」: 사찰을 세우고 범위 안 모든 것에 해·팔을 난사
 //  · 흑섬 / 반전술식: 공통 시스템
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { SlashLines, makeCrescent, FireArrow } from './vfx.js';
 
 /** 세계를 가르는 해: PC(렌더 타깃 화면 효과 · 세계 어긋남) / 단독 기기(이전의 가벼운 연출). 설정이 없으면 기기로 정한다 */
@@ -378,6 +379,7 @@ export class Sukuna {
   // ───────────────── 捌 ─────────────────
   _cleave(t, h) {
     const { fx, sfx, ui } = this.ctx;
+    if (!cool(this.ctx, 'cleave', 2, '捌')) return;
     if (!this.spend(8)) return;
     const c = t.center(new THREE.Vector3());
     // 상대가 약할수록 더 잘게
@@ -434,6 +436,7 @@ export class Sukuna {
           this.denied();
           return;
         }
+        if (!cool(this.ctx, 'fuga', 12, '開')) return;
         this.bow = { ...start, draw: 0, t: 0, arrow: new FireArrow(this.ctx), light: fx.borrowLight(FIRE, 3, 6) };
         ui.manga({ top: '■', main: '開', ruby: 'フーガ', color: '#ff6a10' });
         sfx.playClip('sukunaFuga', { vol: 1.2 });
@@ -657,6 +660,10 @@ export class Sukuna {
   // 연출은 worldCut.js: 먹선 → 파란 차원 균열 → 화면 반전 순간에 절단 → 충격파 고리 + 위쪽 세계가 어긋남
   _worldSlash(h, swipe) {
     const { input: inp, world, sfx, ui } = this.ctx;
+    if (this.energy < 45 || !cool(this.ctx, 'worldSlash', 20, '세계를 가르는 해')) {
+      if (this.energy < 45) this.spend(45);
+      return;
+    }
     if (!this.spend(45)) return;
     const travel = inp.headDir.clone();
     const along = swipe.clone().addScaledVector(travel, -swipe.dot(travel));

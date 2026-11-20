@@ -4,6 +4,7 @@
 //  · 다중혼 「撥体(발체)」: 두 손바닥을 맞댔다가 밀면 뭉친 영혼 덩어리가 튀어나간다
 //  · 영역전개 「自閉円頓裹(자폐원돈과)」: 손으로 가득한 영역 — 안의 모든 영혼에 무위전변이 필중
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
@@ -475,7 +476,7 @@ export class Mahito extends Caster {
 
   /** 개조인간을 쏜다 */
   launchWorm(from, dir) {
-    if ((this.cds.worm ?? 0) > 0 || !this.spend(12)) return;
+    if ((this.cds.worm ?? 0) > 0 || !cool(this.ctx, 'worm', 2.5, '개조인간') || !this.spend(12)) return;
     this.cds.worm = 0.6;
     const inp = this.ctx.input;
     const t = this.gazeTarget(inp.head, inp.headDir, 0.35, 25, false) ?? this.gazeTarget(from, dir, 0.4, 25, false);
@@ -580,7 +581,7 @@ export class Mahito extends Caster {
   }
 
   bodyRepel() {
-    if (!this.spend(25)) return;
+    if (!cool(this.ctx, 'repel', 7, '撥体') || !this.spend(25)) return;
     const inp = this.ctx.input;
     const from = inp.head.clone().add(_v.set(0, -0.3, 0)).addScaledVector(inp.headDir, 0.5);
     this.effects.push(new BodyRepel(this.ctx, from, inp.headDir, 11, (t) => {

@@ -6,6 +6,7 @@
 //  · 영역전개 「無量空処(무량공처)」: 무한한 정보를 주입해 영역 안의 대상을 정지
 //  · 육안: 주력 소모 감소 + 탄도 시각화
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { EnergyOrb } from './vfx.js';
 import { UnlimitedVoid } from './domainVoid.js';
 import { Bolts } from '../../core/fx.js';
@@ -735,6 +736,10 @@ export class Gojo {
 
   _beginPurple(side, mode, from) {
     const { input: inp, fx, sfx } = this.ctx;
+    if (this.energy >= 30 && !cool(this.ctx, 'purple', 14, '虚式「茈」')) {
+      this._purpleLock = true;
+      return;
+    }
     if (!this.spend(30)) {
       this.denied();
       return;

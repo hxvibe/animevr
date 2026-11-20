@@ -9,6 +9,7 @@
 //  · 영역전개 「真贋相愛」: 수많은 일본도가 꽂힌 잔해 더미 — 모방한 술식이 깃든 칼이 날아든다
 //      (해 · 주언 · 야곱의 사다리 중 무작위) / 수인: 손날을 펴 손등을 앞으로, 다른 손 주먹을 턱 앞에
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { bodyOf } from '../../core/body.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
@@ -1046,7 +1047,7 @@ export class Yuta extends Caster {
   }
 
   speech(side = 'right') {
-    if ((this.cds.speech ?? 0) > 0 || !this.spend(20)) return;
+    if ((this.cds.speech ?? 0) > 0 || !cool(this.ctx, 'speech', 6, '주언') || !this.spend(20)) return;
     this.cds.speech = 4;
     const { input: inp, world, ui, fx, sfx } = this.ctx;
     ui.manga({ main: '動くな', ruby: 'うごくな', color: '#ffe080' });
@@ -1136,7 +1137,7 @@ export class Yuta extends Caster {
         this.ctx.scene.remove(C.s);
         C.s = null;
         const cost = big ? 50 : 20;
-        if (this.spend(cost)) {
+        if (cool(this.ctx, big ? 'beamBig' : 'beam', big ? 15 : 3, big ? '純愛砲' : '순애빔') && this.spend(cost)) {
           const from = at.clone();
           const aimT = this.gazeTarget(undefined, undefined, 0.3, 40, false);
           const dir = aimT ? aimT.center(new THREE.Vector3()).sub(from).normalize() : inp.headDir.clone();

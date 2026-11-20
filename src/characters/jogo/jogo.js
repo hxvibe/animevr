@@ -8,6 +8,7 @@
 //  · 도깨비불: 주먹에 고열 — 맞히면 불이 붙는다
 //  · 영역전개 「蓋棺鉄囲山」: 용암이 들끓는 화산 속 — 들어온 것은 모두 탄다
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain, DOMAIN_NOISE } from '../../core/shellDomain.js';
@@ -426,7 +427,7 @@ export class Jogo extends Caster {
   }
 
   headVolcano() {
-    if (!this.spend(16)) return;
+    if (!cool(this.ctx, 'volcano', 6, '火山頭') || !this.spend(16)) return;
     const inp = this.ctx.input;
     const from = inp.head.clone().add(_v.set(0, 0.25, 0));
     const t = this.gazeTarget(undefined, undefined, 0.3, 40, false);

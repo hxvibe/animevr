@@ -6,6 +6,7 @@
 //  · 共鳴り(공명): 왼손바닥을 하늘로 펴면 짚인형이 놓인다 → 망치로 인형을 내리치면
 //        못이 박힌(내 주력이 남은) 대상에게 그대로 울려 몸 안에서 가시가 터져 나온다
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { getModel, loadModel } from '../../core/assets.js';
@@ -782,7 +783,7 @@ export class Nobara extends Caster {
     const stuck = this.nails.filter((n) => n.state === 'stuck');
     if (!stuck.length) return;
     if ((this.cds.kan ?? 0) > 0) return;
-    if (!this.spend(10)) return;
+    if (!cool(this.ctx, 'kanzashi', 2.5, '簪') || !this.spend(10)) return;
     this.cds.kan = 0.6;
     const { fx, sfx, ui, world } = this.ctx;
     ui.manga({ main: '簪', ruby: 'かんざし', color: '#4a8cff', side: 'left' });
@@ -829,7 +830,7 @@ export class Nobara extends Caster {
       ui.callout('공명할 대상이 없다 — 못이나 망치로 먼저 주력을 남겨라', { color: '#ffb0c0', size: 40, dur: 1.5 });
       return;
     }
-    if (!this.spend(25)) return;
+    if (!cool(this.ctx, 'resonance', 6, '共鳴り') || !this.spend(25)) return;
     this.cds.res = 3.5;
     ui.manga({ main: '共鳴り', ruby: 'ともなり', color: '#ff6a8a', big: true });
     sfx.play('black_flash', { vol: 0.5, rate: 1.3 });

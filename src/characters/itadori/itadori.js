@@ -5,6 +5,7 @@
 //  · 적혈조술 「穿血」: 두 손바닥을 맞대 피를 압축(백렴) → 손을 떼면 피의 광선
 //  · 영역전개: 할아버지와 살던 동네. 필중 효과만 있는 고전적인 영역 → 안의 모든 것에 영혼을 가르는 해
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { HandAura } from '../../core/handAura.js';
 import { CutMarks, BloodOrb, spawnBloodBeam, HometownDomain } from './vfx.js';
 
@@ -377,6 +378,7 @@ export class Itadori {
 
   _fireBlood(pos, dir, charge) {
     const { world, fx, sfx, ui, input: inp } = this.ctx;
+    if (!cool(this.ctx, 'piercing', 5, '穿血')) return;
     const power = Math.min(1, charge / 1.2);
     let len = 45;
     if (dir.y < -0.02) len = Math.min(len, (pos.y - 0.02) / -dir.y);

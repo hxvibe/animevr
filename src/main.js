@@ -11,6 +11,7 @@ import { preload } from './core/assets.js';
 import { preloadChars } from './core/rigged.js';
 import { DUMMY_TYPES } from './core/dummy.js';
 import { CHARACTERS } from './characters/index.js';
+import { resetCooldowns } from './core/cooldown.js';
 
 const ENEMY_MODELS = [...new Set(Object.values(DUMMY_TYPES).map((d) => d.model).filter(Boolean))];
 
@@ -85,6 +86,7 @@ const game = {
     return ctx.env.setBackground(id);
   },
   start(charId, bgId) {
+    resetCooldowns();
     settings.character = charId;
     settings.background = bgId;
     this.saveSettings();

@@ -3,6 +3,7 @@
 //  · 왼손바닥을 하늘로 펴면 가진 주령의 주령구가 떠오른다 → 오른손으로 집어 던지면 그곳에서 주령이 나온다
 //  · 극번 「渦(소용돌이)」: 저급 주령을 하나로 뭉쳐 쏜다. 오래 모으면 거둔 특급 주령을 녹여 술식을 뽑아낸다
 import * as THREE from 'three';
+import { cool } from '../../core/cooldown.js';
 import { HandAura } from '../../core/handAura.js';
 import { preloadChars } from '../../core/rigged.js';
 import { DUMMY_TYPES } from '../../core/dummy.js';
@@ -136,6 +137,7 @@ export class Geto {
   summon(id, at, target = null) {
     const def = CURSES[id];
     if (!def) return false;
+    if (!cool(this.ctx, 'summon:' + id, 3, def.label)) return false;
     if ((this.stock.get(id) ?? 0) <= 0) {
       this.denied(`${def.label} — 이미 나가 있다`);
       return false;
@@ -563,7 +565,7 @@ export class Geto {
     if (U.state === 'idle') {
       if (hands && this.low > 0) {
         U.hold = (U.hold ?? 0) + dt;
-        if (U.hold > 0.3) {
+        if (U.hold > 0.3 && cool(this.ctx, 'uzumaki', 12, '극번「渦」')) {
           U.state = 'charge';
           U.byKey = desk;
           U.t = 0;

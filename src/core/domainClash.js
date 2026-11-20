@@ -221,7 +221,9 @@ void main() {
   float n = fbm(vec3(p * 9.0, uTime * 1.5));
   float bolt = smoothstep(0.012, 0.0, abs(n - 0.5)) + smoothstep(0.008, 0.0, abs(fbm(vec3(p * 16.0 + 3.0, uTime * 2.3)) - 0.5)) * 0.7;
   vec3 col = mix(uA, uB, smoothstep(0.3, 0.7, n)) * 0.5 + vec3(0.9, 0.95, 1.0) * bolt;
-  float a = edge * (0.05 + bolt * 0.75) * uK;
+  // 눈앞(3m 안)에선 흐려진다 — VR 에서 번개가 얼굴을 덮지 않게
+  float near = smoothstep(0.8, 3.5, distance(cameraPosition, vW));
+  float a = edge * (0.05 + bolt * 0.5) * uK * near;
   gl_FragColor = vec4(col, a);
 }`;
 
@@ -647,7 +649,7 @@ export class DomainClash {
     S.u.uTime.value += 1 / 60;
     S.u.uA.value.set(C.pd?.color ?? '#ffffff');
     S.u.uB.value.set(this.enemy.def.color);
-    S.u.uK.value = 0.6 + 0.4 * Math.abs(Math.sin(C.t * 9));
+    S.u.uK.value = 0.45 + 0.3 * Math.abs(Math.sin(C.t * 9));
   }
 
   _hideSeam() {

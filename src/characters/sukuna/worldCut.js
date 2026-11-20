@@ -1,6 +1,7 @@
 // 세계를 가르는 해 — 차원 참격 연출
-//  ① 휘두른 자리에 검은 먹선이 화면을 가로지르고, 그 선을 따라 파란 차원 균열이 들쭉날쭉 벌어진다
-//  ② 균열이 화면 전체로 번져 세상이 한순간 파랗게 물든다 (흰 절단선 관통)
+//  ① 휘두른 자리에 세계를 가르는 참격 선(검은 칼날 + 흰 빛 테두리)이 화면을 가로지르고
+//  ② 그 선을 따라 파란 차원 균열이 벌어져 화면을 물들인다. 균열의 톱니 윤곽은 연한 하늘색으로 빛나며
+//     벌어질수록 두꺼워진다
 //  ③ 임팩트 프레임(히로아카식): 한두 프레임 동안 세상이 흑백으로 뒤집히고, 배경·물체가 하얗게
 //     번지며 중심에서 바깥으로 방사형으로 늘어진다 (색수차 테두리)  ← 이 순간 실제로 베인다
 //  ④ 가는 절단선만 남아 점선으로 흩어지고
@@ -8,6 +9,7 @@
 //  ⑥ 절단면 위쪽 세계(배경 건물·벽)가 통째로 미끄러져 어긋난다. 잘린 단면은 붉게 빛난다
 //     잠시 뒤 어긋난 세계는 제자리로 돌아온다
 import * as THREE from 'three';
+import { bladeTexture } from './vfx.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -16,7 +18,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 // 타임라인 (초)
 const T = {
   blueIn: 0.06, // 파란 균열 띠 시작
-  screen: 0.15, // 화면 전체 파란 물듦
+  open: 0.2, // 파란 균열이 거의 다 벌어지는 때
   invert: 0.23, // 임팩트 프레임 = 실제 절단 순간
   invertEnd: 0.28,
   lineEnd: 0.62, // 남은 절단선이 다 흩어짐
@@ -25,7 +27,7 @@ const T = {
   end: 7.1,
 };
 
-const LINE_DIST = 12; // 균열 띠를 그리는 거리 (m)
+const LINE_DIST = 12; // 참격 선을 그리는 거리 (m)
 const SLAB = 1.6; // 단면을 붉게 채우는 깊이 (m)
 
 const GLSL_NOISE = /* glsl */ `
@@ -33,50 +35,6 @@ float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
 float n1(float x) { float i = floor(x); float f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
 // 직선 보간: 뾰족뾰족한 톱니 윤곽
 float jag(float x) { float i = floor(x); return mix(h1(i), h1(i + 1.0), fract(x)); }
-`;
-
-// ── ①②④ 균열 띠: 절단 평면 위, 정면 12m 에 화면을 가로지르는 긴 띠 ──
-const riftVert = /* glsl */ `
-varying vec2 vUv;
-void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-`;
-const riftFrag = /* glsl */ `
-uniform float uT, uL, uW, uGrow, uInk, uBlue, uWhite, uDash, uOp;
-varying vec2 vUv;
-${GLSL_NOISE}
-void main() {
-  float x = (vUv.x - 0.5) * uL;
-  float y = (vUv.y - 0.5) * uW;
-  float r = abs(vUv.x - 0.5) * 2.0 / max(uGrow, 1e-3);
-  if (r > 1.0) discard;
-  float taper = 1.0 - r * r;
-  // 먹선: 굵기가 살짝 출렁이는 검은 선, 끝에서는 점선으로 흩어진다
-  float hw = uInk * (0.55 + 0.45 * n1(x * 2.7 + uT * 23.0)) * taper;
-  float ink = 1.0 - smoothstep(hw * 0.7, hw, abs(y));
-  ink *= step(h1(floor(x * 6.0) + 0.37), uDash);
-  // 파란 차원 균열: 중심이 흔들리고 위아래 윤곽이 톱니처럼 들쭉날쭉
-  float yc = (n1(x * 0.6 + uT * 9.0) - 0.5) * 0.35 * uBlue;
-  float bw = uBlue * (0.12 + 0.75 * pow(jag(x * 1.9 + uT * 34.0), 2.0)) * taper;
-  float dy = abs(y - yc);
-  float blue = step(dy, bw);
-  float inner = step(dy, bw * 0.42 + 0.02 * uBlue);
-  // 하얀 윤곽선: 균열이 벌어질수록 두꺼워진다 (안쪽으로 번지는 흰빛 + 바깥 테두리)
-  float ow = uBlue * (0.04 + 0.55 * uBlue) * (0.5 + 0.5 * taper);
-  float rimOut = (1.0 - blue) * (1.0 - smoothstep(ow * 0.35, ow, dy - bw));
-  float rimIn = blue * smoothstep(bw - ow * 1.2, bw, dy);
-  float rim = max(rimOut, rimIn * 0.85) * step(0.001, uBlue);
-  float white = 1.0 - smoothstep(uWhite * 0.6, uWhite, abs(y));
-  vec3 col = mix(vec3(0.16, 0.47, 1.0), vec3(0.62, 0.85, 1.0), inner);
-  float a = blue * 0.92;
-  col = mix(col, vec3(1.0), rim);
-  a = max(a, rim);
-  col = mix(col, vec3(0.0), ink);
-  a = max(a, ink);
-  col = mix(col, vec3(1.0), white);
-  a = max(a, white);
-  if (a < 0.01) discard;
-  gl_FragColor = vec4(col, a * uOp);
-}
 `;
 
 // ── 머리에 붙은 구: 시야 방향(월드)을 넘겨준다 ──
@@ -92,7 +50,7 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
-// ② 파랗게 물들이기: 절단선에서 위아래로 톱니 윤곽을 그리며 벌어진다
+// ② 파란 차원 균열: 참격 선에서 위아래로 톱니 윤곽을 그리며 벌어져 화면을 물들인다
 //    톱니 모양은 몇 프레임마다 바뀌어 손으로 그린 듯 들끓는다
 const EDGE = /* glsl */ `
 float tearEdge(float s) {
@@ -114,10 +72,11 @@ void main() {
   gl_FragColor = vec4(mix(vec3(1.0), tint, m), 1.0);
 }
 `;
-// 파란 영역의 하얀 윤곽선 (일반 혼합). 벌어질수록 uOW 가 커져 두꺼워진다
+// 파란 균열의 톱니 윤곽선 (일반 혼합). 벌어질수록 uOW 가 커져 두꺼워진다
 const tintEdgeFrag = /* glsl */ `
 uniform vec3 uN, uA;
 uniform float uW, uAmt, uT, uOW;
+uniform vec3 uEdgeCol;
 varying vec3 vDir;
 varying float vOff;
 ${GLSL_NOISE}
@@ -129,7 +88,8 @@ void main() {
   float inGlow = (1.0 - smoothstep(0.0, uOW * 3.0, -e)) * step(e, 0.0);
   float a = max(core, inGlow * 0.55) * uAmt;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(1.0, 1.0, 1.0, a);
+  // 연한 하늘색 테두리, 한가운데는 하얗게
+  gl_FragColor = vec4(mix(uEdgeCol, vec3(1.0), core * 0.55), a);
 }
 `;
 
@@ -458,19 +418,15 @@ export class WorldCut {
     this.ctx = ctx;
     this.active = null;
     this.split = null;
-    // 균열 띠
-    this.riftU = {
-      uT: { value: 0 }, uL: { value: 150 }, uW: { value: 5 }, uGrow: { value: 0 }, uInk: { value: 0.05 },
-      uBlue: { value: 0 }, uWhite: { value: 0 }, uDash: { value: 1 }, uOp: { value: 1 },
-    };
-    this.rift = new THREE.Mesh(
+    // 참격 선: 기존 「세계를 가르는 해」 칼날 (검은 칼날 + 흰 빛 테두리, 양끝이 가늘게)
+    this.blade = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
-      new THREE.ShaderMaterial({ vertexShader: riftVert, fragmentShader: riftFrag, uniforms: this.riftU, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+      new THREE.MeshBasicMaterial({ map: bladeTexture(), transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false }),
     );
-    this.rift.renderOrder = 405;
-    this.rift.frustumCulled = false;
-    this.rift.visible = false;
-    ctx.scene.add(this.rift);
+    this.blade.renderOrder = 405;
+    this.blade.frustumCulled = false;
+    this.blade.visible = false;
+    ctx.scene.add(this.blade);
     // 화면 효과 (머리에 붙는 구)
     const shared = { uO: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uA: { value: new THREE.Vector3() }, uT: { value: 0 } };
     this.tintU = { ...shared, uW: { value: 0 }, uAmt: { value: 0 } };
@@ -478,7 +434,7 @@ export class WorldCut {
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
       blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, // 화면 알파는 그대로
     }, 401);
-    this.edgeU = { ...shared, uW: this.tintU.uW, uAmt: this.tintU.uAmt, uOW: { value: 0.02 } };
+    this.edgeU = { ...shared, uW: this.tintU.uW, uAmt: this.tintU.uAmt, uOW: { value: 0.02 }, uEdgeCol: { value: new THREE.Color(0.72, 0.9, 1.0) } };
     this.tintEdge = headSphere(tintEdgeFrag, this.edgeU, null, 402);
     // 임팩트 프레임 (렌더 타깃에 먼저 그린 장면을 가공)
     this.rt = new THREE.WebGLRenderTarget(4, 4, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true });
@@ -564,12 +520,13 @@ export class WorldCut {
     const shift = along.clone().multiplyScalar(2.4 * (0.55 + 0.45 * Math.abs(nUp.y))).addScaledVector(nUp, 0.35); // 세로로 벤 경우는 덜 밀린다
     this.split = new WorldSplit(this.ctx, { o, travelH, nUp, shift });
     if (!this.split.ok) this.split = null;
-    // 균열 띠: 정면 12m, 휘두른 방향으로 길게 (평면을 정면으로 마주 본다)
+    // 참격 선: 정면 12m, 휘두른 방향으로 길게 (평면을 정면으로 마주 본다)
     const c = o.clone().addScaledVector(travel, LINE_DIST);
-    this.rift.position.copy(c);
-    this.rift.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(along, n, travel));
-    this.rift.scale.set(this.riftU.uL.value, this.riftU.uW.value, 1);
-    this.rift.visible = true;
+    this.blade.position.copy(c);
+    this.blade.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(along, n, travel));
+    this.blade.scale.set(0.01, 0.01, 1);
+    this.blade.material.opacity = 1;
+    this.blade.visible = true;
     const u = this.tintU;
     u.uO.value.copy(o);
     u.uN.value.copy(n);
@@ -580,7 +537,7 @@ export class WorldCut {
 
   _finish() {
     this.active = null;
-    this.rift.visible = false;
+    this.blade.visible = false;
     this.tint.visible = this.tintEdge.visible = this.impact.visible = false;
     for (const r of this.rings) r.g.visible = false;
     this.split?.dispose();
@@ -595,28 +552,28 @@ export class WorldCut {
     const t = a.t;
     const { fx, sfx } = this.ctx;
     const bright = fx.brightBg;
-    const R = this.riftU;
-    R.uT.value += dt;
-    this.tintU.uT.value = R.uT.value;
-    // ①④ 균열 띠
-    R.uGrow.value = Math.min(1, 1 - Math.pow(1 - Math.min(1, t / 0.09), 3));
-    R.uInk.value = t < T.invertEnd ? 0.055 : 0.028;
-    const bk = t < T.blueIn ? 0 : t < 0.14 ? (t - T.blueIn) / (0.14 - T.blueIn) : t < T.invert ? 1 : 0;
-    R.uBlue.value = bk * 0.55;
-    R.uWhite.value = t > T.screen && t < T.invertEnd ? 0.035 : 0;
-    R.uDash.value = t < 0.42 ? 1 : Math.max(0, 1 - (t - 0.42) / (T.lineEnd - 0.42));
-    R.uOp.value = 1;
-    this.rift.visible = t < T.lineEnd && !(t >= T.invert && t < T.invertEnd);
-    // ② 화면 전체 파란 물듦
-    const tintOn = t >= T.screen && t < T.invert;
+    this.tintU.uT.value += dt;
+    // ①④ 참격 선: 순식간에 화면 끝까지 뻗고, 절단 뒤에는 가늘어지며 사라진다
+    const grow = 1 - Math.pow(1 - Math.min(1, t / 0.09), 3);
+    let thick = 0.55;
+    let op = 1;
+    if (t >= T.invertEnd) {
+      const k = Math.min(1, (t - T.invertEnd) / (T.lineEnd - T.invertEnd));
+      thick = 0.4 * (1 - k * 0.7);
+      op = 1 - k * k;
+    }
+    this.blade.scale.set(6 + 144 * grow, thick, 1);
+    this.blade.material.opacity = op;
+    this.blade.visible = t < T.lineEnd && !(t >= T.invert && t < T.invertEnd);
+    // ② 파란 차원 균열: 선에서부터 벌어져 화면을 물들인다. 벌어질수록 윤곽선이 두꺼워진다
+    const tintOn = t >= T.blueIn && t < T.invert;
     this.tint.visible = this.tintEdge.visible = tintOn;
     if (tintOn) {
-      // 확 벌어진 뒤 조금씩 더. 톱니 윤곽이 시야 위아래 끝에 걸리도록
-      const k = Math.min(1, (t - T.screen) / 0.05);
-      const open = 1 - Math.pow(1 - k, 2);
-      this.tintU.uW.value = 0.04 + open * 0.5 + (t - T.screen) * 0.6;
+      const k = Math.min(1, (t - T.blueIn) / (T.open - T.blueIn));
+      const open = k * k * (3 - 2 * k);
+      this.tintU.uW.value = 0.004 + 0.56 * Math.pow(open, 1.4) + Math.max(0, t - T.open) * 0.6;
       this.tintU.uAmt.value = 1;
-      this.edgeU.uOW.value = 0.012 + open * 0.07; // 벌어질수록 윤곽선이 두꺼워진다
+      this.edgeU.uOW.value = 0.005 + open * 0.075;
     }
     // ③ 임팩트 프레임
     const invOn = t >= T.invert && t < T.invertEnd;
@@ -674,7 +631,8 @@ export class WorldCut {
   dispose() {
     this._finish();
     const { scene, camera } = this.ctx;
-    scene.remove(this.rift);
+    scene.remove(this.blade);
+    this.blade.material.dispose();
     camera.remove(this.tint, this.tintEdge, this.impact);
     const hooks = this.ctx.beforeRender;
     const i = hooks ? hooks.indexOf(this._preRender) : -1;

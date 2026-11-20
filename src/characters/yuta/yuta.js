@@ -9,6 +9,7 @@
 //  · 영역전개 「真贋相愛」: 수많은 일본도가 꽂힌 잔해 더미 — 모방한 술식이 깃든 칼이 날아든다
 //      (해 · 주언 · 야곱의 사다리 중 무작위) / 수인: 손날을 펴 손등을 앞으로, 다른 손 주먹을 턱 앞에
 import * as THREE from 'three';
+import { bodyOf } from '../../core/body.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
@@ -103,13 +104,13 @@ class Katana {
       this.hasPrev = false;
       return 0;
     }
-    // 칼 방향: 손 추적이면 주먹의 엄지 쪽으로(조금 손끝 쪽으로 기울여), 컨트롤러는 가리키는 방향
+    // 칼 방향: 손 추적이면 주먹을 꿰뚫는 축(엄지 쪽) 그대로 — 주먹에 수직으로 선다. 컨트롤러는 가리키는 방향
     const F = _v.copy(h.fingersDir).normalize();
     const N = _v2.copy(h.palmNormal).normalize();
     if (h.source === 'hand') {
       const thumb = _v3.crossVectors(F, N);
       if (this.side === 'left') thumb.negate();
-      this.dir.copy(thumb).addScaledVector(F, 0.8).normalize();
+      this.dir.copy(thumb).normalize();
     } else this.dir.copy(h.dir).normalize();
     // 날은 손등(손가락 마디) 쪽을 향한다
     const edge = _v2.copy(h.source === 'hand' ? F : UP).addScaledVector(this.dir, -(h.source === 'hand' ? F : UP).dot(this.dir)).normalize();
@@ -150,6 +151,68 @@ class Katana {
     this.ctx.scene.remove(this.group, this.trailMesh);
     this.trailMesh.geometry.dispose();
     this.trailMesh.material.dispose();
+  }
+}
+
+// ───────────────── 허리춤 칼집 ─────────────────
+//  왼쪽 허리에 비스듬히 (칼집 입구가 앞·위, 끝이 뒤·아래). 칼을 꽂아 둔 채로 보이고, 손잡이를 쥐면 뽑힌다
+function sheathMesh() {
+  const src = getModel('wpn_yuta_sheath');
+  const g = new THREE.Group();
+  if (!src) {
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.018, 0.78).rotateX(Math.PI / 2).translate(0, 0, 0.53), new THREE.MeshToonMaterial({ color: 0x14141c })));
+    return g;
+  }
+  const c = new THREE.Group();
+  src.updateMatrixWorld(true);
+  src.traverse((o) => {
+    if (!o.isMesh) return;
+    const mesh = new THREE.Mesh(o.geometry, new THREE.MeshToonMaterial({ color: o.material.color ?? 0xffffff, map: o.material.map ?? null }));
+    if (o.isSkinnedMesh && o.skeleton?.bones.length) {
+      const bm = new THREE.Matrix4().multiplyMatrices(o.skeleton.bones[0].matrixWorld, o.skeleton.boneInverses[0]).multiply(o.bindMatrix);
+      mesh.applyMatrix4(bm);
+    } else mesh.applyMatrix4(o.matrixWorld);
+    mesh.castShadow = true;
+    c.add(mesh);
+  });
+  // 칼집 모델은 칼과 반대로(-Z 쪽으로) 놓여 있다 → 뒤집어 칼날(코등이 0.14 ~ 칼끝 0.97)을 감싸게
+  c.rotation.y = Math.PI;
+  c.position.z = 0.38;
+  g.add(c);
+  return g;
+}
+// 몸 기준: 칼집 입구 근처의 손잡이 가운데 · 칼끝 방향 (뒤·아래)
+const HILT = [-0.2, 0.02, -0.16];
+const SHEATH_DIR = [0.18, -0.55, 1];
+class Sheath {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.g = new THREE.Group();
+    this.sheath = sheathMesh();
+    this.sword = swordMesh();
+    this.g.add(this.sheath, this.sword);
+    ctx.scene.add(this.g);
+    this.hilt = new THREE.Vector3();
+    this.dir = new THREE.Vector3();
+    this.flash = 0;
+  }
+
+  update(dt, drawn) {
+    const B = bodyOf(this.ctx).update(dt);
+    B.point(...HILT, this.hilt);
+    B.dir(...SHEATH_DIR, this.dir);
+    // 칼날 면은 위(칼등이 위)
+    const side = _v.crossVectors(this.dir, UP).normalize();
+    const edge = _v2.crossVectors(side, this.dir).normalize().negate();
+    _m.makeBasis(edge, _v3.crossVectors(this.dir, edge), this.dir);
+    this.g.quaternion.setFromRotationMatrix(_m);
+    this.g.position.copy(this.hilt);
+    this.sword.visible = !drawn;
+    this.g.visible = this.ctx.input.mode !== 'desktop';
+  }
+
+  dispose() {
+    this.ctx.scene.remove(this.g);
   }
 }
 
@@ -777,7 +840,7 @@ export class Yuta extends Caster {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '주먹을 쥐면 칼이 쥐어진다 → 휘둘러 벤다 (칼끝이 빠를수록 깊게)\n아주 세게 휘두르면 칼날의 주력이 터져 검기가 날아간다 · 손을 펴면 칼을 거둔다' },
+        { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '왼쪽 허리춤 칼집에서 비스듬히 나온 손잡이에 손을 대고 주먹을 쥐면 칼이 뽑힌다 → 휘둘러 벤다 (칼끝이 빠를수록 깊게)\n아주 세게 휘두르면 칼날의 주력이 터져 검기가 날아간다 · 손을 펴면 칼이 칼집으로 돌아간다' },
         { head: '리카 현현', demo: 'yuta.rika', color: '#c8a0ff', text: '왼손 주먹(반지)을 입술에 0.5초 → 리카 완전현현, 곁에서 싸운다 (1분)\n왼손 검지로 적을 가리키면 그 적에게 · 다시 하면 돌려보낸다' },
         { head: '순애빔', demo: 'yuta.beam', color: '#ff7ac0', text: '리카 완전현현 중에: 두 손바닥을 마주 보게 모았다가 앞으로 밀기\n리카의 입에서 주력의 고출력 지향 방출 (오래 모을수록 굵다)' },
         { head: '주언 「動くな」', demo: 'yuta.speech', color: '#ffe080', text: '편 손바닥으로 입을 가렸다가 떼며 앞으로 내밀기 → 그 손에 확성기가 쥐어지고 외친다\n바라본 적들이 3초 동안 멈춘다 (특급은 절반)' },
@@ -818,7 +881,11 @@ export class Yuta extends Caster {
     // 반전술식
     const P = world.player;
     if (P.hp > 0 && P.hp < P.maxHp && world.time - (P.lastHit ?? -10) > 1.5) P.hp = Math.min(P.maxHp, P.hp + 5 * dt);
-    if (!this.swords && (getModel('wpn_yuta_sword') || this.time > 4)) this.swords = { left: new Katana(this.ctx, 'left'), right: new Katana(this.ctx, 'right') };
+    if (!this.swords && (getModel('wpn_yuta_sword') || this.time > 4)) {
+      this.swords = { left: new Katana(this.ctx, 'left'), right: new Katana(this.ctx, 'right') };
+      this.sheath = new Sheath(this.ctx);
+    }
+    this.sheath?.update(dt, !!this.drawnBy);
     if (!this.swords) {
       // 칼 모델을 받는 중
     } else if (!ui.menuOpen) {
@@ -846,8 +913,28 @@ export class Yuta extends Caster {
       return;
     }
     const nearFace = h.palm.distanceTo(inp.head) < 0.2;
-    // 칼: 주먹 (입 근처에서 반지에 입 맞출 땐 제외)
-    let want = ctrl ? h.btn.grip && h.side === 'right' : desk ? h.side === 'right' && inp.keyDown('KeyE') : h.gesture === 'fist' && !(h.side === 'left' && nearFace);
+    // 칼: 허리춤 칼집의 손잡이를 쥐면 뽑힌다 → 쥔 동안 손에. 손을 펴면 칼집으로 돌아간다 (데스크톱은 E)
+    const fistNow = ctrl ? h.btn.grip : h.gesture === 'fist';
+    if (!desk && this.sheath) {
+      const grabAt = _v3.copy(h.palm);
+      if (!this.drawnBy && fistNow && h.palm.distanceTo(this.sheath.hilt) < 0.14 && (h.gestureTime < 0.4 || ctrl)) {
+        this.drawnBy = h.side;
+        this._sheatheT = 0;
+        this.ctx.sfx.play('click', { at: grabAt, vol: 0.7, rate: 0.55 });
+        this.ctx.sfx.whoosh(grabAt, 0.6, 1.6);
+        h.pulse?.(0.6, 60);
+        S.k = 1; // 칼집에서 그대로 뽑아 든다 (커지며 나타나지 않게)
+      }
+      if (this.drawnBy === h.side && !fistNow) {
+        this._sheatheT = (this._sheatheT ?? 0) + dt;
+        if (this._sheatheT > 0.15) {
+          this.drawnBy = null;
+          S.k = 0;
+          this.ctx.sfx.play('click', { at: this.sheath.hilt, vol: 0.6, rate: 0.7 });
+        }
+      } else if (this.drawnBy === h.side) this._sheatheT = 0;
+    }
+    let want = desk ? h.side === 'right' && inp.keyDown('KeyE') : this.drawnBy === h.side && fistNow && !(h.side === 'left' && nearFace);
     if (this.charge.on || (this.mega.t > 0 && this.mega.side === h.side)) want = false;
     const speed = S.update(dt, desk ? { ...h, source: 'controller', dir: _v.copy(inp.headDir).add(_v2.set(0, 0.2, 0)).normalize() } : h, want);
     if (want && speed > 2.6) this._slash(S, speed);
@@ -1106,6 +1193,7 @@ export class Yuta extends Caster {
     this.rika?.dispose();
     this.mega.dispose();
     if (this.swords) for (const s of ['left', 'right']) this.swords[s].dispose();
+    this.sheath?.dispose();
     if (this.charge.s) this.ctx.scene.remove(this.charge.s);
     for (const o of this.list) o.g && this.ctx.scene.remove(o.g);
     this.aura.dispose();

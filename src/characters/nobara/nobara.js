@@ -10,6 +10,7 @@ import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { getModel, loadModel } from '../../core/assets.js';
 import { makeGlowSprite } from '../../core/fx.js';
+import { bodyOf } from '../../core/body.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -227,8 +228,20 @@ class Hammer {
   }
 
   /** h: 손. want: 꺼내기. 반환: 머리 속도 */
-  update(dt, h, want) {
+  update(dt, h, want, holster = null) {
     this.k = THREE.MathUtils.clamp(this.k + (want ? dt * 7 : -dt * 5), 0, 1);
+    if (!want && holster) {
+      // 허리춤에 차 둔다
+      this._build();
+      this.k = 0;
+      this.g.visible = true;
+      this.g.position.copy(holster.pos);
+      this.g.quaternion.copy(holster.quat);
+      this.g.scale.setScalar(1);
+      this.hasPrev = false;
+      this.speed = 0;
+      return 0;
+    }
     this.g.visible = this.k > 0.01;
     if (!this.g.visible) {
       this.hasPrev = false;
@@ -243,7 +256,7 @@ class Hammer {
       const N = _v2.copy(h.palmNormal).normalize();
       const thumb = _v3.crossVectors(F, N);
       if (h.side === 'left') thumb.negate();
-      this.axis.copy(thumb).addScaledVector(F, 0.35).normalize();
+      this.axis.copy(thumb).normalize(); // 주먹을 꿰뚫는 축 그대로 (주먹에 수직)
       this.face.copy(F).addScaledVector(this.axis, -F.dot(this.axis)).normalize();
     } else if (h.source === 'controller') {
       // 컨트롤러: 손잡이는 위로 세우고 머리는 가리키는 쪽
@@ -524,14 +537,17 @@ export class Nobara extends Caster {
     this._keys = {};
     this.desk = { swing: 0 };
     this.holdHand = { lost: 0 };
+    this.hammerDrawn = false;
+    this.holster = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), grip: new THREE.Vector3() };
+    this.pouch = this._makePouch();
     for (const n of NOBARA_MODELS) loadModel(n);
   }
 
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '망치', demo: 'nobara.hammer', color: '#8ab4ff', text: '오른손 주먹을 쥐면 망치가 쥐어진다 · 휘둘러 치기 (흑섬도 난다)' },
-        { head: '못 → 망치로 쏘기', demo: 'nobara.nails', color: '#c8dcff', text: '왼손 엄지·검지를 꼬집듯 모으면 못 세 개 → 손을 펴며 위로 띄운다\n떠 있는 못을 망치로 후려치면 바라본 대상에게 날아가 박힌다' },
+        { head: '망치', demo: 'nobara.hammer', color: '#8ab4ff', text: '오른쪽 허리춤에 걸린 망치 손잡이에 손을 대고 주먹을 쥐면 뽑힌다 · 휘둘러 치기 (흑섬도 난다)\n손을 펴면 망치가 허리로 돌아간다' },
+        { head: '못 → 망치로 쏘기', demo: 'nobara.nails', color: '#c8dcff', text: '왼쪽 허리춤 못 주머니에 손을 대고 엄지·검지를 꼬집듯 모으면 못 세 개 → 손을 펴며 위로 띄운다\n떠 있는 못을 망치로 후려치면 바라본 대상에게 날아가 박힌다' },
         { head: '簪 비녀', demo: 'nobara.kanzashi', color: '#4a8cff', text: '못이 박혀 있을 때 왼손을 활짝 폈다가 주먹을 꽉 쥐기 → 박힌 못에서 주력이 터진다' },
         { head: '共鳴り 공명', demo: 'nobara.resonance', color: '#ff8aa0', text: '왼손바닥을 하늘로 펴면 짚인형 → 망치로 인형을 내리치기\n못이 박힌 대상(내 주력이 남은 대상)에게 그대로 울려 몸 안에서 가시가 터진다' },
       ];
@@ -568,10 +584,26 @@ export class Nobara extends Caster {
     const L = inp.left;
     const R = inp.right;
     const blocked = ui.menuOpen;
-    // 망치: 오른손 주먹(손 추적) · 오른쪽 그립(컨트롤러) · 데스크톱은 늘
-    const wantHammer = !blocked && (inp.mode === 'desktop' || (R.active && !R.uiBlock && (R.source === 'hand' ? R.gesture === 'fist' || (this.hammer.k > 0.5 && R.gesture !== 'open' && R.gesture !== 'none') : R.btn.grip)));
-    if (inp.mode === 'desktop') this.hammer.swingK = this.desk.swing > 0 ? 1 - this.desk.swing / 0.3 : 0;
-    this.hammer.update(dt, R, wantHammer);
+    // 허리춤: 오른쪽엔 망치(머리를 아래로 걸어 둠), 왼쪽엔 못 주머니
+    this._placeBelt(dt);
+    // 망치: 오른쪽 허리춤의 망치 손잡이에 손을 대고 주먹을 쥐면 뽑힌다 → 손을 펴면 허리로 돌아간다 · 데스크톱은 늘
+    const desk = inp.mode === 'desktop';
+    const rFist = R.active && !R.uiBlock && (R.source === 'hand' ? R.gesture === 'fist' || (this.hammer.k > 0.5 && R.gesture !== 'open' && R.gesture !== 'none') : R.btn.grip);
+    if (!desk && !blocked) {
+      if (!this.hammerDrawn && rFist && R.palm.distanceTo(this.holster.grip) < 0.14) {
+        this.hammerDrawn = true;
+        this.hammer.k = 1;
+        this.ctx.sfx.play('click', { at: R.palm, vol: 0.6, rate: 0.6 });
+        R.pulse?.(0.5, 50);
+      }
+      if (this.hammerDrawn && !rFist) {
+        this._holsterT = (this._holsterT ?? 0) + dt;
+        if (this._holsterT > 0.15) this.hammerDrawn = false;
+      } else this._holsterT = 0;
+    }
+    const wantHammer = !blocked && (desk || (this.hammerDrawn && rFist));
+    if (desk) this.hammer.swingK = this.desk.swing > 0 ? 1 - this.desk.swing / 0.3 : 0;
+    this.hammer.update(dt, R, wantHammer, desk ? null : this.holster);
     if (!blocked) {
       this._leftHand(dt, L);
       if (inp.mode === 'desktop') this._desktop(dt);
@@ -590,6 +622,44 @@ export class Nobara extends Caster {
     this.aura.update(dt);
   }
 
+  // ───────────────── 허리춤 ─────────────────
+  _makePouch() {
+    const g = new THREE.Group();
+    const leather = new THREE.MeshToonMaterial({ color: 0x5a3a22 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.09, 0.045), leather);
+    box.castShadow = true;
+    const ol = new THREE.Mesh(box.geometry, new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide }));
+    ol.scale.setScalar(1.08);
+    g.add(box, ol);
+    // 위로 삐죽 나온 못대가리
+    for (let i = 0; i < 4; i++) {
+      const n = makeNail();
+      n.rotation.x = Math.PI / 2; // 끝이 아래로
+      n.position.set(-0.025 + i * 0.016, 0.06, rnd(-0.008, 0.008));
+      g.add(n);
+    }
+    this.ctx.scene.add(g);
+    return g;
+  }
+
+  _placeBelt(dt) {
+    const B = bodyOf(this.ctx).update(dt);
+    const desk = this.ctx.input.mode === 'desktop';
+    // 망치: 오른쪽 허리, 머리가 아래 · 때리는 면이 앞
+    const axis = B.dir(0, -1, 0.12, _v);
+    const face = B.dir(0, 0, -1, _v2);
+    const side = _v3.crossVectors(axis, face).normalize();
+    face.crossVectors(side, axis).normalize();
+    _m.makeBasis(side, axis, face);
+    this.holster.quat.setFromRotationMatrix(_m);
+    B.point(0.21, 0.06, -0.07, this.holster.pos);
+    this.holster.grip.copy(this.holster.pos);
+    // 못 주머니: 왼쪽 허리
+    B.point(-0.2, -0.02, -0.08, this.pouch.position);
+    this.pouch.quaternion.copy(B.quat);
+    this.pouch.visible = !desk;
+  }
+
   // ───────────────── 왼손: 못 · 簪 ─────────────────
   _leftHand(dt, L) {
     if (!L.active || L.uiBlock) {
@@ -599,8 +669,9 @@ export class Nobara extends Caster {
     this.holdHand.lost = 0;
     const ctrl = L.source === 'controller';
     const pinch = ctrl ? L.btn.trigger : L.gesture === 'pinch' || L.pinching;
-    // 못 꺼내기
-    if (pinch && !this.held.length && (this.cds.nails ?? 0) <= 0 && this.doll.k < 0.2) {
+    // 못 꺼내기: 왼쪽 허리춤 못 주머니에 손을 대고 엄지·검지를 모은다
+    const atPouch = L.palm.distanceTo(this.pouch.position) < 0.16 || L.indexTip.distanceTo(this.pouch.position) < 0.12;
+    if (pinch && atPouch && !this.held.length && (this.cds.nails ?? 0) <= 0 && this.doll.k < 0.2) {
       if (this.spend(6)) {
         this.cds.nails = 0.5;
         for (let i = 0; i < 3; i++) {
@@ -846,6 +917,7 @@ export class Nobara extends Caster {
     this.held = [];
     this.hammer.dispose();
     this.doll.dispose();
+    this.ctx.scene.remove(this.pouch);
     this.aura.dispose();
   }
 }

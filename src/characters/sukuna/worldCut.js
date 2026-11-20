@@ -16,16 +16,21 @@ const _q = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
 
 // 타임라인 (초)
+// 참고 영상(30fps)을 프레임 단위로 맞춘 실시간 타이밍
+//  0~3 참격 선 · 4~6 파란 균열(얇은 띠 → 거의 전체 → 전체) · 7 임팩트 · 8~12 남은 선이 점선으로 흩어짐
+//  13~16 정적 · 17 충격파 + 세계 어긋남 (충격파는 ~5프레임, 어긋남은 ~3프레임 만에)
+//  영상 0프레임에 이미 선이 그어져 있으므로 휘두른 순간 = -1프레임 → 영상 k프레임 = (k+1)/30초
+const RF = (k) => (k + 1) / 30 - 0.004; // 누적 오차로 경계 프레임을 놓치지 않게 살짝 당긴다
 const T = {
-  blueIn: 0.18, // 파란 균열 (딱 BLUE_FRAMES 프레임) → 바로 이어서 임팩트 프레임 = 실제 절단 순간
-  impactDur: 0.05, // 임팩트 프레임 길이
-  lineEnd: 0.62, // 남은 절단선이 다 흩어짐
-  split: 0.5, // 충격파 + 세계 어긋남
+  blueIn: RF(4), // 파란 균열 시작
+  impact: RF(7), // 임팩트 프레임 = 실제 절단 순간
+  impactDur: 1 / 30 - 0.002, // 임팩트 프레임 길이 (30fps 기준 1프레임)
+  lineEnd: RF(12.5), // 남은 절단선이 다 흩어짐
+  split: RF(17), // 충격파 + 세계 어긋남
   heal: 6.5, // 제자리로 돌아오기 시작
   end: 7.1,
 };
 
-const BLUE_FRAMES = 2; // 파란 균열이 보이는 렌더 프레임 수 (주사율과 무관하게 한두 프레임만 번쩍)
 const LINE_DIST = 12; // 참격 선을 그리는 거리 (m)
 const SLAB = 1.6; // 단면을 붉게 채우는 깊이 (m)
 
@@ -306,6 +311,7 @@ class WorldSplit {
     this.upper.parent?.remove(this.upper);
     this.caps.parent?.remove(this.caps);
     this.ctx.scene.add(this.upper, this.caps);
+    this.update(0); // 첫 프레임부터 단면·솔기 평면 값을 채워 둔다
   }
 
   // 잘린 표면을 따라 붉게 빛나는 솔기 (절단 평면에서 SEAM 폭 안쪽). 멀수록 굵게 해서 멀리서도 보이게
@@ -395,10 +401,10 @@ class WorldSplit {
     const t = this.t;
     // 순식간에 어긋난 뒤 아주 천천히 더 밀려나고, 끝에 제자리로
     let e;
-    if (t < 0.22) {
-      const k = t / 0.22;
+    if (t < 0.12) {
+      const k = t / 0.12;
       e = 1 - Math.pow(1 - k, 3);
-    } else e = 1 + Math.min(1, (t - 0.22) / 3) * 0.12;
+    } else e = 1 + Math.min(1, (t - 0.12) / 3) * 0.12;
     const healT = T.heal - T.split;
     const endT = T.end - T.split;
     if (t > healT) {
@@ -415,7 +421,7 @@ class WorldSplit {
     this.capColor.setRGB(1 - cool * 0.55, 0.16 - cool * 0.13, 0.1 - cool * 0.08);
     this.seamU.col.value.copy(this.capColor);
     // 솔기: 갈라지는 순간 굵게 번쩍였다가 가늘어지고, 제자리로 돌아올 때 사라진다
-    const flare = t < 0.3 ? 1 + (1 - t / 0.3) * 2.5 : 1;
+    const flare = t < 0.2 ? 1 + (1 - t / 0.2) * 2.5 : 1;
     const heal = t > healT ? Math.max(0, 1 - (t - healT) / (endT - healT)) : 1;
     this.seamU.w.value = flare * heal;
     for (const x of this.entries) {
@@ -456,7 +462,6 @@ export class WorldCut {
     this.ctx = ctx;
     this.active = null;
     this.split = null;
-    this.blueFrames = BLUE_FRAMES;
     // 참격 선: 기존 「세계를 가르는 해」 칼날 (검은 칼날 + 흰 빛 테두리, 양끝이 가늘게)
     this.blade = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -495,8 +500,8 @@ export class WorldCut {
     this.shockRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true });
     this.shockGeo = new THREE.SphereGeometry(1, 64, 32);
     this.shocks = [
-      { delay: 0, R: 75, dur: 1.15, str: 0.06, sheen: 0.22 },
-      { delay: 0.14, R: 50, dur: 1.0, str: 0.03, sheen: 0.1 },
+      { delay: 0, R: 60, dur: 0.3, str: 0.07, sheen: 0.25 },
+      { delay: 0.04, R: 40, dur: 0.26, str: 0.035, sheen: 0.12 },
     ].map((sp) => {
       const u = { uTex: { value: this.shockRT.texture }, uRes: this.impactU.uRes, uVp: this.impactU.uVp, uStr: { value: 0 }, uSheen: { value: 0 } };
       const m = new THREE.Mesh(this.shockGeo, new THREE.ShaderMaterial({ vertexShader: shockVert, fragmentShader: shockFrag, uniforms: u, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }));
@@ -593,18 +598,17 @@ export class WorldCut {
     const t = a.t;
     const { fx, sfx } = this.ctx;
     this.tintU.uT.value += dt;
-    // ② 파란 차원 균열: 딱 BLUE_FRAMES 프레임. 첫 프레임은 반쯤, 마지막 프레임은 다 벌어져 화면을 덮는다
-    let tintOn = false;
-    if (a.blueF === undefined && t >= T.blueIn) a.blueF = 0;
-    if (a.blueF !== undefined && a.blueF < this.blueFrames) {
-      a.blueF++;
-      tintOn = true;
-      const open = a.blueF / this.blueFrames;
-      this.tintU.uW.value = 0.08 + 0.52 * open;
+    // ② 파란 차원 균열: 얇은 띠에서 순식간에 벌어져 화면을 덮는다 (약 0.1초)
+    const tintOn = t >= T.blueIn && t < T.impact;
+    if (tintOn) {
+      const k = (t - T.blueIn) / (T.impact - T.blueIn);
+      const open = Math.pow(Math.min(1, 0.06 + k * 1.5), 1.3);
+      this.tintU.uW.value = 0.02 + 0.58 * open;
       this.tintU.uAmt.value = 1;
-      this.edgeU.uOW.value = 0.02 + open * 0.06; // 벌어질수록 윤곽선이 두꺼워진다
-    } else if (a.blueF >= this.blueFrames && a.impactT === undefined) a.impactT = t; // 균열 바로 다음 프레임부터 임팩트
+      this.edgeU.uOW.value = 0.01 + open * 0.07; // 벌어질수록 윤곽선이 두꺼워진다
+    }
     this.tint.visible = this.tintEdge.visible = tintOn;
+    if (t >= T.impact && a.impactT === undefined) a.impactT = t;
     // ③ 임팩트 프레임
     const impEnd = a.impactT !== undefined ? a.impactT + T.impactDur : Infinity;
     const invOn = a.impactT !== undefined && t < impEnd;

@@ -9,6 +9,7 @@ import { ShadowPools, ShadowSpikes, ChimeraShadowGarden, shadowSplash } from './
 import { DivineDog, DogTotality, Nue, Toad, Orochi, MaxElephant, RabbitEscape, Mahoraga, MahoragaWheel, PiercingOx } from './shikigami.js';
 import { SlashLines } from '../sukuna/vfx.js';
 import { preloadShikigami } from './models.js';
+import { MahoragaRitual } from './ritual.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -141,7 +142,7 @@ export class Megumi {
         { head: '蝦蟇 가마 · 脱兎 탈토', demo: ['megumi.toad', 'megumi.rabbits'], color: '#a8b8ff', text: '가마: 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다' },
         { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)' },
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
-        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 높이에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
+        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 높이에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
         { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 앞으로 뻗어 허리 아래에서 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
         { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
       ];
@@ -197,6 +198,7 @@ export class Megumi {
       this._controller(dt);
       if (inp.mode === 'desktop') this._desktop(dt);
     }
+    if (this.ritual && !this.ritual.update(dt)) this.ritual = null;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const s = this.list[i];
       if (!s.alive || !s.update(dt)) this.list.splice(i, 1);
@@ -527,10 +529,30 @@ export class Megumi {
         this.fadingWheels.push(this.wheel);
         this.wheel = null;
       }
+      if (!inherit && !this.ctx.settings.mahoragaTamed && this.ctx.settings.mahoragaRitual !== false && !this.domainActive) {
+        // 조복의 의식: 「布瑠部由良由良」 음성에 맞춘 연출 뒤에 마허라가 번데기에서 풀려난다
+        if (this.ritual?.alive) return;
+        this.ritual = new MahoragaRitual(this, (pos, y) => {
+          const m = new Mahoraga(this);
+          m.emerge(pos, y);
+          m.state = 'act';
+          m.t = 0;
+          m.body.position.y = 0;
+          m.pool?.close();
+          m.pool = null;
+          this.list.push(m);
+        });
+        inp.left.pulse?.(0.6, 60);
+        inp.right.pulse?.(0.6, 60);
+        return;
+      }
       const m = new Mahoraga(this, inherit);
       m.emerge(at(3.6, 0), yaw + Math.PI);
       made = [m];
-      sfx.play('chant', { vol: 0.9, rate: 0.7 });
+      // 의식 없이 부를 땐 음성의 앞부분 「布瑠部由良由良」만 (앞 0.4초 페이드 인, 4.7초에 페이드 아웃)
+      const v = sfx.playClip('mahoragaSummon', { vol: 1.1, fadeIn: 0.4 });
+      if (v.duration) setTimeout(() => v.stop(0.5), 4700);
+      else sfx.play('chant', { vol: 0.9, rate: 0.7 });
     }
     this.list.push(...made);
     if (totality) ui.manga({ main: '玉犬・渾', ruby: 'ぎょくけん・こん', color: '#9fb2ff' });
@@ -641,6 +663,8 @@ export class Megumi {
   }
 
   dispose() {
+    this.ritual?.cancel();
+    this.ritual = null;
     for (const s of this.list) s.destroy();
     this.list = [];
     this.wheel?.destroy();

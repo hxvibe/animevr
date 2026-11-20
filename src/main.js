@@ -56,6 +56,7 @@ ctx.sfx.preloadClips({
   shrineMusic: 'assets/audio/sukuna_domain_music.mp3',
   mahoragaWheel: 'assets/audio/mahoraga_wheel.mp3',
   megumiDomain: 'assets/audio/megumi_domain_voice.mp3',
+  mahoragaSummon: 'assets/audio/mahoraga_summon_voice.mp3',
 });
 ctx.fx = new Fx(scene, renderer);
 ctx.input = new Input(renderer, rig, camera, renderer.domElement);

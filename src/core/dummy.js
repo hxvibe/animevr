@@ -359,8 +359,34 @@ export class Dummy {
     return a.addScaledVector(ab, t).distanceTo(p) - this.radius;
   }
 
+  /** 버티는 힘 (맷집): 이게 다 깎이거나 아주 센 한 방이어야 쓰러진다 */
+  get maxPoise() {
+    if (this.def.poise) return this.def.poise;
+    if (this.infinite) return 60;
+    return Math.min(180, 40 + this.maxHp * 0.12);
+  }
+
   impulse(v, spin = 0) {
     if (!this.alive || this.state === 'held') return;
+    // 서 있을 때 맞으면: 맷집으로 버티며 움찔하고 조금 밀린다 (쓰러지지 않는다)
+    const s = v.length() / Math.sqrt(this.scale);
+    if (this.state === 'stand' && !this.dying && !this.frozen && s > 1.2 && !this.heldBy) {
+      const P = (this._poise ??= { v: this.maxPoise, t: -10 });
+      const cost = s * 5;
+      if (s < 11 && P.v - cost > 0) {
+        P.v -= cost;
+        P.t = this.world.time;
+        _v.copy(v).setY(0).clampLength(0, 1.4 + s * 0.08);
+        this.vel.add(_v);
+        const dir = v.clone().setY(0);
+        if (dir.lengthSq() < 1e-4) dir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).negate();
+        this.flinch = { t: 0, dir: dir.normalize(), k: Math.min(1, 0.35 + s / 8) };
+        this.onFlinch?.(s);
+        return;
+      }
+      P.v = this.maxPoise; // 무너졌다 → 쓰러지고, 일어나면 다시 가득
+      this.world.ctx?.ui?.callout?.('무너졌다!', { color: '#ffd080', size: 34, dur: 0.6 });
+    }
     this.vel.add(v);
     if (this.frozen) return;
     if (v.length() > 2.2 * Math.sqrt(this.scale) || this.vel.y > 1.5) {
@@ -760,6 +786,23 @@ export class Dummy {
       this.root.position.addScaledVector(this.vel, dt);
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.root.position.y = Math.max(0, this.root.position.y);
+      // 맷집 회복 (1.2초 동안 안 맞으면)
+      const P = this._poise;
+      if (P && this.world.time - P.t > 1.2) P.v = Math.min(this.maxPoise, P.v + this.maxPoise * 0.5 * dt);
+      // 움찔: 맞은 쪽 반대로 몸이 젖혀졌다 돌아온다
+      const F = this.flinch;
+      if (F) {
+        F.t += dt;
+        const u = Math.min(1, F.t / 0.32);
+        const k = Math.sin(Math.PI * u) * (1 - u * 0.3) * F.k;
+        _v.crossVectors(UP, F.dir).normalize();
+        _q.setFromAxisAngle(_v, 0.32 * k);
+        this.root.quaternion.setFromAxisAngle(UP, this.yaw).premultiply(_q);
+        if (u >= 1) {
+          this.flinch = null;
+          this.root.quaternion.setFromAxisAngle(UP, this.yaw);
+        }
+      }
     } else if (this.state === 'air') {
       this._integrate(dt, 1);
       if (this.dying) this._pose(dt, 'clutch', 1);

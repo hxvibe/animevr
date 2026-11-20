@@ -712,6 +712,7 @@ const G_RED = {
 };
 const G_PURPLE = {
   tech: true,
+  armor: true,
   name: '虚式 「茈」', range: [4, 30], cd: 22, w: 0.9, dur: 2.5, track: true,
   start: (e, m) => {
     e.world.ctx.ui.manga({ top: '虚式', main: '茈', ruby: 'むらさき', color: '#b070ff', big: true });
@@ -834,6 +835,7 @@ function domainSign(T, e, k) {
   }
 }
 const DOMAIN = {
+  armor: true,
   name: '영역전개', range: [0, 99], cd: 0, w: 0, dur: 1.5, track: true,
   start: (e) => {
     const def = ENEMY_DOMAINS[e.def.model];
@@ -900,6 +902,16 @@ export class RiggedEnemy extends Dummy {
     this.rig.show('-MaskDown', on);
     this.rig.show('-HairMaskDown', on);
     this.unmasked = on;
+  }
+
+  /** 맞아서 움찔: 하던 동작이 끊긴다 (영역전개·허식처럼 버티는 동작은 그대로) */
+  onFlinch(s) {
+    const C = this.cur;
+    if (C && !C.def.armor && s > 2.5) {
+      C.def.end?.(this, C);
+      this.cur = null;
+      this.decide = Math.max(this.decide ?? 0, 0.35);
+    }
   }
 
   /** 무하한: 영역의 필중(맞영역에 막히지 않은)이 아니면 닿지 않는다 · 술식이 타 버리면 꺼진다 */

@@ -101,6 +101,9 @@ export class Melee {
     target.damage(dmg, { type: 'punch', dir });
     target.impulse?.(_v.copy(dir).multiplyScalar((2 + speed * 0.6) * push).add(_v2.set(0, 0.8 * push, 0)), 3);
     fx.burst(pos, 14, new THREE.Color(0xffffff), 2, 0.03, 0.25);
+    // 타격감: 아주 짧은 멈춤 + 맞은 자리에 충격 고리
+    this.ctx.game.hitstop = Math.max(this.ctx.game.hitstop, 0.03 + Math.min(0.04, speed * 0.006));
+    fx.shockwave(pos, 0xffffff, 0.35 + speed * 0.04, 0.16, { faceDir: dir.clone(), opacity: 0.7 });
     sfx.punch(pos);
     hand?.pulse?.(0.7, 60);
     return dmg;

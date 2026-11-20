@@ -456,6 +456,7 @@ export class WorldCut {
     this.ctx = ctx;
     this.active = null;
     this.split = null;
+    this.blueFrames = BLUE_FRAMES;
     // 참격 선: 기존 「세계를 가르는 해」 칼날 (검은 칼날 + 흰 빛 테두리, 양끝이 가늘게)
     this.blade = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -595,14 +596,14 @@ export class WorldCut {
     // ② 파란 차원 균열: 딱 BLUE_FRAMES 프레임. 첫 프레임은 반쯤, 마지막 프레임은 다 벌어져 화면을 덮는다
     let tintOn = false;
     if (a.blueF === undefined && t >= T.blueIn) a.blueF = 0;
-    if (a.blueF !== undefined && a.blueF < BLUE_FRAMES) {
+    if (a.blueF !== undefined && a.blueF < this.blueFrames) {
       a.blueF++;
       tintOn = true;
-      const open = a.blueF / BLUE_FRAMES;
+      const open = a.blueF / this.blueFrames;
       this.tintU.uW.value = 0.08 + 0.52 * open;
       this.tintU.uAmt.value = 1;
       this.edgeU.uOW.value = 0.02 + open * 0.06; // 벌어질수록 윤곽선이 두꺼워진다
-    } else if (a.blueF >= BLUE_FRAMES && a.impactT === undefined) a.impactT = t; // 균열 바로 다음 프레임부터 임팩트
+    } else if (a.blueF >= this.blueFrames && a.impactT === undefined) a.impactT = t; // 균열 바로 다음 프레임부터 임팩트
     this.tint.visible = this.tintEdge.visible = tintOn;
     // ③ 임팩트 프레임
     const impEnd = a.impactT !== undefined ? a.impactT + T.impactDur : Infinity;

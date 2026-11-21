@@ -790,7 +790,7 @@ export class Dummy {
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.root.position.y = Math.max(0, this.root.position.y);
       // 벽 · 물체를 통과하지 못한다
-      this.world.collideActor(this.root.position, 0.28 * this.scale, { height: 1.7 * this.scale });
+      this.world.collideActor(this.root.position, 0.28 * this.scale, { height: 1.7 * this.scale, who: this });
       // 맷집 회복 (1.2초 동안 안 맞으면)
       const P = this._poise;
       if (P && this.world.time - P.t > 1.2) P.v = Math.min(this.maxPoise, P.v + this.maxPoise * 0.5 * dt);

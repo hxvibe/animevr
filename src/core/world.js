@@ -420,10 +420,15 @@ export class World {
    * 원(바닥 xz) 충돌: pos 를 벽(경계) · 고정물 · 소품 밖으로 민다 (사람 · 적이 물체를 통과하지 못하게)
    *  가벼운 소품(상자·콘)은 밀려나고, 무거운 소품(차)은 버틴다. 반환: 밀린 양(xz)
    */
-  collideActor(pos, r, { height = 1.7, push = true } = {}) {
+  collideActor(pos, r, { height = 1.7, push = true, who = null } = {}) {
     const ox = pos.x;
     const oz = pos.z;
     const env = this.ctx.env;
+    // 영역 안에 갇힌 자는 동그란 영역 밖으로 나갈 수 없다
+    if (who && this.clash) {
+      if (who._cageIn) this.clash.cage(pos, r, who._cageIn);
+      who._cageIn = this.clash.insideOf(pos);
+    }
     for (const b of env.colliders ?? []) {
       if (b.maxY < pos.y + 0.15) continue; // 위로 넘어갈 만큼 낮다
       const cx = THREE.MathUtils.clamp(pos.x, b.minX, b.maxX);
@@ -485,7 +490,8 @@ export class World {
     if (!this.ctx.character || inp.mode === 'none') return;
     _cp.copy(inp.head);
     _cp.y = Math.max(0, inp.head.y - 1.6);
-    const d = this.collideActor(_cp, 0.25, { height: 1.8 });
+    this._pCage ??= {};
+    const d = this.collideActor(_cp, 0.25, { height: 1.8, who: this._pCage });
     if (d.lengthSq() > 1e-10) {
       this.ctx.rig.position.x += d.x;
       this.ctx.rig.position.z += d.z;

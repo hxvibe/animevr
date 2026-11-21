@@ -22,11 +22,11 @@ const clamp = THREE.MathUtils.clamp;
 // 적 영역: ref = 완성도(영역·술식의 정교함 · 상성 · 상태를 합친 값)
 export const ENEMY_DOMAINS = {
   mahito: {
-    name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#7ad8ff', ref: 80, radius: 19, type: 0, dur: 24,
+    name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#7ad8ff', ref: 82, radius: 19, type: 0, dur: 24,
     lights: { hemi: 0xd0b8c0, ground: 0x3a1820, hemiI: 1.1, sun: 0xffd0d8, sunI: 0.9, fog: 0x2a1018, fogNear: 10, fogFar: 45, exposure: 0.95 },
   },
   jogo: {
-    name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 70, radius: 19, type: 1, dur: 24,
+    name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 80, radius: 19, type: 1, dur: 24,
     lights: { hemi: 0xff8040, ground: 0x401008, hemiI: 1.0, sun: 0xff6020, sunI: 1.6, fog: 0x401006, fogNear: 12, fogFar: 60, exposure: 0.9 },
   },
   // 손가락 보유자: 불완전한 영역 — 소년원 같은 리미널 스페이스 (결계가 엉성해 틈이 보이고, 필중도 약하다)
@@ -35,24 +35,24 @@ export const ENEMY_DOMAINS = {
     lights: { hemi: 0xfff4d0, ground: 0x403828, hemiI: 1.15, sun: 0xfff0c0, sunI: 0.7, fog: 0x8a8060, fogNear: 6, fogFar: 32, exposure: 0.95 },
   },
   gojo: {
-    name: '無量空処', ruby: 'むりょうくうしょ', label: '무량공처', color: '#6fb8ff', ref: 100, radius: 24, type: 2, dur: 20,
+    name: '無量空処', ruby: 'むりょうくうしょ', label: '무량공처', color: '#6fb8ff', ref: 94, radius: 24, type: 2, dur: 20,
     lights: { hemi: 0xb8d8ff, ground: 0x101830, hemiI: 1.3, sun: 0xffffff, sunI: 1.0, fog: 0x02040c, fogNear: 25, fogFar: 120, exposure: 1.0 },
   },
 };
 
-// 플레이어 영역의 완성도 (원작의 서열 · 결계 유무 · 완성형인가를 대략 반영)
-//  메구미의 감합암예정은 미완성이지만, 그래도 완성형 영역을 어느 정도 중화할 수 있었다
+// 영역 싸움의 강함 (원작 서열): 스쿠나 > 고죠 > 마히토 ≈ 죠고 > 메구미 > 특급 주령
+//  (유타 · 유지는 원작에 맞대결이 없어 그 사이에 둔다) — 강하다고 무조건 이기지는 않는다: 격돌의 운 · 주력 쏟기 · 남은 체력이 판을 뒤집는다
 export const PLAYER_DOMAINS = {
-  gojo: { ref: 100, name: '無量空処', color: '#6fb8ff' },
-  sukuna: { ref: 99, name: '伏魔御廚子', color: '#ff3a3a' },
-  yuta: { ref: 88, name: '真贋相愛', color: '#c8a0ff' },
-  mahito: { ref: 80, name: '自閉円頓裹', color: '#7ad8ff' },
-  itadori: { ref: 76, name: '領域展開', color: '#ff5a6e' },
-  jogo: { ref: 70, name: '蓋棺鉄囲山', color: '#ff7a2a' },
-  megumi: { ref: 55, name: '嵌合暗翳庭', color: '#6f86ff' },
+  sukuna: { ref: 100, name: '伏魔御廚子', color: '#ff3a3a' },
+  gojo: { ref: 94, name: '無量空処', color: '#6fb8ff' },
+  yuta: { ref: 87, name: '真贋相愛', color: '#c8a0ff' },
+  mahito: { ref: 82, name: '自閉円頓裹', color: '#7ad8ff' },
+  jogo: { ref: 80, name: '蓋棺鉄囲山', color: '#ff7a2a' },
+  itadori: { ref: 74, name: '領域展開', color: '#ff5a6e' },
+  megumi: { ref: 58, name: '嵌合暗翳庭', color: '#6f86ff' },
 };
 
-const OVERWHELM = 24;
+const OVERWHELM = 45; // 이만큼 넘게 차이 나야 '압도' (그래도 버티면 뒤집을 수 있다)
 
  // 완성도가 이만큼 넘게 차이 나면 '압도' (곧바로 밀려난다)
 
@@ -385,7 +385,7 @@ export class DomainClash {
     const E = this.enemy;
     const gap = pd.ref - E.def.ref + (responder === 'player' ? 6 : -6);
     const overwhelm = Math.abs(gap) >= OVERWHELM;
-    this.clash = { D: 0, gap, overwhelm, responder, t: 0, done: false, pd };
+    this.clash = { D: 0, gap, overwhelm, responder, t: 0, done: false, pd, seed: Math.random() * 6 };
     ui.manga({ main: '領域の押し合い', ruby: '영역 싸움', color: '#ffffff', big: true });
     ui.callout(overwhelm ? (gap > 0 ? '압도적인 차이 — 상대 영역을 짓누른다' : '격이 다르다 — 이대로는 밀려난다!') : '중첩 — 서로의 필중 효과가 사라졌다 · 두 손바닥으로 밀어 주력을 쏟아라', { color: '#ffffff', dur: 3 });
     sfx.play('black_flash', { vol: 0.6, rate: 0.6 });
@@ -434,6 +434,8 @@ export class DomainClash {
       if (k >= 1) return this._end();
     }
 
+    // 바깥에서 결계를 치면 깨진다 (결계는 안쪽엔 강하고 바깥엔 약하다)
+    if (E.state === 'active' || E.state === 'opening') this._outsideHits(dt);
     // 영역 싸움
     const pd = playerDomain(this.ctx);
     if (!this.clash && pd && this.active) this._startClash(pd, 'player');
@@ -447,6 +449,81 @@ export class DomainClash {
     this._updateHud();
     void world;
     void env;
+  }
+
+  /** 플레이어가 영역 바깥에 있으면 주먹으로 결계를 친다 → 금이 가다 깨진다 */
+  _outsideHits(dt) {
+    const E = this.enemy;
+    const { input: inp, fx, sfx, ui } = this.ctx;
+    E.barrier ??= 100;
+    E.hitCd = Math.max(0, (E.hitCd ?? 0) - dt);
+    const R = (E.view.dome?.scale.x ?? E.def.radius);
+    const headD = Math.hypot(inp.head.x - E.center.x, inp.head.z - E.center.z);
+    if (headD < R) return;
+    for (const h of [inp.left, inp.right]) {
+      if (!h.active || E.hitCd > 0 || h.speed < 2.2) continue;
+      const p = h.palm;
+      const d = Math.hypot(p.x - E.center.x, p.z - E.center.z);
+      const r3 = Math.hypot(d, p.y - (E.center.y ?? 0)); // 반구 표면까지
+      if (Math.abs(r3 - R) > 0.5 && Math.abs(d - R) > 0.5) continue;
+      E.hitCd = 0.22;
+      const dmg = 4 + h.speed * 1.6;
+      E.barrier -= dmg;
+      fx.burst(p, 18, new THREE.Color(E.def.color), 3, 0.05, 0.4);
+      fx.flash(p, new THREE.Color(0xffffff), 1.2, 0.08);
+      sfx.play('shatter_2', { at: p, vol: 0.6, rate: rnd(0.8, 1.1) });
+      h.pulse?.(0.9, 60);
+      E.view.u.uCrack.value = Math.min(0.55, (1 - E.barrier / 100) * 0.6);
+      if (!E.toldOut) {
+        E.toldOut = true;
+        ui.callout('결계를 바깥에서 친다 — 영역은 바깥의 공격에 약하다', { color: '#ffffff', dur: 2.2 });
+      }
+      if (E.barrier <= 0) {
+        ui.manga({ main: '結界破壊', ruby: '결계 파괴', color: '#ffffff', big: true });
+        const e = E.caster;
+        if (e.alive) {
+          e.burnout = this.ctx.world.time + 8;
+          e.stunUntil = Math.max(e.stunUntil ?? 0, this.ctx.world.time + 1.5);
+        }
+        this._break('outside');
+        return;
+      }
+    }
+  }
+
+  /**
+   * 영역 안에 갇힌 것은 동그란 영역 밖으로 나갈 수 없다 (플레이어 · 적) — pos 를 안쪽으로 되돌린다
+   * 반환: 밀린 양
+   */
+  cage(pos, r, wasInside) {
+    const out = _v4.set(0, 0, 0);
+    const lim = (c, R) => {
+      const dx = pos.x - c.x;
+      const dz = pos.z - c.z;
+      const d = Math.hypot(dx, dz);
+      const m = R - r - 0.3;
+      if (d > m && d < R + 2.5) {
+        out.x += (dx / d) * (m - d);
+        out.z += (dz / d) * (m - d);
+        pos.x = c.x + (dx / d) * m;
+        pos.z = c.z + (dz / d) * m;
+      }
+    };
+    const E = this.enemy;
+    if (E && (E.state === 'active' || E.state === 'opening') && wasInside?.enemy) lim(E.center, E.def.radius);
+    const pd = playerDomain(this.ctx);
+    if (pd?.open && wasInside?.player) lim(pd.center, pd.radius);
+    return out;
+  }
+
+  /** 지금 이 점이 영역(적 · 플레이어) 안인가 */
+  insideOf(pos) {
+    const E = this.enemy;
+    const pd = playerDomain(this.ctx);
+    return {
+      enemy: !!E && (E.state === 'active' || E.state === 'opening') && Math.hypot(pos.x - E.center.x, pos.z - E.center.z) < E.def.radius - 0.2,
+      player: !!pd?.open && Math.hypot(pos.x - pd.center.x, pos.z - pd.center.z) < pd.radius - 0.2,
+    };
   }
 
   /** 배경을 숨기고 영역의 빛으로 (플레이어 영역이 열려 있으면 그쪽 조명을 둔다) */
@@ -508,10 +585,13 @@ export class DomainClash {
     const eff = C.gap + (ef - 0.5) * 6 - (hf - 0.5) * 10 + this.pushK * 22 - (E.caster.enemyPush ?? 0);
     // 격돌: 1~2.5초마다 한쪽이 몰아친다 → 경계가 크게 출렁이고 번쩍이며 땅이 울린다
     C.surgeT = (C.surgeT ?? 1.2) - dt;
-    if (C.surgeT <= 0 && !C.overwhelm) {
-      C.surgeT = rnd(1.0, 2.4);
-      const mine = Math.random() < 0.5 + clamp(eff, -30, 30) / 80 + this.pushK * 0.2;
-      C.D = clamp(C.D + (mine ? 1 : -1) * rnd(0.05, 0.12), -1, 1);
+    if (C.surgeT <= 0) {
+      C.surgeT = rnd(0.9, 2.2);
+      const mine = Math.random() < 0.5 + clamp(eff, -30, 30) / 110 + this.pushK * 0.18;
+      C.D = clamp(C.D + (mine ? 1 : -1) * rnd(0.05, 0.16), -1, 1);
+      C.surges = (C.surges ?? 0) + 1;
+      C.last = mine ? 'mine' : 'theirs';
+      C.lastT = 0;
       C.amp = 4.5;
       C.flashK = 1;
       C.flashCol = mine ? pd.color : E.def.color;
@@ -522,8 +602,9 @@ export class DomainClash {
       ui.callout(mine ? '밀어붙였다!' : '밀린다!', { color: mine ? '#c8ffd8' : '#ffb0b0', size: 40, dur: 0.6 });
     }
     let rate;
-    if (C.overwhelm) rate = Math.sign(C.gap) * 0.85;
-    else rate = eff * 0.011 + Math.sin(C.t * 1.7) * 0.04 + Math.sin(C.t * 4.3) * 0.03;
+    // 격의 차이는 흐름을 기울일 뿐 — 흔들림(운)과 쏟는 주력으로 뒤집힐 수 있다
+    if (C.overwhelm) rate = Math.sign(C.gap) * 0.32 + this.pushK * 0.12 * -Math.sign(C.gap) * (C.gap < 0 ? 1 : 0);
+    else rate = eff * 0.0075 + Math.sin(C.t * 1.7 + C.seed) * 0.05 + Math.sin(C.t * 4.3) * 0.03;
     C.D = clamp(C.D + rate * dt, -1, 1);
     // 경계: 두 중심 (D>0 이면 경계가 적 쪽으로 밀려간다). 중심이 겹치면 플레이어 → 적 방향으로 벌린다
     const pc = _v2.copy(pd.center);
@@ -741,14 +822,24 @@ export class DomainClash {
     if (this.hud) return;
     const c = document.createElement('canvas');
     c.width = 1024;
-    c.height = 200;
+    c.height = 256;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.121), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.76, 0.19), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
     m.position.set(0, 0.2, -0.75);
     m.renderOrder = 998;
     this.ctx.camera.add(m);
-    this.hud = { c, g: c.getContext('2d'), tex, m, last: '' };
+    // 밀릴 때 시야 가장자리가 붉게 조여 온다
+    const vg = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.ShaderMaterial({
+      uniforms: { uK: { value: 0 }, uCol: { value: new THREE.Color(0xff2020) }, uT: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'uniform float uK; uniform vec3 uCol; uniform float uT; varying vec2 vUv; void main(){ vec2 q = vUv - 0.5; float r = length(q * vec2(1.0, 1.35)); float a = smoothstep(0.28, 0.62, r) * uK * (0.8 + 0.2 * sin(uT * 9.0)); gl_FragColor = vec4(uCol, a * 0.55); }',
+      transparent: true, depthTest: false, depthWrite: false,
+    }));
+    vg.position.set(0, 0, -0.6);
+    vg.renderOrder = 997;
+    this.ctx.camera.add(vg);
+    this.hud = { c, g: c.getContext('2d'), tex, m, vg, last: 0, t: 0, shake: 0 };
   }
 
   _updateHud() {
@@ -757,37 +848,117 @@ export class DomainClash {
     const C = this.clash;
     const on = !!C && !C.done && !!this.enemy;
     H.m.visible = on;
+    H.vg.visible = on;
     if (!on) return;
-    const key = `${C.D.toFixed(3)}|${this.pushK.toFixed(2)}`;
-    if (key === H.last) return;
-    H.last = key;
+    const dt = 1 / 72;
+    H.t += dt;
+    C.lastT = (C.lastT ?? 9) + dt;
+    // 밀리는 정도 → 붉은 테두리 · 격돌 순간엔 HUD가 떨린다
+    const lose = clamp(-C.D * 1.6 - 0.2, 0, 1);
+    H.vg.material.uniforms.uK.value = Math.max(lose, C.lastT < 0.25 && C.last === 'theirs' ? 0.8 : 0);
+    H.vg.material.uniforms.uT.value = H.t;
+    H.vg.material.uniforms.uCol.value.set(C.lastT < 0.25 && C.last === 'mine' ? C.pd?.color ?? '#ffffff' : this.enemy.def.color);
+    const sh = C.lastT < 0.3 ? (0.3 - C.lastT) * 0.03 : 0;
+    H.m.position.set((Math.random() - 0.5) * sh, 0.2 + (Math.random() - 0.5) * sh, -0.75);
+    // 그리기는 초당 30번
+    if (H.t - H.last < 1 / 30) return;
+    H.last = H.t;
     const g = H.g;
     const W = 1024;
-    g.clearRect(0, 0, W, 200);
-    g.fillStyle = 'rgba(0,0,0,0.55)';
-    g.beginPath();
-    g.roundRect(0, 0, W, 200, 24);
-    g.fill();
+    const HH = 256;
+    g.clearRect(0, 0, W, HH);
     const mine = C.pd?.color ?? '#9fb2ff';
     const theirs = this.enemy.def.color;
-    const x0 = 40;
-    const w = W - 80;
-    const mid = x0 + w * (0.5 + C.D * 0.5);
-    g.fillStyle = mine;
-    g.fillRect(x0, 100, mid - x0, 50);
-    g.fillStyle = theirs;
-    g.fillRect(mid, 100, x0 + w - mid, 50);
-    g.fillStyle = '#ffffff';
-    g.fillRect(mid - 4, 90, 8, 70);
-    g.font = "900 44px 'Noto Serif JP', 'Noto Sans KR', serif";
-    g.textAlign = 'left';
-    g.fillText(C.pd?.name ?? '', x0, 70);
-    g.textAlign = 'right';
-    g.fillText(this.enemy.def.name, x0 + w, 70);
+    // 바탕: 먹색 띠 + 위아래 가는 금선
+    const bg = g.createLinearGradient(0, 0, 0, HH);
+    bg.addColorStop(0, 'rgba(0,0,0,0)');
+    bg.addColorStop(0.25, 'rgba(6,6,10,0.82)');
+    bg.addColorStop(0.75, 'rgba(6,6,10,0.82)');
+    bg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, HH);
+    g.fillStyle = 'rgba(255,255,255,0.18)';
+    g.fillRect(60, 64, W - 120, 1.5);
+    g.fillRect(60, 192, W - 120, 1.5);
+    // 가운데 제목
     g.textAlign = 'center';
-    g.font = "700 30px 'Noto Sans KR', sans-serif";
-    g.fillStyle = this.pushK > 0.3 ? '#ffffff' : 'rgba(255,255,255,0.75)';
-    g.fillText(C.overwhelm ? (C.gap > 0 ? '압도' : '격이 다르다') : this.pushK > 0.3 ? '주력을 쏟는 중!' : '중첩 · 필중 상쇄', W / 2, 70);
+    g.font = "900 30px 'Noto Serif JP', serif";
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    g.fillText('領 域 の 押 し 合 い', W / 2, 50);
+    // 이름 (내 영역 왼쪽 · 상대 오른쪽)
+    g.font = "900 40px 'Noto Serif JP', 'Noto Sans KR', serif";
+    g.textAlign = 'left';
+    g.shadowColor = mine;
+    g.shadowBlur = 18;
+    g.fillStyle = '#ffffff';
+    g.fillText(C.pd?.name ?? '', 64, 108);
+    g.textAlign = 'right';
+    g.shadowColor = theirs;
+    g.fillText(this.enemy.def.name, W - 64, 108);
+    g.shadowBlur = 0;
+    // 줄다리기 막대: 비스듬히 잘린 두 색이 맞물리고, 이음매는 지지직
+    const x0 = 64;
+    const w = W - 128;
+    const y = 128;
+    const h = 34;
+    const mid = x0 + w * (0.5 + C.D * 0.5);
+    const grad1 = g.createLinearGradient(x0, 0, mid, 0);
+    grad1.addColorStop(0, 'rgba(255,255,255,0.05)');
+    grad1.addColorStop(1, mine);
+    const grad2 = g.createLinearGradient(mid, 0, x0 + w, 0);
+    grad2.addColorStop(0, theirs);
+    grad2.addColorStop(1, 'rgba(255,255,255,0.05)');
+    g.fillStyle = grad1;
+    g.beginPath();
+    g.moveTo(x0, y);
+    g.lineTo(mid + 10, y);
+    g.lineTo(mid - 10, y + h);
+    g.lineTo(x0, y + h);
+    g.fill();
+    g.fillStyle = grad2;
+    g.beginPath();
+    g.moveTo(mid + 10, y);
+    g.lineTo(x0 + w, y);
+    g.lineTo(x0 + w, y + h);
+    g.lineTo(mid - 10, y + h);
+    g.fill();
+    // 눈금 (중앙 · 4분)
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    for (const f of [0.25, 0.5, 0.75]) g.fillRect(x0 + w * f - 1, y - 6, 2, h + 12);
+    // 이음매 번개
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 3;
+    g.shadowColor = '#ffffff';
+    g.shadowBlur = 16;
+    g.beginPath();
+    let yy = y - 10;
+    g.moveTo(mid + (Math.random() - 0.5) * 10, yy);
+    while (yy < y + h + 10) {
+      yy += 8;
+      g.lineTo(mid + (Math.random() - 0.5) * (10 + this.pushK * 14), yy);
+    }
+    g.stroke();
+    g.shadowBlur = 0;
+    // 아래: 형세 · 주력 · 상태
+    const pct = Math.round(50 + C.D * 50);
+    g.font = "800 26px 'Noto Sans KR', sans-serif";
+    g.textAlign = 'left';
+    g.fillStyle = mine;
+    g.fillText(`${pct}%`, 64, 200 + 16 - 16);
+    g.textAlign = 'right';
+    g.fillStyle = theirs;
+    g.fillText(`${100 - pct}%`, W - 64, 200);
+    g.textAlign = 'center';
+    const msg = C.lastT < 0.6 ? (C.last === 'mine' ? '— 밀어붙였다 —' : '— 밀린다 —') : C.overwhelm ? (C.gap > 0 ? '격이 다르다 · 짓누른다' : '격이 다르다 · 주력을 쏟아 버텨라') : this.pushK > 0.3 ? '주력을 쏟는 중' : lose > 0.3 ? '두 손바닥을 앞으로 — 주력을 쏟아라' : '중첩 · 필중 상쇄';
+    g.fillStyle = C.lastT < 0.6 ? (C.last === 'mine' ? '#c8ffd8' : '#ffb0b0') : 'rgba(255,255,255,0.85)';
+    g.fillText(msg, W / 2, 200);
+    // 주력 게이지 (가운데 아래 가는 줄)
+    const ch = this.ctx.character;
+    const ef = ch?.maxEnergy ? clamp(ch.energy / ch.maxEnergy, 0, 1) : 0;
+    g.fillStyle = 'rgba(255,255,255,0.15)';
+    g.fillRect(W / 2 - 160, 214, 320, 6);
+    g.fillStyle = ef < 0.2 ? '#ff6060' : '#9fe0ff';
+    g.fillRect(W / 2 - 160, 214, 320 * ef, 6);
     H.tex.needsUpdate = true;
   }
 
@@ -800,6 +971,7 @@ export class DomainClash {
     this.ctx.sfx.play('shatter', { vol: 1, rate: 0.6 });
     this.ctx.sfx.rumble(1.2, 0.5);
     if (why === 'caster') this.ctx.ui.callout(`시전자가 쓰러져 ${E.def.label}이(가) 무너진다`, { color: '#ffffff', dur: 2 });
+    if (why === 'outside') this.ctx.ui.callout(`${E.def.label} — 바깥에서 결계가 깨졌다 (시전자의 술식이 타 버렸다)`, { color: '#ffffff', dur: 2.5 });
   }
 
   _close() {
@@ -819,7 +991,7 @@ export class DomainClash {
     this._hideSeam();
     this._clearSure(0);
     if (this.overload) this.overload.m.visible = false;
-    if (this.hud) this.hud.m.visible = false;
+    if (this.hud) this.hud.m.visible = this.hud.vg.visible = false;
     // 플레이어 영역이 열려 있지 않으면 배경·조명을 되돌린다
     const pd = playerDomain(this.ctx);
     if (!pd) {

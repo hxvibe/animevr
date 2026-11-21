@@ -340,16 +340,15 @@ export class Mahito extends Caster {
     this.cds = {};
     this._keys = {};
     // 영역 「自閉円頓裹」: 남색 밤하늘 허공에 손이 엮인 거대한 아가리 (가운데 손 모양에서 꽃처럼 피어난다)
-    this.maw = new HandMaw(16 * 0.9);
+    this.maw = new HandMaw(16);
     this.shell = new ShellDomain(ctx, {
       radius: 16,
       glsl: HANDS_GLSL + VOID_WALL,
       wall: `vec3 n = normalize(vP); col = mahitoVoid(n, uTime); col = mix(vec3(0.0), col, uOpen);`,
-      floor: `vec2 uv = vW.xz * 0.45; vec2 h = handLayer(uv, uTime, 3.0);
-              vec3 base = mix(vec3(0.06, 0.04, 0.09), vec3(0.13, 0.08, 0.17), dfbm(vec3(vW.xz * 0.2, 1.0)));
-              col = mix(base, vec3(0.3, 0.22, 0.32), h.x * 0.35); col = mix(col, vec3(0.02, 0.01, 0.03), h.y * 0.5);
-              float r = length(vP.xz); col *= smoothstep(1.0, 0.85, r) * uOpen;`,
-      lights: { hemi: 0xd8c8e8, ground: 0x2a1a34, hemiI: 0.9, sunI: 0.9, sun: 0xf0e0ff, fog: 0x0a0610, fogNear: 16, fogFar: 50, exposure: 1.0 },
+      // 바닥: 손 그림 없이 비쳐 보이는 어둠 — 바닥 밑으로 이어진 새장(깍지 낀 팔들)이 보인다
+      floor: `float r = length(vP.xz); col = vec3(0.05, 0.035, 0.09) + vec3(0.12, 0.08, 0.22) * smoothstep(0.9, 1.0, r) * 0.6;
+              alpha = mix(0.5, 0.12, smoothstep(0.0, 1.0, r)) * uOpen;`,
+      lights: { hemi: 0xe8e0ff, ground: 0x2a2080, hemiI: 0.95, sunI: 1.0, sun: 0xf4f0ff, fog: 0x0a0610, fogNear: 24, fogFar: 70, exposure: 1.0 },
       anim: (dt, sh) => {
         const M = this.maw;
         if (sh.state === 'opening' && !this._mawK) {
@@ -364,6 +363,8 @@ export class Mahito extends Caster {
       },
     });
     this.shell.group.add(this.maw.group);
+    this.shell.floorMat.transparent = true;
+    this.shell.floorMat.depthWrite = false;
   }
 
   // ───── 공통 ─────

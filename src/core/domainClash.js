@@ -24,7 +24,7 @@ const clamp = THREE.MathUtils.clamp;
 export const ENEMY_DOMAINS = {
   mahito: {
     name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#b88ad8', ref: 82, radius: 19, type: 0, dur: 24,
-    lights: { hemi: 0xd8c8e8, ground: 0x2a1a34, hemiI: 0.9, sun: 0xf0e0ff, sunI: 0.9, fog: 0x0a0610, fogNear: 18, fogFar: 55, exposure: 1.0 },
+    lights: { hemi: 0xe8e0ff, ground: 0x2a2080, hemiI: 0.95, sun: 0xf4f0ff, sunI: 1.0, fog: 0x0a0610, fogNear: 24, fogFar: 75, exposure: 1.0 },
   },
   jogo: {
     name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 80, radius: 19, type: 1, dur: 24,
@@ -148,13 +148,8 @@ vec3 wallLook(vec3 d) {
 }
 vec3 floorLook(vec2 q, float r) {
   if (uType == 0) {
-    // 연보랏빛 손바닥이 깔린 바닥 (손가락 마디 결)
-    float n = fbm(vec3(q * 0.4, 1.0));
-    vec3 skin = mix(vec3(0.06, 0.04, 0.09), vec3(0.14, 0.09, 0.18), n);
-    vec2 cell = fract(q * 0.45) - 0.5;
-    float fing = smoothstep(0.06, 0.0, abs(fract((cell.x + fbm(vec3(floor(q * 0.45), 3.0)) * 0.3) * 4.0) - 0.5) - 0.38);
-    skin = mix(skin, vec3(0.02, 0.01, 0.03), fing * 0.4);
-    return skin * (0.8 + 0.2 * smoothstep(1.0, 0.2, r));
+    // 손 그림 없는 어둠 (반투명: 바닥 밑의 새장이 비친다)
+    return vec3(0.05, 0.035, 0.09) + vec3(0.12, 0.08, 0.22) * smoothstep(0.9, 1.0, r) * 0.6;
   }
   if (uType == 1) {
     vec3 p = vec3(q.x, 0.0, q.y) * 0.6;
@@ -213,7 +208,8 @@ void main() {
     float c = smoothstep(0.02, 0.0, abs(fbm(d * 9.0) - 0.5)) * uCrack;
     col = mix(col, vec3(1.0), c);
   }
-  gl_FragColor = vec4(col * uOpen, 1.0);
+  float alpha = uType == 0 ? mix(0.5, 0.12, r) : 1.0;
+  gl_FragColor = vec4(col * uOpen, alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -283,7 +279,9 @@ class EnemyDomainView {
     this.group.add(this.dome, this.floor);
     // 자폐원돈과: 손이 엮인 거대한 아가리
     if (def.type === 0) {
-      this.maw = new HandMaw(def.radius * 0.9);
+      this.floor.material.transparent = true;
+      this.floor.material.depthWrite = false;
+      this.maw = new HandMaw(def.radius);
       this.mawK = 0;
       this.group.add(this.maw.group);
     }

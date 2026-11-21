@@ -156,6 +156,9 @@ export class MalevolentShrine {
     this.pool.rotation.x = -Math.PI / 2;
     this.pool.position.y = 0.012;
     this.group.add(this.sky, this.pool);
+    // 결계를 치지 않는 영역: 바닥 색 · 하늘 · 조명은 그대로 두고 사당만 세운다
+    this.pool.visible = false;
+    this.keepWorld = true;
     this.center = new THREE.Vector3();
     this.radius = 30;
   }
@@ -197,8 +200,8 @@ export class MalevolentShrine {
       this.shrine.position.y = -16 + e * (16 + this.restY);
       this.pool.scale.setScalar(0.01 + e * this.radius);
       // 하늘과 조명을 핏빛으로 (그릇의 영역에 겹칠 때는 배경을 건드리지 않는다)
-      if (!this.guest) env.fog.color.lerp(new THREE.Color(0x200000), Math.min(1, dt * 3));
-      if (!this.guest) {
+      if (!this.guest && !this.keepWorld) env.fog.color.lerp(new THREE.Color(0x200000), Math.min(1, dt * 3));
+      if (!this.guest && !this.keepWorld) {
         env.fog.near = THREE.MathUtils.lerp(env.fog.near, 20, dt * 2);
         env.fog.far = THREE.MathUtils.lerp(env.fog.far, 90, dt * 2);
         env.hemi.color.lerp(new THREE.Color(0xff6050), dt * 2);
@@ -207,7 +210,7 @@ export class MalevolentShrine {
         env.sun.color.lerp(new THREE.Color(0xff3020), dt * 2);
       }
       if (Math.random() < 0.8) fx.burst(this.shrine.position.clone().setY(0.3), 3, new THREE.Color(0x3a2a24), 4, 0.15, 1.2, { up: 1, grav: 3, drag: 1 });
-      if (k > 0.5 && !this.sky.visible && !this.guest) {
+      if (k > 0.5 && !this.sky.visible && !this.guest && !this.keepWorld) {
         env.setHidden(true);
         this.sky.visible = true;
       }

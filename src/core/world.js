@@ -315,7 +315,7 @@ export class World {
       if (dist < r + 0.5 * d.scale) fn(d, dist, c);
     }
     for (const p of this.props) {
-      if (!p.alive) continue;
+      if (!p.alive || p.away) continue;
       const dist = p.pos.distanceTo(center);
       if (dist < r + p.radius) fn(p, dist, p.pos);
     }
@@ -339,7 +339,7 @@ export class World {
   }
 
   targets() {
-    return [...this.dummies.filter((d) => d.alive), ...this.props.filter((p) => p.alive), ...this.extraTargets.filter((x) => x.alive)];
+    return [...this.dummies.filter((d) => d.alive), ...this.props.filter((p) => p.alive && !p.away), ...this.extraTargets.filter((x) => x.alive)];
   }
 
   /** 점에 가장 가까운 대상 (몸 표면까지 거리) */
@@ -452,7 +452,7 @@ export class World {
       pos.z = cz + (dz / d) * r;
     }
     for (const p of this.props) {
-      if (!p.alive || p.held) continue;
+      if (!p.alive || p.away || p.held) continue;
       const pc = p.pos;
       const top = pc.y + (p.halfH ?? p.radius);
       if (top < pos.y + 0.2 || pc.y - (p.halfH ?? p.radius) > pos.y + height) continue;
@@ -518,8 +518,14 @@ export class World {
 
     // 소품 물리 (상자 강체)
     const bnd = ctx.env.bounds;
+    // 영역전개 중엔 소품이 영역 안으로 들어오지 않는다 (배경과 함께 사라졌다가 영역이 걷히면 돌아온다)
+    const away = !!ctx.env.hidden;
     for (const p of this.props) {
-      if (!p.alive || p.asleep || p.fixed || p.held) continue;
+      if (p.away !== away) {
+        p.away = away;
+        p.obj.visible = !away;
+      }
+      if (!p.alive || p.away || p.asleep || p.fixed || p.held) continue;
       const sub = p.vel.lengthSq() > 25 || p.spin.lengthSq() > 25 ? 2 : 1;
       for (let i = 0; i < sub; i++) p.step(dt / sub, bnd);
       if (this.shield && p.vel.lengthSq() > 4) this.shield(p, dt, bc);
@@ -528,10 +534,10 @@ export class World {
     const props = this.props;
     for (let i = 0; i < props.length; i++) {
       const a = props[i];
-      if (!a.alive) continue;
+      if (!a.alive || a.away) continue;
       for (let j = i + 1; j < props.length; j++) {
         const c = props[j];
-        if (!c.alive || (a.asleep && c.asleep)) continue;
+        if (!c.alive || c.away || (a.asleep && c.asleep)) continue;
         this._collide(a, c);
       }
       if (a.asleep) continue;

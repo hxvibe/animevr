@@ -1,323 +1,435 @@
-// 「自閉円頓裹」 — 원작 애니(1기 13화)처럼: 거의 검은 보랏빛 허공, 마히토 자신의 손(모델에서 떼어 낸 손)이
-//  뒤에서 거대하게 피어오르고, 양 끝에 손만 달린 팔들이 서로 깍지를 끼며 길게 이어져 영역 전체를 공 모양으로 두른다.
-//  펼쳐질 때: 손이 먼저 피어나고 → 깍지 낀 팔의 사슬이 바닥에서 정수리 쪽으로 자라 올라간다.
+// 「自閉円頓裹」 — 원작 애니(1기 13화)처럼: 거의 검은 보랏빛 허공에 마히토 자신의 손(모델에서 떼어 낸 손 · 아래팔째)이
+//  · 한가운데: 손바닥을 맞대고 위아래로 깍지 낀 거대한 두 손 (앞에서 보면 엄지가 왼쪽) — 움직이지 않는다
+//  · 그 둘레: 사방으로 뻗어 손가락을 꿈틀대는 손들
+//  · 영역 겉 사방: 벽에서 안쪽으로 뻗은 손들 (손가락이 계속 움직인다, 아래팔은 벽 너머로 사라진다)
+//  · 새장: 양 끝이 손뿐인 팔들이 이웃과 손가락을 엇갈려 자연스럽게 깍지 끼며, 대각선으로 기운 고리 여러 겹으로 영역을 공처럼 감싼다 (바닥 밑까지)
+//  손목 · 팔꿈치의 잘린 끝은 다른 손 · 벽 · 팔 속에 묻혀 보이지 않게 둔다.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RiggedBody } from './rigged.js';
 import { FingerRig } from './enemies.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
-const _q2 = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
-const _e = new THREE.Euler();
 const _a = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
 
-// 손 모양들 (엄지 · 검지 · 중지 · 약지 · 새끼 굽힘)
-const POSES = {
-  open: [0.05, 0, 0.02, 0.05, 0.1], // 활짝
-  relax: [0.25, 0.22, 0.3, 0.38, 0.45], // 힘을 뺀
-  claw: [0.35, 0.5, 0.55, 0.6, 0.65], // 움켜쥐려는
-  clasp: [0.55, 0.78, 0.82, 0.85, 0.85], // 깍지 낀
-};
-const POSE_KEYS = Object.keys(POSES);
+// 굽힘 단계 (엄지 · 검지 · 중지 · 약지 · 새끼): 펴짐 → 반쯤 → 깍지
+const STAGES = [
+  [0.02, 0.0, 0.02, 0.05, 0.08],
+  [0.3, 0.4, 0.45, 0.5, 0.55],
+  [0.55, 0.85, 0.9, 0.92, 0.92],
+];
 
 /**
- * 마히토 모델의 오른손을 떼어 고정된 기하로 굽는다 (손가락 굽힘 포함).
+ * 마히토 모델의 오른손(아래팔째)을 세 가지 굽힘으로 굽는다 — 정점 순서가 같아 셰이더에서 사이를 섞을 수 있다.
  *  손 좌표: 손목 = 원점, 손가락 = +Y, 손바닥이 보는 쪽 = +Z, 길이(손목→가운뎃손가락 끝) = 1
+ *  반환: { geo(position=펴짐 · pMid · pClose · normal · nMid · nClose · aFinger), thumbX, elbowY, elbowR }
  */
-const _baked = new Map();
-export function bakeHand(pose) {
-  if (_baked.has(pose)) return _baked.get(pose);
-  let out = null;
+let _set;
+export function bakeHandSet() {
+  if (_set !== undefined) return _set;
+  _set = null;
   try {
-    const body = new RiggedBody('mahito', { height: 1.8, hide: [] });
-    if (body.ok) {
-      const fr = new FingerRig(body);
-      const F = fr.hands.R;
-      if (F.length >= 4) {
-        body.model.updateMatrixWorld(true);
-        const W = (b) => b.getWorldPosition(new THREE.Vector3());
-        const wristB = F[2].bones[0].parent;
-        const wrist = W(wristB);
-        const mid = W(F[2].bones[0]);
-        const idx = W(F[1].bones[0]);
-        const pin = W((F[4] ?? F[3]).bones[0]);
-        const mb = F[2].bones;
-        const last = mb[mb.length - 1];
-        const tip = last.children[0]?.isBone ? W(last.children[0]) : W(last).addScaledVector(W(last).sub(W(mb[Math.max(0, mb.length - 2)])).normalize(), 0.02);
-        const f = mid.clone().sub(wrist).normalize();
-        const n = new THREE.Vector3().crossVectors(idx.clone().sub(wrist), pin.clone().sub(wrist));
-        n.addScaledVector(f, -n.dot(f)).normalize();
-        const sd = new THREE.Vector3().crossVectors(f, n);
-        const toHand = new THREE.Matrix4().makeBasis(sd, f, n).invert();
-        const len = tip.distanceTo(wrist);
-        const thumbX = W(F[0].bones[F[0].bones.length - 1]).sub(wrist).applyMatrix4(toHand).x;
-        fr.applyEach('R', POSES[pose]);
-        body.model.updateMatrixWorld(true);
-        const keep = new Set();
-        wristB.traverse((b) => b.isBone && keep.add(b));
-        const parts = [];
-        for (const o of body.meshes) {
-          if (!o.isSkinnedMesh || !o.geometry.attributes.skinIndex) continue;
-          o.skeleton.update();
-          const g = o.geometry;
-          const si = g.attributes.skinIndex;
-          const sw = g.attributes.skinWeight;
-          const N = si.count;
-          const ok = new Uint8Array(N);
-          for (let i = 0; i < N; i++) {
-            let best = 0;
-            let bw = -1;
-            for (let c = 0; c < 4; c++) {
-              const w = sw.getComponent(i, c);
-              if (w > bw) {
-                bw = w;
-                best = si.getComponent(i, c);
-              }
-            }
-            ok[i] = keep.has(o.skeleton.bones[best]) ? 1 : 0;
+    const body = new RiggedBody('mahito', { height: 1.8 }); // 숨긴 부품(칼날 팔 등 '-' 메시)은 빼고
+    if (!body.ok) return _set;
+    const fr = new FingerRig(body);
+    const F = fr.hands.R;
+    if (F.length < 4) return _set;
+    body.model.updateMatrixWorld(true);
+    const W = (b) => b.getWorldPosition(new THREE.Vector3());
+    const wristB = F[2].bones[0].parent;
+    const armB = wristB.parent?.isBone ? wristB.parent : wristB;
+    const wrist = W(wristB);
+    const mid = W(F[2].bones[0]);
+    const idx = W(F[1].bones[0]);
+    const pin = W((F[4] ?? F[3]).bones[0]);
+    const mb = F[2].bones;
+    const last = mb[mb.length - 1];
+    const tip = last.children[0]?.isBone ? W(last.children[0]) : W(last).addScaledVector(W(last).sub(W(mb[Math.max(0, mb.length - 2)])).normalize(), 0.02);
+    const f = mid.clone().sub(wrist).normalize();
+    const n = new THREE.Vector3().crossVectors(idx.clone().sub(wrist), pin.clone().sub(wrist));
+    n.addScaledVector(f, -n.dot(f)).normalize();
+    const sd = new THREE.Vector3().crossVectors(f, n);
+    const toHand = new THREE.Matrix4().makeBasis(sd, f, n).invert();
+    const len = tip.distanceTo(wrist);
+    const thumbX = W(F[0].bones[0]).sub(wrist).applyMatrix4(toHand).x;
+    // 남길 뼈: 아래팔 · 손 · 손가락 / 손가락 번호
+    const keep = new Set();
+    armB.traverse((b) => b.isBone && keep.add(b));
+    const fingerOf = new Map();
+    F.forEach((fi, i) => fi.bones[0].traverse((b) => b.isBone && fingerOf.set(b, i)));
+    // 메시마다 남길 삼각형 (한 번만)
+    const parts = [];
+    for (const o of body.meshes) {
+      if (!o.isSkinnedMesh || !o.geometry.attributes.skinIndex || !o.visible || o.name.startsWith('-')) continue;
+      const g = o.geometry;
+      const si = g.attributes.skinIndex;
+      const sw = g.attributes.skinWeight;
+      const N = si.count;
+      const best = new Int32Array(N);
+      const ok = new Uint8Array(N);
+      for (let i = 0; i < N; i++) {
+        let bi = 0;
+        let bw = -1;
+        for (let c = 0; c < 4; c++) {
+          const w = sw.getComponent(i, c);
+          if (w > bw) {
+            bw = w;
+            bi = si.getComponent(i, c);
           }
-          const src = g.index ? g.index.array : Array.from({ length: N }, (_, i) => i);
-          const remap = new Int32Array(N).fill(-1);
-          const pos = [];
-          const ind = [];
-          const v = new THREE.Vector3();
-          for (let t = 0; t < src.length; t += 3) {
-            if (!(ok[src[t]] && ok[src[t + 1]] && ok[src[t + 2]])) continue;
-            for (let k = 0; k < 3; k++) {
-              const i = src[t + k];
-              if (remap[i] < 0) {
-                o.getVertexPosition(i, v);
-                v.applyMatrix4(o.matrixWorld).sub(wrist).applyMatrix4(toHand).multiplyScalar(1 / len);
-                remap[i] = pos.length / 3;
-                pos.push(v.x, v.y, v.z);
-              }
-              ind.push(remap[i]);
-            }
-          }
-          if (!ind.length) continue;
-          const pg = new THREE.BufferGeometry();
-          pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-          pg.setIndex(ind);
-          parts.push(pg);
         }
-        if (parts.length) {
-          out = mergeVerts(parts.length > 1 ? mergeGeometries(parts) : parts[0]);
-          out.computeVertexNormals();
-          out.computeBoundingSphere();
-          out.userData.thumbX = thumbX;
+        best[i] = bi;
+        ok[i] = keep.has(o.skeleton.bones[bi]) ? 1 : 0;
+      }
+      const src = g.index ? g.index.array : Array.from({ length: N }, (_, i) => i);
+      const remap = new Int32Array(N).fill(-1);
+      const verts = [];
+      const ind = [];
+      for (let t = 0; t < src.length; t += 3) {
+        if (!(ok[src[t]] && ok[src[t + 1]] && ok[src[t + 2]])) continue;
+        for (let k = 0; k < 3; k++) {
+          const i = src[t + k];
+          if (remap[i] < 0) {
+            remap[i] = verts.length;
+            verts.push(i);
+          }
+          ind.push(remap[i]);
         }
       }
+      if (ind.length) parts.push({ o, verts, ind, finger: verts.map((i) => fingerOf.get(o.skeleton.bones[best[i]]) ?? 5) });
     }
+    if (!parts.length) return _set;
+    // 단계마다 정점 위치
+    const v = new THREE.Vector3();
+    const stagePos = STAGES.map((curls) => {
+      fr.applyEach('R', curls);
+      body.model.updateMatrixWorld(true);
+      const out = [];
+      for (const P of parts) {
+        P.o.skeleton.update();
+        for (const i of P.verts) {
+          P.o.getVertexPosition(i, v);
+          v.applyMatrix4(P.o.matrixWorld).sub(wrist).applyMatrix4(toHand).multiplyScalar(1 / len);
+          out.push(v.x, v.y, v.z);
+        }
+      }
+      return out;
+    });
+    // 이어 붙이기 + 같은 자리 정점 합치기 (펴진 손 기준)
+    const index = [];
+    const finger = [];
+    let base = 0;
+    for (const P of parts) {
+      for (const i of P.ind) index.push(i + base);
+      finger.push(...P.finger);
+      base += P.verts.length;
+    }
+    const p0 = stagePos[0];
+    const key = new Map();
+    const re = new Int32Array(p0.length / 3);
+    const keepV = [];
+    for (let i = 0; i < re.length; i++) {
+      const k = `${Math.round(p0[i * 3] * 3000)},${Math.round(p0[i * 3 + 1] * 3000)},${Math.round(p0[i * 3 + 2] * 3000)}`;
+      let j = key.get(k);
+      if (j === undefined) {
+        j = keepV.length;
+        key.set(k, j);
+        keepV.push(i);
+      }
+      re[i] = j;
+    }
+    const idx2 = index.map((i) => re[i]);
+    const pick = (arr) => {
+      const o = new Float32Array(keepV.length * 3);
+      keepV.forEach((i, j) => o.set([arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]], j * 3));
+      return o;
+    };
+    const geo = new THREE.BufferGeometry();
+    const normals = [];
+    for (let s = 0; s < 3; s++) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pick(stagePos[s]), 3));
+      g.setIndex(idx2);
+      g.computeVertexNormals();
+      normals.push(g.attributes.normal);
+      if (s === 0) geo.setAttribute('position', g.attributes.position);
+      else geo.setAttribute(s === 1 ? 'pMid' : 'pClose', g.attributes.position);
+    }
+    geo.setAttribute('normal', normals[0]);
+    geo.setAttribute('nMid', normals[1]);
+    geo.setAttribute('nClose', normals[2]);
+    geo.setAttribute('aFinger', new THREE.BufferAttribute(new Float32Array(keepV.map((i) => finger[i])), 1));
+    geo.setIndex(idx2);
+    geo.computeBoundingSphere();
+    // 팔꿈치 쪽 잘린 끝: 높이 · 굵기
+    const P0 = geo.attributes.position;
+    let minY = 0;
+    for (let i = 0; i < P0.count; i++) minY = Math.min(minY, P0.getY(i));
+    let rs = 0;
+    let rn = 0;
+    for (let i = 0; i < P0.count; i++) {
+      if (P0.getY(i) < minY + 0.06) {
+        rs += Math.hypot(P0.getX(i), P0.getZ(i));
+        rn++;
+      }
+    }
+    _set = { geo, thumbX, elbowY: minY, elbowR: rn ? rs / rn : 0.06 };
   } catch (e) {
     console.warn('mahito hand bake', e);
-    out = null;
+    _set = null;
   }
-  _baked.set(pose, out);
-  return out;
+  return _set;
 }
 
-/** 같은 자리의 정점을 합친다 (이음매가 갈라지지 않은 매끈한 법선) */
-function mergeVerts(g) {
-  const p = g.attributes.position;
-  const map = new Map();
-  const keep = [];
-  const remap = new Uint32Array(p.count);
-  for (let i = 0; i < p.count; i++) {
-    const k = `${Math.round(p.getX(i) * 2000)},${Math.round(p.getY(i) * 2000)},${Math.round(p.getZ(i) * 2000)}`;
-    let j = map.get(k);
-    if (j === undefined) {
-      j = keep.length / 3;
-      map.set(k, j);
-      keep.push(p.getX(i), p.getY(i), p.getZ(i));
-    }
-    remap[i] = j;
+/** 좌우 거울 (오른손 → 왼손): 위치 · 법선의 x 를 뒤집고 면 방향도 뒤집는다 */
+function mirrorSet(S) {
+  const g = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(S.geo.attributes)) {
+    const b = a.clone();
+    if (a.itemSize === 3) for (let i = 0; i < b.count; i++) b.setX(i, -b.getX(i));
+    g.setAttribute(k, b);
   }
-  const idx = g.index ? Array.from(g.index.array, (i) => remap[i]) : Array.from(remap);
-  const o = new THREE.BufferGeometry();
-  o.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
-  o.setIndex(idx);
-  return o;
+  if (S.geo.index) {
+    const idx = Array.from(S.geo.index.array);
+    for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+    g.setIndex(idx);
+  }
+  g.computeBoundingSphere();
+  return { ...S, geo: g, thumbX: -S.thumbX };
 }
 
-/** 모델이 없을 때의 둥근 손 (캡슐 손가락) */
-let _fallback = null;
-function fallbackHand() {
-  if (_fallback) return _fallback;
+/** 모델이 없을 때: 둥근 손 + 아래팔 (굽힘 없음) */
+function fallbackSet() {
   const parts = [];
   const cap = (r, l, x, y, z, rx = 0, rz = 0) => parts.push(new THREE.CapsuleGeometry(r, l, 4, 8).translate(0, l / 2 + r, 0).rotateX(rx).rotateZ(rz).translate(x, y, z));
   parts.push(new THREE.SphereGeometry(1, 14, 10).scale(0.24, 0.27, 0.08).translate(0, 0.27, 0));
   [-0.15, -0.05, 0.05, 0.15].forEach((x, i) => cap(0.045, [0.3, 0.36, 0.34, 0.27][i], x, 0.48, 0, 0.15));
-  cap(0.05, 0.22, -0.2, 0.18, 0.04, 0.2, 0.8);
-  _fallback = mergeVerts(mergeGeometries(parts.map((g) => {
-    const x = g.index ? g.toNonIndexed() : g;
-    for (const k of Object.keys(x.attributes)) if (k !== 'position') x.deleteAttribute(k);
-    return x;
-  })));
-  _fallback.computeVertexNormals();
-  return _fallback;
-}
-
-/** 좌우 거울 (오른손 → 왼손): 면 방향도 뒤집는다 */
-function mirrorX(g) {
-  const o = g.clone();
-  const p = o.attributes.position;
-  for (let i = 0; i < p.count; i++) p.setX(i, -p.getX(i));
-  const idx = o.index.array;
-  for (let i = 0; i < idx.length; i += 3) {
-    const t = idx[i + 1];
-    idx[i + 1] = idx[i + 2];
-    idx[i + 2] = t;
+  cap(0.05, 0.22, 0.2, 0.18, 0.04, 0.2, -0.8);
+  parts.push(new THREE.CylinderGeometry(0.09, 0.11, 1.1, 10).translate(0, -0.5, 0));
+  const flat = parts.map((g) => (g.index ? g.toNonIndexed() : g));
+  let n = 0;
+  for (const g of flat) n += g.attributes.position.count;
+  const pos = new Float32Array(n * 3);
+  let o = 0;
+  for (const g of flat) {
+    pos.set(g.attributes.position.array, o);
+    o += g.attributes.position.array.length;
   }
-  o.index.needsUpdate = true;
-  o.computeVertexNormals();
-  return o;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  geo.setAttribute('pMid', geo.attributes.position);
+  geo.setAttribute('pClose', geo.attributes.position);
+  geo.setAttribute('nMid', geo.attributes.normal);
+  geo.setAttribute('nClose', geo.attributes.normal);
+  geo.setAttribute('aFinger', new THREE.BufferAttribute(new Float32Array(n).fill(5), 1));
+  geo.computeBoundingSphere();
+  return { geo, thumbX: 1, elbowY: -1.05, elbowR: 0.1 };
 }
 
-/** 법선 쪽으로 부풀린 외곽선용 기하 (뒷면을 검게 그려 애니 느낌의 윤곽선) */
-function inflate(g, d) {
-  const o = g.clone();
-  const p = o.attributes.position;
-  const n = o.attributes.normal;
-  for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) + n.getX(i) * d, p.getY(i) + n.getY(i) * d, p.getZ(i) + n.getZ(i) * d);
-  return o;
+// 손가락 굽힘을 셰이더에서: 인스턴스마다 aAnim = (기본 굽힘, 흔들 폭, 위상)
+const HAND_VERT_HEAD = /* glsl */ `
+attribute vec3 pMid; attribute vec3 pClose; attribute vec3 nMid; attribute vec3 nClose; attribute float aFinger; attribute vec3 aAnim;
+uniform float uHandT;
+float handCurl() {
+  float c = aAnim.x;
+  if (aFinger < 4.5) c += aAnim.y * (0.6 * sin(uHandT * (1.3 + 0.27 * aFinger) + aAnim.z + aFinger * 1.17) + 0.4 * sin(uHandT * 2.9 + aAnim.z * 2.0 + aFinger * 2.3));
+  return clamp(c, 0.0, 1.0);
+}
+vec3 handMix(vec3 a, vec3 b, vec3 c, float k) { return k < 0.5 ? mix(a, b, k * 2.0) : mix(b, c, k * 2.0 - 1.0); }`;
+
+// 셀 그늘: 밝은 연보라 · 짙은 청보라 두 단 (원작 영역 속 손처럼)
+let _grad = null;
+function toonGrad() {
+  if (_grad) return _grad;
+  _grad = new THREE.DataTexture(new Uint8Array([60, 60, 60, 255, 125, 125, 125, 255, 205, 205, 205, 255]), 3, 1);
+  _grad.minFilter = _grad.magFilter = THREE.NearestFilter;
+  _grad.needsUpdate = true;
+  return _grad;
+}
+function handMaterials(T) {
+  const skin = new THREE.MeshToonMaterial({ color: 0xc8bcff, emissive: 0x1a1048, emissiveIntensity: 0.6, gradientMap: toonGrad() });
+  skin.onBeforeCompile = (sh) => {
+    sh.uniforms.uHandT = T;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + HAND_VERT_HEAD)
+      .replace('#include <beginnormal_vertex>', 'float hc = handCurl();\nvec3 objectNormal = normalize(handMix(normal, nMid, nClose, hc));')
+      .replace('#include <begin_vertex>', 'vec3 transformed = handMix(position, pMid, pClose, hc);');
+  };
+  skin.customProgramCacheKey = () => 'mahitoHand';
+  const line = new THREE.MeshBasicMaterial({ color: 0x0b0616, side: THREE.BackSide });
+  line.onBeforeCompile = (sh) => {
+    sh.uniforms.uHandT = T;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + HAND_VERT_HEAD)
+      .replace('#include <begin_vertex>', 'float hc = handCurl();\nvec3 transformed = handMix(position, pMid, pClose, hc) + normalize(handMix(normal, nMid, nClose, hc)) * 0.011;');
+  };
+  line.customProgramCacheKey = () => 'mahitoHandLine';
+  return { skin, line };
 }
 
-// 살빛: 원작 영역 속 손처럼 창백한 연보랏빛 · 그늘은 짙은 자주
-const SKIN = 0x9c8494;
+/** 손 무리 하나 (같은 기하 · 인스턴스마다 자리와 굽힘) */
+class HandGroup {
+  constructor(set, items, mats, { outline = true } = {}) {
+    this.items = items;
+    const n = Math.max(1, items.length);
+    const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+    items.forEach((it, i) => anim.setXYZ(i, it.curl ?? 0.2, it.amp ?? 0, it.ph ?? Math.random() * 6.28));
+    const geo = new THREE.BufferGeometry();
+    for (const [k, a] of Object.entries(set.geo.attributes)) geo.setAttribute(k, a);
+    if (set.geo.index) geo.setIndex(set.geo.index);
+    geo.setAttribute('aAnim', anim);
+    geo.boundingSphere = set.geo.boundingSphere;
+    this.geo = geo;
+    this.mesh = new THREE.InstancedMesh(geo, mats.skin, n);
+    this.mesh.frustumCulled = false;
+    this.line = outline ? new THREE.InstancedMesh(geo, mats.line, n) : null;
+    if (this.line) this.line.frustumCulled = false;
+  }
+  add(parent) {
+    parent.add(this.mesh);
+    if (this.line) parent.add(this.line);
+  }
+  set(i, m) {
+    this.mesh.setMatrixAt(i, m);
+    this.line?.setMatrixAt(i, m);
+  }
+  flush() {
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.line) this.line.instanceMatrix.needsUpdate = true;
+  }
+  dispose() {
+    this.mesh.dispose();
+    this.line?.dispose();
+  }
+}
+
+/** fingers(+Y) · palm(+Z) 방향으로 손 좌표를 세우는 회전 */
+function look(fingers, palm) {
+  const yv = fingers.clone().normalize();
+  const zv = palm.clone().addScaledVector(yv, -palm.dot(yv)).normalize();
+  const xv = new THREE.Vector3().crossVectors(yv, zv);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
+}
 
 export class HandMaw {
-  /** R: 영역 반지름(m) */
+  /** R: 영역(벽) 반지름(m) */
   constructor(R) {
     this.R = R;
-    this.group = new THREE.Group(); // 영역 중심
-    this.cluster = new THREE.Group(); // 피어오른 손 무더기 (가장자리 쪽에 세운다)
-    this.group.add(this.cluster);
     this.t = 0;
-    this.mat = new THREE.MeshToonMaterial({ color: SKIN, emissive: 0x1c1024, emissiveIntensity: 0.5 });
-    this.lineMat = new THREE.MeshBasicMaterial({ color: 0x120a16, side: THREE.BackSide });
-    this.items = [];
-    const add = (pos, quat, s, pose, delay, chain = false) => this.items.push({ pos: pos.clone(), quat: quat.clone(), s, pose, delay, ph: Math.random() * 6.28, wob: chain ? 0 : rnd(0.03, 0.08), chain });
-    const look = (fingers, palm) => {
-      const yv = fingers.clone().normalize();
-      const zv = palm.clone().addScaledVector(yv, -palm.dot(yv)).normalize();
-      const xv = new THREE.Vector3().crossVectors(yv, zv);
-      return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xv, yv, zv));
-    };
+    this.T = { value: 0 };
+    this.group = new THREE.Group(); // 영역 중심
+    this.cluster = new THREE.Group(); // 가운데 손 무더기 (가장자리 쪽에 세운다, +Z 가 영역 가운데 쪽)
+    this.group.add(this.cluster);
+    const set = bakeHandSet() ?? fallbackSet();
+    const mir = mirrorSet(set);
+    this.mats = handMaterials(this.T);
+    const FA = -set.elbowY; // 아래팔 길이 (손 길이 단위)
 
-    // ── 1) 피어오른 손 무더기 (무더기 좌표: +Z 가 영역 가운데 쪽) ──
-    const C0 = new THREE.Vector3(0, R * 0.36, 0);
+    // ── 1) 한가운데: 손바닥을 위아래로 맞댄 거대한 두 손 (움직이지 않는다) — 원작처럼 주먹 쥔 듯 앞(영역 가운데)을 향한다
+    //  위 손: 손바닥이 아래 · 손가락이 앞쪽으로 뻗어 아래로 감긴다 / 아래 손: 손바닥이 위 · 손가락이 위로 감긴다
+    //  아래팔은 뒤(무더기 속)로 들어가 보이지 않는다. 앞에서 볼 때 두 엄지가 모두 왼쪽에 오게 손마다 오른손/왼손을 고른다
+    const C0 = new THREE.Vector3(0, R * 0.4, 0);
     this.C0 = C0;
-    const big = R * 0.32;
-    // 가운데 손 둘레를 겹겹이 두른 큰 손 (뒤쪽)
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      const out = new THREE.Vector3(Math.cos(a), Math.sin(a), -0.35).normalize();
-      const pos = C0.clone().addScaledVector(out, big * 0.5).add(new THREE.Vector3(0, 0, -big * 0.15));
-      add(pos, look(out, new THREE.Vector3(0, 0, 1)), big * 0.6, i % 2 ? 'claw' : 'relax', 0.15 + i * 0.02);
-    }
-    // 둘레로 사방에 피어난 손
-    const NB = 44;
-    for (let i = 0; i < NB; i++) {
-      const y = 1 - ((i + 0.5) / NB) * 2;
-      const r = Math.sqrt(1 - y * y);
-      const th = i * 2.39996;
-      const d = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r * 0.6 - 0.45).normalize();
-      const pos = C0.clone().addScaledVector(d, big * 0.55);
-      add(pos, look(d, new THREE.Vector3(0, 0, 1).addScaledVector(d, -0.5)), big * rnd(0.45, 0.62), POSE_KEYS[i % 3], 0.12 + Math.random() * 0.25);
-    }
+    const big = R * 0.3;
+    const thumbLeft = (fingers, palm) => {
+      // 손 좌표 +X 가 화면(앞에서 본) 오른쪽(+X)으로 가는지
+      const xv = new THREE.Vector3().crossVectors(fingers.clone().normalize(), palm.clone().normalize());
+      const right = xv.x > 0;
+      return (set.thumbX > 0) === right ? mir : set;
+    };
+    const upF = new THREE.Vector3(0, -0.15, 1);
+    const upP = new THREE.Vector3(0, -1, 0.1);
+    const loF = new THREE.Vector3(0, 0.15, 1);
+    const loP = new THREE.Vector3(0, 1, 0.1);
+    this.pairs = [
+      new HandGroup(thumbLeft(upF, upP), [{ pos: C0.clone().add(new THREE.Vector3(0, big * 0.1, -big * 0.05)), quat: look(upF, upP), s: big, curl: 0.8, amp: 0, delay: 0 }], this.mats),
+      new HandGroup(thumbLeft(loF, loP), [{ pos: C0.clone().add(new THREE.Vector3(0, -big * 0.1, -big * 0.05)), quat: look(loF, loP), s: big, curl: 0.8, amp: 0, delay: 0.04 }], this.mats),
+    ];
+    for (const G of this.pairs) G.add(this.cluster);
 
-    // ── 2) 깍지 낀 팔의 사슬: 가로로 여러 겹 둘러 영역을 공 모양으로 감싼다 ──
-    const Rs = R * 0.9;
-    const HL = 1.25; // 손 길이(m)
-    this.arms = [];
-    const paths = [];
-    [0.1, 0.28, 0.46, 0.63, 0.78, 0.9].forEach((f, li) => {
-      const ringH = Rs * f;
-      const ringR = Math.sqrt(Rs * Rs - ringH * ringH);
-      const off = li * 0.37;
-      paths.push({ ring: true, li, L: 2 * Math.PI * ringR, P: (t) => new THREE.Vector3(Math.cos(t * Math.PI * 2 + off) * ringR, ringH, Math.sin(t * Math.PI * 2 + off) * ringR) });
-    });
-    for (const { ring, li, L, P } of paths) {
-      const nJ = Math.max(3, Math.round(L / 4.6));
+    // ── 2) 둘레: 사방으로 뻗어 손가락을 꿈틀대는 손 (아래팔은 무더기 안쪽 · 뒤로 묻힌다) ──
+    const ring = [];
+    const addRing = (n, beta0, beta1, back, s0, s1) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd(-0.15, 0.15);
+        const b = rnd(beta0, beta1);
+        const d = new THREE.Vector3(Math.sin(b) * Math.cos(a), Math.sin(b) * Math.sin(a), Math.cos(b)).normalize();
+        const s = big * rnd(s0, s1);
+        const pos = C0.clone().addScaledVector(d, big * 0.5).add(new THREE.Vector3(0, 0, -back * big));
+        const palm = new THREE.Vector3(0, 0, 1).addScaledVector(d, -0.4).add(new THREE.Vector3(rnd(-0.3, 0.3), rnd(-0.3, 0.3), 0));
+        ring.push({ pos, quat: look(d, palm), s, curl: rnd(0.1, 0.35), amp: rnd(0.22, 0.38), delay: 0.1 + Math.random() * 0.25 });
+      }
+    };
+    addRing(16, 0.95, 1.3, 0.4, 0.55, 0.75);
+    addRing(14, 1.25, 1.65, 0.7, 0.7, 0.95);
+    this.ring = new HandGroup(set, ring, this.mats);
+    this.ring.add(this.cluster);
+
+    // ── 3) 영역 겉 사방: 벽에서 안쪽으로 뻗은 손 (손가락이 계속 움직인다 · 아래팔은 벽 너머로) ──
+    const shell = [];
+    const NS = 54;
+    for (let i = 0; i < NS; i++) {
+      const y = 1 - ((i + 0.5) / NS) * 1.75; // 위 → 바닥 밑 조금
+      const r = Math.sqrt(Math.max(0, 1 - y * y));
+      const th = i * 2.39996;
+      const u = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r);
+      const sHand = R * rnd(0.1, 0.13);
+      const pos = u.clone().multiplyScalar(R * 0.98 - sHand * 0.85);
+      const inward = u.clone().negate().add(new THREE.Vector3(rnd(-0.35, 0.35), rnd(-0.35, 0.35), rnd(-0.35, 0.35))).normalize();
+      const palm = new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1));
+      shell.push({ pos, quat: look(inward, palm), s: sHand, curl: rnd(0.05, 0.3), amp: rnd(0.25, 0.42), delay: 0.25 + (1 - y) * 0.15 });
+    }
+    this.shell = new HandGroup(set, shell, this.mats, { outline: false });
+    this.shell.add(this.group);
+
+    // ── 4) 새장: 대각선으로 기운 큰 고리들 — 이음매마다 양쪽 팔의 손이 손가락을 엇갈려 깍지 낀다 (움직이지 않는다) ──
+    const HL = R * 0.065; // 손 길이(m)
+    const reach = (0.42 + FA) * HL; // 이음매 → 팔꿈치
+    const clasp = [];
+    this.bridges = [];
+    const NC = 6;
+    for (let k = 0; k < NC; k++) {
+      const az = (k / NC) * Math.PI * 2;
+      const tilt = 0.78; // 약 45°
+      const nrm = new THREE.Vector3(Math.sin(tilt) * Math.cos(az), Math.cos(tilt), Math.sin(tilt) * Math.sin(az)).normalize();
+      const e1 = new THREE.Vector3().crossVectors(nrm, Y).normalize();
+      const e2 = new THREE.Vector3().crossVectors(nrm, e1).normalize();
+      const Rc = R * 0.78 + (k % 2 ? 0.35 : -0.35) * (1 + k * 0.15); // 고리끼리 엇갈리는 곳에서 부딪치지 않게
+      const L = 2 * Math.PI * Rc;
+      const nJ = Math.max(6, Math.round(L / (2 * reach + HL * 1.6)));
+      const P = (t) => new THREE.Vector3().addScaledVector(e1, Math.cos(t * Math.PI * 2) * Rc).addScaledVector(e2, Math.sin(t * Math.PI * 2) * Rc);
       const joints = [];
       for (let j = 0; j < nJ; j++) {
-        const t = ring ? j / nJ : (j + 0.5) / nJ;
+        const t = (j + k * 0.37) / nJ;
         const p = P(t);
-        if (p.y < 0.6) continue;
-        const tan = P(t + 0.002).sub(P(t - 0.002)).normalize();
-        joints.push({ p, tan, delay: 0.35 + li * 0.09 + (j / nJ) * 0.12 });
+        const tan = P(t + 0.001).sub(P(t - 0.001)).normalize();
+        const radial = p.clone().normalize();
+        const side = new THREE.Vector3().crossVectors(tan, radial).normalize();
+        const delay = 0.3 + (p.y / Rc + 1) * 0.25;
+        // 깍지: 손바닥끼리 맞대고(옆을 보게), 한 손은 손가락 반 마디만큼 비껴 손가락이 서로 사이로 들어가 상대 손등을 감는다
+        const off = 0.06 * HL;
+        const wa = p.clone().addScaledVector(tan, -0.4 * HL).addScaledVector(side, -off);
+        const wb = p.clone().addScaledVector(tan, 0.4 * HL).addScaledVector(side, off).addScaledVector(radial, 0.052 * HL);
+        clasp.push({ pos: wa, quat: look(tan, side), s: HL, curl: 0.92, amp: 0, delay });
+        clasp.push({ pos: wb, quat: look(tan.clone().negate(), side.clone().negate()), s: HL, curl: 0.92, amp: 0, delay });
+        joints.push({ p, delay, ea: wa.clone().addScaledVector(tan, -FA * HL), eb: wb.clone().addScaledVector(tan, FA * HL) });
       }
-      for (const J of joints) {
-        // 깍지: 두 손이 손바닥을 맞대고 손가락을 서로의 손등으로 감는다
-        const inward = J.p.clone().negate().normalize();
-        const side = new THREE.Vector3().crossVectors(J.tan, inward).normalize();
-        J.wa = J.p.clone().addScaledVector(J.tan, -HL * 0.5).addScaledVector(side, -0.07);
-        J.wb = J.p.clone().addScaledVector(J.tan, HL * 0.5).addScaledVector(side, 0.07);
-        add(J.wa, look(J.tan, side), HL, 'clasp', J.delay, true);
-        add(J.wb, look(J.tan.clone().negate(), side.clone().negate()), HL, 'clasp', J.delay, true);
-      }
-      // 팔: 앞 깍지의 손목 → 다음 깍지의 손목 (양 끝에 손만 달린 팔)
-      for (let ji = 0; ji < joints.length - (ring ? 0 : 1); ji++) {
-        const A = joints[ji];
-        const B = joints[(ji + 1) % joints.length];
-        this.arms.push({ a: A.wb, b: B.wa, delay: Math.max(A.delay, B.delay) - 0.05 });
+      // 팔: 앞 이음매 손의 팔꿈치 → 다음 이음매 손의 팔꿈치 (아래팔 둘이 이어진, 양 끝이 손뿐인 팔)
+      for (let j = 0; j < joints.length; j++) {
+        const A = joints[j];
+        const B = joints[(j + 1) % joints.length];
+        this.bridges.push({ a: A.eb, b: B.ea, delay: Math.max(A.delay, B.delay), r: set.elbowR * HL * 1.05 });
       }
     }
-
-    // ── 메시: 손 모양마다 InstancedMesh (+ 윤곽선) ──
-    this.meshes = {};
-    const counts = {};
-    for (const it of this.items) counts[it.pose] = (counts[it.pose] ?? 0) + 1;
-    for (const k of POSE_KEYS) {
-      const n = counts[k] ?? 0;
-      if (!n) continue;
-      const geo = bakeHand(k) ?? fallbackHand();
-      const m = new THREE.InstancedMesh(geo, this.mat, n);
-      const o = new THREE.InstancedMesh(inflate(geo, 0.012), this.lineMat, n);
-      for (const x of [m, o]) {
-        x.frustumCulled = false;
-        x.castShadow = false;
-        this.group.add(x);
-      }
-      this.meshes[k] = { m, o, i: 0 };
-    }
-    for (const it of this.items) {
-      it.mesh = this.meshes[it.pose];
-      it.idx = it.mesh.i++;
-    }
-    // ── 3) 한가운데: 손바닥을 위아래로 맞댄 거대한 두 손 (영역전개의 손 모양 — 앞에서 보면 엄지가 왼쪽) ──
-    //  앞 손: 오른손, 손가락이 위 · 손등이 앞 / 뒤 손: 왼손(거울), 손가락이 아래 · 손바닥이 앞 손의 손바닥에 닿는다
-    const pairL = big * 1.05;
-    // 앞에서 볼 때 엄지가 왼쪽: 두 손 모두 손 좌표 +X 가 왼쪽으로 가므로, 엄지가 −X 인 모델이면 거울로
-    const g0 = bakeHand('open') ?? fallbackHand();
-    const gR = (g0.userData.thumbX ?? 1) > 0 ? g0 : mirrorX(g0);
-    const gL = gR;
-    this.pair = [];
-    const mk = (geo, fingers, palm, wristY, z) => {
-      const m = new THREE.Mesh(geo, this.mat);
-      const o = new THREE.Mesh(inflate(geo, 0.01), this.lineMat);
-      const q = look(fingers, palm);
-      const wrist = C0.clone().add(new THREE.Vector3(0, wristY * pairL, z * pairL + big * 0.22));
-      for (const x of [m, o]) {
-        x.frustumCulled = false;
-        this.cluster.add(x);
-      }
-      this.pair.push({ m, o, q, wrist });
-    };
-    mk(gR, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), -0.42, 0.045);
-    mk(gL, new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), 0.42, -0.045);
-    this.pairL = pairL;
-
-    // 팔: 손목에서 굵어졌다 다시 손목으로 가늘어지는 아래팔
-    const prof = [[0.0, 0], [0.62, 0.0], [0.8, 0.1], [1.0, 0.3], [1.0, 0.7], [0.8, 0.9], [0.62, 1], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y));
-    const armGeo = new THREE.LatheGeometry(prof, 12);
-    armGeo.deleteAttribute('uv');
-    this.armMesh = new THREE.InstancedMesh(armGeo, this.mat, Math.max(1, this.arms.length));
+    this.cage = new HandGroup(set, clasp, this.mats, { outline: false });
+    this.cage.add(this.group);
+    const prof = [[0.0, -0.06], [0.9, -0.06], [1.0, 0.1], [1.12, 0.5], [1.0, 0.9], [0.9, 1.06], [0.0, 1.06]].map(([r, y]) => new THREE.Vector2(r, y));
+    const brGeo = new THREE.LatheGeometry(prof, 10);
+    brGeo.deleteAttribute('uv');
+    this.armMat = new THREE.MeshToonMaterial({ color: 0xc8bcff, emissive: 0x1a1048, emissiveIntensity: 0.6, gradientMap: toonGrad() });
+    this.armMesh = new THREE.InstancedMesh(brGeo, this.armMat, Math.max(1, this.bridges.length));
     this.armMesh.frustumCulled = false;
     this.group.add(this.armMesh);
     this.update(0, 0);
@@ -329,69 +441,45 @@ export class HandMaw {
     this.cluster.rotation.y = yaw;
   }
 
+  _put(G, open, span, bloomFrom) {
+    G.items.forEach((it, i) => {
+      const k = THREE.MathUtils.clamp((open - it.delay) / span, 0, 1);
+      const e = 1 - Math.pow(1 - k, 3);
+      if (bloomFrom) _p.lerpVectors(bloomFrom, it.pos, e);
+      else _p.copy(it.pos);
+      _m.compose(_p, it.quat, _s.setScalar(Math.max(0.0001, it.s * (bloomFrom ? 0.15 + 0.85 * e : e))));
+      G.set(i, _m);
+    });
+    G.flush();
+  }
+
   update(dt, open) {
     this.t += dt;
-    const t = this.t;
-    this.cluster.updateMatrix();
-    const cm = this.cluster.matrix;
-    const cq = this.cluster.quaternion;
-    for (const it of this.items) {
-      const k = THREE.MathUtils.clamp((open - it.delay) / (it.chain ? 0.3 : 0.5), 0, 1);
-      const e = 1 - Math.pow(1 - k, 3);
-      if (it.chain) {
-        _p.copy(it.pos);
-        _q.copy(it.quat);
-      } else {
-        // 가운데에서 피어나며 바깥으로 · 숨 쉬듯 꿈틀
-        _p.lerpVectors(this.C0, it.pos, e).applyMatrix4(cm);
-        const w = Math.sin(t * 1.2 + it.ph) * it.wob;
-        _e.set(w, Math.sin(t * 0.8 + it.ph) * it.wob, w * 0.6);
-        _q.copy(cq).multiply(it.quat).multiply(_q2.setFromEuler(_e));
-      }
-      _m.compose(_p, _q, _s.setScalar(Math.max(0.0001, it.s * (it.chain ? e : 0.1 + 0.9 * e))));
-      it.mesh.m.setMatrixAt(it.idx, _m);
-      it.mesh.o.setMatrixAt(it.idx, _m);
-    }
-    // 가운데 두 손: 가장 먼저 맺힌다 (숨 쉬듯 아주 조금 떨린다)
-    const pk = THREE.MathUtils.clamp(open / 0.45, 0, 1);
-    const pe = 1 - Math.pow(1 - pk, 3);
-    for (const P of this.pair ?? []) {
-      const sc = Math.max(0.0001, this.pairL * (0.2 + 0.8 * pe));
-      for (const x of [P.m, P.o]) {
-        x.position.copy(this.C0).lerp(P.wrist, pe);
-        x.position.y += Math.sin(t * 0.9) * 0.05;
-        x.quaternion.copy(P.q);
-        x.scale.setScalar(sc);
-      }
-    }
-    this.arms.forEach((A, i) => {
+    this.T.value = this.t;
+    for (const G of this.pairs) this._put(G, open, 0.45, this.C0);
+    this._put(this.ring, open, 0.5, this.C0);
+    this._put(this.shell, open, 0.45, null);
+    this._put(this.cage, open, 0.3, null);
+    this.bridges.forEach((A, i) => {
       const k = THREE.MathUtils.clamp((open - A.delay) / 0.3, 0, 1);
       const d = _a.subVectors(A.b, A.a);
       const L = d.length();
       _q.setFromUnitVectors(Y, d.normalize());
-      const r = Math.max(0.0001, 0.17 * k);
+      const r = Math.max(0.0001, A.r * k);
       _m.compose(A.a, _q, _s.set(r, Math.max(0.0001, L * k), r));
       this.armMesh.setMatrixAt(i, _m);
     });
-    for (const k in this.meshes) {
-      this.meshes[k].m.instanceMatrix.needsUpdate = true;
-      this.meshes[k].o.instanceMatrix.needsUpdate = true;
-    }
     this.armMesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose() {
     this.group.parent?.remove(this.group);
-    for (const k in this.meshes) {
-      this.meshes[k].m.dispose();
-      this.meshes[k].o.geometry.dispose();
-      this.meshes[k].o.dispose();
-    }
+    for (const G of [...this.pairs, this.ring, this.shell, this.cage]) G.dispose();
     this.armMesh.geometry.dispose();
     this.armMesh.dispose();
-    for (const P of this.pair ?? []) P.o.geometry.dispose();
-    this.mat.dispose();
-    this.lineMat.dispose();
+    this.armMat.dispose();
+    this.mats.skin.dispose();
+    this.mats.line.dispose();
   }
 }
 

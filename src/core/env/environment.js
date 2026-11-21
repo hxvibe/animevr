@@ -103,13 +103,16 @@ export class Environment {
     this.current.group.traverse((o) => {
       if (o === this.current.group) return;
       if (o.isMesh || o.isLine || o.isSprite || o.isInstancedMesh) {
-        // 소품(파괴 가능한 물체)은 남겨둔다
+        // 소품(파괴 가능한 물체)은 world 가 따로 숨긴다 (영역 안으로 들어오지 않는다)
         if (o.userData.isProp) return;
         if (o.userData._vis === undefined) o.userData._vis = o.visible;
         o.visible = hidden ? false : o.userData._vis;
       }
     });
-    for (const p of this.ctx.world.props) p.obj.traverse((o) => (o.visible = true));
+    for (const p of this.ctx.world.props) {
+      p.away = hidden;
+      p.obj.visible = !hidden;
+    }
   }
 
   /** 설정(그림자)과 배경에 맞춰 그림자를 켜고 끈다 */

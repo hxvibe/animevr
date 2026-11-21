@@ -196,16 +196,18 @@ export class MalevolentShrine {
       const e = 1 - Math.pow(1 - k, 3);
       this.shrine.position.y = -16 + e * (16 + this.restY);
       this.pool.scale.setScalar(0.01 + e * this.radius);
-      // 하늘과 조명을 핏빛으로
-      env.fog.color.lerp(new THREE.Color(0x200000), Math.min(1, dt * 3));
-      env.fog.near = THREE.MathUtils.lerp(env.fog.near, 20, dt * 2);
-      env.fog.far = THREE.MathUtils.lerp(env.fog.far, 90, dt * 2);
-      env.hemi.color.lerp(new THREE.Color(0xff6050), dt * 2);
-      env.hemi.groundColor.lerp(new THREE.Color(0x200000), dt * 2);
-      env.hemi.intensity = THREE.MathUtils.lerp(env.hemi.intensity, 1.0, dt * 2);
-      env.sun.color.lerp(new THREE.Color(0xff3020), dt * 2);
+      // 하늘과 조명을 핏빛으로 (그릇의 영역에 겹칠 때는 배경을 건드리지 않는다)
+      if (!this.guest) env.fog.color.lerp(new THREE.Color(0x200000), Math.min(1, dt * 3));
+      if (!this.guest) {
+        env.fog.near = THREE.MathUtils.lerp(env.fog.near, 20, dt * 2);
+        env.fog.far = THREE.MathUtils.lerp(env.fog.far, 90, dt * 2);
+        env.hemi.color.lerp(new THREE.Color(0xff6050), dt * 2);
+        env.hemi.groundColor.lerp(new THREE.Color(0x200000), dt * 2);
+        env.hemi.intensity = THREE.MathUtils.lerp(env.hemi.intensity, 1.0, dt * 2);
+        env.sun.color.lerp(new THREE.Color(0xff3020), dt * 2);
+      }
       if (Math.random() < 0.8) fx.burst(this.shrine.position.clone().setY(0.3), 3, new THREE.Color(0x3a2a24), 4, 0.15, 1.2, { up: 1, grav: 3, drag: 1 });
-      if (k > 0.5 && !this.sky.visible) {
+      if (k > 0.5 && !this.sky.visible && !this.guest) {
         env.setHidden(true);
         this.sky.visible = true;
       }
@@ -227,7 +229,7 @@ export class MalevolentShrine {
       if (k >= 1) {
         this.state = 'idle';
         this.group.visible = false;
-        env.restore();
+        if (!this.guest) env.restore();
       }
     }
   }

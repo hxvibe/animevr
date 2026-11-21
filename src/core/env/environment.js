@@ -73,6 +73,8 @@ export class Environment {
       }
     }
     this.scene.environment = this.envTex;
+    // 패스스루: 투명하게 지워 현실 카메라 영상이 비치게
+    this.ctx.renderer.setClearColor(0x000000, bg.passthrough ? 0 : 1);
     return bg;
   }
 

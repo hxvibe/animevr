@@ -1,5 +1,5 @@
 // VR UI: 타이틀(메인 메뉴) · 옵션 패널 · 손목 HUD · 만화풍 기술명 · 데미지 숫자 · 피격 효과
-import { CTRL_HELP } from './ctrlHands.js';
+import { CTRL_HELP, CTRL_LEGEND } from './ctrlHands.js';
 import { worldCutPC } from '../characters/sukuna/sukuna.js';
 // 기본값이 기기에 따라 정해지는 설정
 const optVal = (S, k) => (k === 'worldCutPC' ? worldCutPC(S) : !!S[k]);
@@ -406,12 +406,17 @@ export class UI {
     const cur = anyHand ? 'hand' : this.ctx.input.mode === 'desktop' ? 'desktop' : 'controller';
     const mode = this.help.view ?? cur;
     let lines = ch ? [...ch.helpLines(mode)] : [];
-    // 컨트롤러를 손으로 쓰면: 손 추적과 같은 수인 + 버튼으로 손가락 만드는 법
-    if (mode === 'controller' && this.ctx.settings.ctrlHands !== false && ch) {
+    // 컨트롤러를 손으로 쓰면: 기술마다 누르는 버튼 (게토 · 메구미는 원래 컨트롤러 조작 그대로)
+    if (mode === 'controller' && this.ctx.settings.ctrlHands !== false && ch && !ch.ctrlNative) {
       lines = [
-        { head: '컨트롤러 = 손', color: '#ffffff', text: '트리거 = 검지 · 그립 = 중지·약지·새끼 · 엄지는 스틱/버튼에 대면 접힘, 떼면 폄\n아무것도 안 누름 = 편 손 · 그립+트리거 = 주먹 · 그립만 = 검지 · 그립만+엄지 뗌 = 두 손가락 · 트리거만 = 집기\n손 추적과 같은 손 모양·위치로 기술이 나간다. Y 메뉴 · B 더미 소환 · 왼쪽 스틱 이동 · 오른쪽 스틱 회전' },
-        ...ch.helpLines('hand').map((l) => (l.demo && CTRL_HELP[l.demo] ? { ...l, text: l.text + '\n' + CTRL_HELP[l.demo] } : l)),
+        { head: '컨트롤러 버튼 → 손 모양', color: '#ffffff', text: CTRL_LEGEND },
+        ...ch.helpLines('hand').map((l) => ({ ...l, text: l.demo && CTRL_HELP[l.demo] ? CTRL_HELP[l.demo] : l.text })),
       ];
+    }
+    if (ch && (ch.id === 'megumi' || ch.id === 'itadori')) {
+      const after = '먹은 뒤: 解 · 捌 · 竈開 · 세계를 가르는 해를 함께 쓰고, 영역전개에 복마어주자(사당 · 참격 난사)가 겹친다';
+      const how = mode === 'desktop' ? '6 키: 먹기' : mode === 'controller' ? '오른쪽 허리의 손가락에 컨트롤러를 대고 그립 → 입으로 가져가면 먹는다' + (ch.ctrlNative ? ' · 먹은 뒤 B: 정면 解' : '') : '오른쪽 허리의 손가락을 주먹(또는 집게)으로 쥐어 입으로 가져가면 먹는다';
+      lines.push({ head: '宿儺の指 스쿠나의 손가락', color: '#ff6060', text: how + '\n' + after });
     }
     if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', demo: 'common.loco', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기\n오른손 엄지 척 → 옆으로 밀면 30° 회전' });
     return { lines, mode, cur };
@@ -937,7 +942,7 @@ export class UI {
     this._iconCd -= dt;
     let show = false;
     void R;
-    if (inp.mode === 'xr' && L.active && L.source === 'hand') {
+    if (inp.mode === 'xr' && L.active && L.source === 'hand' && !L.emulated) {
       _v.subVectors(inp.head, L.palm);
       const d = _v.length();
       _v.normalize();

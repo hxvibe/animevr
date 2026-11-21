@@ -350,7 +350,7 @@ export class Mahito extends Caster {
     if (mode === 'hand') {
       return [
         { head: '무위전변 — 영혼 만지기', demo: 'mahito.touch', color: '#7ad8ff', text: '편 맨손바닥으로 상대를 0.2초 만지면 영혼을 비틀어 개조 인간으로 (특급은 큰 피해)\n주먹이나 변형한 손으로는 발동하지 않는다' },
-        { head: '칼날 팔', demo: 'mahito.blade', color: '#e8e2d8', text: '손날을 세운 채(손바닥을 옆으로) 0.35초 → 손이 칼날로 바뀐다 → 휘둘러 베기\n주먹을 쥐거나 다른 손 모양을 하면 되돌아온다' },
+        { head: '칼날 팔', demo: 'mahito.blade', color: '#e8e2d8', text: '검지·중지를 곧게 펴 칼처럼 세우고(손바닥을 옆으로) 0.35초 → 손이 칼날로 바뀐다 → 휘둘러 베기\n주먹을 쥐면 되돌아온다' },
         { head: '드릴 팔', demo: 'mahito.drill', color: '#c8c0bc', text: '주먹을 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르면 꿰뚫는다' },
         { head: '늘어나는 팔', demo: 'mahito.stretch', color: '#c8c0bc', text: '검지로 앞을 빠르게 찌르면 팔이 7m까지 늘어나 때리고 끌어당긴다' },
         { head: '개조인간 발사', demo: 'mahito.launch', color: '#c8c4bc', text: '주먹을 입에 0.25초 (몸속의 개조인간을 꺼낸다) → 앞으로 던지면\n벌레 같은 개조인간이 몸을 늘이며 날아가 바라본 적을 물어뜯는다' },
@@ -360,7 +360,7 @@ export class Mahito extends Caster {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '무위전변', color: '#7ad8ff', text: 'E: 1.6m 안의 조준한 대상을 만진다' },
         { head: '몸 변형', color: '#e8e2d8', text: '1 칼날 베기 · 2 드릴 찌르기 · 3 늘어나는 팔 · 4 다중혼 발체 · 5 개조인간 발사 · Q 1.2초 영역전개' },
       ];
@@ -417,10 +417,10 @@ export class Mahito extends Caster {
     const ctrl = h.source === 'controller';
     const fwd = this.flatFwd(_v3);
     // 손 모양을 바꾸면 변형이 풀린다
-    if (F.form === 'blade' && (ctrl ? !h.btn.grip : g !== 'open' && g !== 'none' && h.gestureTime > 0.25)) F.set(null);
+    if (F.form === 'blade' && (ctrl ? !h.btn.grip : (g === 'fist' || g === 'pinch') && h.gestureTime > 0.25)) F.set(null);
     if (F.form === 'drill' && (ctrl ? !h.btn.grip : g !== 'fist' && h.gestureTime > 0.25)) F.set(null);
-    // 칼날: 손날(손바닥을 옆으로) 유지
-    const knife = ctrl ? h.side === 'right' && h.btn.grip : g === 'open' && Math.abs(h.palmNormal.y) < 0.55 && h.speed < 1.0;
+    // 칼날: 검지·중지를 곧게 모아 세운 칼 손(손바닥을 옆으로) 유지 — 그냥 편 손으로는 바뀌지 않는다
+    const knife = ctrl ? h.side === 'right' && h.btn.grip : g === 'two' && Math.abs(h.palmNormal.y) < 0.6 && h.speed < 1.0;
     if (!F.form && this.held(h.side + 'blade', knife, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
     // 드릴: 주먹을 앞으로 겨눈다
     const aimFist = ctrl ? h.side === 'left' && h.btn.grip : g === 'fist' && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0 && h.palm.distanceTo(inp.head) > 0.22;

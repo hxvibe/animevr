@@ -184,10 +184,35 @@ function buildWhiteRoomGLB(ctx, src) {
   };
 }
 
+/** 패스스루(MR): 현실 방이 배경. 바닥엔 그림자만 받는 투명 판 */
+function buildPassthrough() {
+  const group = new THREE.Group();
+  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(60, 60).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.35 }));
+  catcher.position.y = 0.002;
+  catcher.receiveShadow = true;
+  group.add(catcher);
+  return {
+    id: 'passthrough',
+    passthrough: true,
+    bright: true,
+    group,
+    sky: new THREE.Group(),
+    fog: { color: 0xffffff, near: 900, far: 5000 },
+    hemi: { sky: 0xffffff, ground: 0x9a9aa2, intensity: 1.4 },
+    sun: { color: 0xffffff, intensity: 1.5, pos: [-6, 30, 10] },
+    exposure: 1,
+    capture: false,
+    shadows: true,
+    bounds: null,
+    spawn: new THREE.Vector3(0, 0, 0),
+  };
+}
+
 export const BACKGROUNDS = {
   white: { label: '하얀 방', build: buildWhiteRoom },
   city: { label: '도쿄 오피스가', build: buildCity },
   alley: { label: '뒷골목', build: buildAlley },
   shibuya: { label: '시부야', build: buildShibuya },
   shinjuku: { label: '신주쿠', build: buildShinjuku },
+  passthrough: { label: '패스스루 (현실)', build: buildPassthrough },
 };

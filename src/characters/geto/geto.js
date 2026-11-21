@@ -27,6 +27,7 @@ export class Geto {
   constructor(ctx) {
     this.ctx = ctx;
     this.id = 'geto';
+    this.ctrlNative = true; // 컨트롤러: 손 모델은 그리되 조작은 원래 컨트롤러 방식 (소환은 트리거)
     this.name = '게토 스구루';
     this.domainLabel = '극번 「渦」';
     this.reviveText = '쓰러졌다… 주령이 몸을 감싸 일으킨다';
@@ -817,7 +818,7 @@ export class Geto {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '주령 부르기', color: '#c8a0ff', text: '1 지네 · 2 큰코 · 3 데스웜 · 4 효수 · 5 쿠치사케온나 · 6 홍룡 · 7 타마모노마에 · 8~9 거둔 주령\n(조준한 대상을 노린다)' },
         { head: '흡수 · 소용돌이', color: '#ffd28a', text: 'E: 가장 가까운 주령구를 끌어와 삼키기 · Q 누르고 있다 떼기: 극번 「渦」' },
       ];

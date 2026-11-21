@@ -79,14 +79,14 @@ export class Sukuna {
         { head: '解(해) — 참격', demo: 'sukuna.dismantle', color: '#ff6a6a', text: '손을 펴고 빠르게 휘두르기. 휘두른 방향으로 참격이 날아감 (연속 가능)' },
         { head: '捌(팔) — 난도질', demo: 'sukuna.cleave', color: '#ff9a7a', text: '편 손으로 더미를 직접 건드리기. 약한 상대일수록 잘게 썰림' },
         { head: '竈 開(フーガ) — 화염', demo: 'sukuna.fuga', color: '#ffb050', text: '한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기' },
-        { head: '세계를 가르는 해', demo: 'sukuna.world', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 1.3초 유지(영창) → 그 손을 크게 휘두르기' },
+        { head: '세계를 가르는 해', demo: 'sukuna.world', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 다른 손 주먹으로 그 손목을 붙잡은 채 1.3초 (영창) → 편 손을 크게 휘두르기' },
         { head: '영역전개 「伏魔御廚子」', demo: 'sukuna.domain', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 손가락을 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
         { head: '잡기 · 흑섬', demo: 'common.grab', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
       ];
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '解 / 捌', color: '#ff6a6a', text: '좌클릭: 해 (누르고 있으면 연사, 마우스 움직임 방향으로 벰)\n우클릭: 조준한 2.5m 이내 더미에 팔' },
         { head: '竈 開', color: '#ffb050', text: 'F 길게 눌러 당기기 → 떼면 발사' },
         { head: '세계참 / 영역 / 흑섬', color: '#ff4040', text: 'G 1.3초 영창 후 좌클릭: 세계를 가르는 해 · Q 1초: 복마어주자 · V 주먹' },
@@ -98,7 +98,7 @@ export class Sukuna {
       { head: '竈 開(フーガ) — 화염', color: '#ffb050', text: '왼쪽 그립 유지 + 오른 컨트롤러를 왼손에 대고 트리거 → 뒤로 당겼다 놓기' },
       { head: '세계를 가르는 해', color: '#ffffff', text: 'A 버튼 1.3초 (영창) → 오른 컨트롤러를 크게 휘두르기' },
       { head: '영역전개 「伏魔御廚子」', color: '#ff4040', text: '양쪽 스틱을 눌러 1.5초 (메뉴에서도 발동)' },
-      { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · B 더미 소환 · Y 메뉴' },
+      { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · Y 메뉴' },
     ];
   }
 
@@ -143,6 +143,61 @@ export class Sukuna {
     this.worldCut.update(dt);
   }
 
+  // ───────────────── 그릇(메구미 · 유지)이 손가락을 먹었을 때 ─────────────────
+  /** 손님으로: 영역 수인·데스크톱 키 없이 손 술식만 (조작이 원래 컨트롤러 방식인 캐릭터는 B 로 정면 解) */
+  guestUpdate(dt) {
+    const { input: inp } = this.ctx;
+    this.energy = Math.min(this.maxEnergy, this.energy + 12 * dt);
+    for (const k in this._mangaCd) this._mangaCd[k] -= dt;
+    if (!this.ctx.ui.menuOpen) {
+      this._updateBow(dt);
+      for (const side of ['left', 'right']) {
+        const h = inp[side];
+        if (h.source === 'controller' && this.guest?.ctrlNative) {
+          const s = this.hand[side];
+          s.swipeCd -= dt;
+          if (side === 'right' && h.active && h.pressed('b') && s.swipeCd <= 0) {
+            s.swipeCd = 0.12;
+            this._dismantle(h, new THREE.Vector3(1, (Math.random() - 0.5) * 1.2, 0).applyQuaternion(inp.headQuat).normalize());
+          }
+          continue;
+        }
+        if (this.guest?.handBusy?.(side)) continue;
+        this._updateHand(side, dt);
+      }
+    }
+    this._updateSlashes(dt);
+    this._updateArrows(dt);
+    this._updatePending(dt);
+    this._updateDomain(dt);
+    this._updateScars(dt);
+    this.lines.bright = this.ctx.fx.brightBg;
+    this.lines.update(dt, inp.head);
+    this.handAura.update(dt);
+    this.shrine.update(dt);
+    this.worldCut.update(dt);
+  }
+
+  /** 그릇의 영역에 겹쳐 사당을 세운다 (배경·하늘은 그릇의 영역이 맡는다) */
+  guestDomain(center, dir, radius) {
+    this.shrine.guest = true;
+    this.shrine.radius = Math.min(radius, 30);
+    this.shrine.start(center, dir);
+    this.domain.t = 0;
+    this.domain.duration = 1e9; // 그릇의 영역이 끝날 때까지
+    this.domain.stopSlashes = false;
+    this.domain.radius = radius;
+    this.ctx.sfx.playClip('sukunaDomain', { vol: 0.8 });
+  }
+
+  guestStop(now = false) {
+    if (now) {
+      this.shrine.state = 'idle';
+      this.shrine.group.visible = false;
+    } else this.shrine.stop();
+    this.domain.radius = null;
+  }
+
   _slashBlockedFor(h) {
     return this.bow && (this.bow.draw === h.side || this.bow.bowSide === h.side);
   }
@@ -167,7 +222,10 @@ export class Sukuna {
     let chantPose;
     if (h.source === 'hand') {
       const fwd = _v.copy(inp.headDir).setY(0).normalize();
-      chantPose = h.gesture === 'open' && h.palmNormal.dot(fwd) > 0.5 && h.palm.distanceTo(inp.head) > 0.38 && h.palm.y > inp.head.y - 0.4 && h.speed < 0.9;
+      // 편 손바닥을 앞으로 뻗고, 다른 손 주먹으로 그 손목을 붙잡는다 (그냥 편 손만으로는 영창하지 않는다)
+      const o = side === 'left' ? inp.right : inp.left;
+      const brace = o.active && o.gesture === 'fist' && o.palm.distanceTo(h.palm) < 0.2;
+      chantPose = h.gesture === 'open' && brace && h.palmNormal.dot(fwd) > 0.5 && h.palm.distanceTo(inp.head) > 0.38 && h.palm.y > inp.head.y - 0.4 && h.speed < 0.9;
     } else chantPose = side === 'right' && h.btn.a;
     if (chantPose && s.armed <= 0 && !this.bow) {
       s.chant += dt;
@@ -851,16 +909,17 @@ export class Sukuna {
     if (d.t >= d.duration) {
       S.stop();
       d.cd = 10;
-      world.domain = null;
+      if (!this.guest) world.domain = null;
       this._stopMusic(2);
       return;
     }
     if (d.stopSlashes) return;
     const c = S.center;
+    const R = d.radius ?? S.radius;
     // 허공에 번뜩이는 무수한 참격
     for (let i = 0; i < 2; i++) {
       const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * S.radius * 0.8;
+      const r = Math.random() * R * 0.8;
       const p = new THREE.Vector3(c.x + Math.cos(a) * r, Math.random() * 4, c.z + Math.sin(a) * r);
       this.lines.add(p, _v.randomDirection(), _v2.randomDirection(), 1 + Math.random() * 4, 0.02 + Math.random() * 0.03, 0.12, Math.random() < 0.3 ? 0xff5050 : 0xffffff);
       if (Math.random() < 0.3) this._scar(p, _v.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(), 0.04, 1 + Math.random() * 3, 0x200000);
@@ -870,7 +929,7 @@ export class Sukuna {
     d.cutSfx -= dt;
     for (const t of world.targets()) {
       const tc = t.center(new THREE.Vector3());
-      if (tc.distanceTo(c) > S.radius) continue;
+      if (tc.distanceTo(c) > R) continue;
       const next = d.hitT.get(t) ?? 0;
       if (world.time < next) continue;
       d.hitT.set(t, world.time + 0.1 + Math.random() * 0.1);
@@ -887,7 +946,7 @@ export class Sukuna {
     // 조각들도 계속 썰려 나간다
     if (Math.random() < 0.15 && world.slicer.pieces.length) {
       const pc = world.slicer.pieces[Math.floor(Math.random() * world.slicer.pieces.length)];
-      if (pc.pivot.position.distanceTo(c) < S.radius) {
+      if (pc.pivot.position.distanceTo(c) < R) {
         if (pc.localPlanes.length < 3) world.slicer.sliceAgain(pc, new THREE.Plane().setFromNormalAndCoplanarPoint(_v.randomDirection(), pc.pivot.position), { sep: 0.6, radius: pc.radius * 0.7 });
         else world.slicer.shatterPiece(pc, 14);
       }
@@ -931,6 +990,6 @@ export class Sukuna {
     for (const s of this.scars) if (s.ember) scene.remove(s.ember);
     this.shrine.dispose();
     this.worldCut.dispose();
-    this.ctx.world.domain = null;
+    if (!this.guest) this.ctx.world.domain = null;
   }
 }

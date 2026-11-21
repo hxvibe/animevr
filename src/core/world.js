@@ -406,6 +406,8 @@ export class World {
     P.hp = Math.max(0, P.hp - amount);
     if (P.hp <= 0) {
       P.hp = P.maxHp;
+      // 캐릭터가 쓰러짐을 따로 다룰 수 있다 (예: 조복 전 마허라에게 쓰러지면 술사가 마허라가 된다)
+      if (this.ctx.character?.onPlayerDown?.(info)) return;
       this.ctx.ui.callout(this.ctx.character?.reviveText ?? '쓰러졌다… 반전술식으로 회복', { color: '#ff8a8a' });
     }
   }

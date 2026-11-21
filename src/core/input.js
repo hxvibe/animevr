@@ -270,7 +270,6 @@ export class Input {
       if (e.code === 'Tab') e.preventDefault();
       if (!this.keys.has(e.code)) {
         if (e.code === 'KeyH' || e.code === 'Tab') this.actions.toggleMenu = true;
-        if (e.code === 'KeyR') this.actions.quickSpawn = true;
       }
       this.keys.add(e.code);
     });
@@ -392,7 +391,7 @@ export class Input {
     CH.charId = this.ctx?.character?.id ?? null;
     if (L.emulated || R.emulated) {
       CH.build(dt, this._jointPos);
-      for (const h of this.hands) if (h.emulated && h.active) this._fromJoints(h, this._jointPos[h.side], dt, CH.gestureFor(h.side));
+      for (const h of this.hands) if (h.emulated && h.active && !h.native) this._fromJoints(h, this._jointPos[h.side], dt, CH.gestureFor(h.side));
     }
     for (const h of this.hands) if (!(h.emulated && h.active)) CH.hide(h.side);
 
@@ -416,7 +415,6 @@ export class Input {
 
     this._updateHandLoco(dt);
     if ((L.source === 'controller' || L.emulated) && (L.pressed('b') || L.pressed('menu'))) this.actions.toggleMenu = true; // Y / 메뉴
-    if ((R.source === 'controller' || R.emulated) && R.pressed('b')) this.actions.quickSpawn = true; // B
   }
 
   snapTurn(angle) {
@@ -464,18 +462,16 @@ export class Input {
     }
     if (this.ctrlAsHand) {
       // 손으로 다룬다: 손 모양·관절은 두 손을 다 읽은 뒤 CtrlHands 가 만든다
+      //  ctrlNative 캐릭터(게토 · 메구미)는 손 모델만 그리고 조작은 원래 컨트롤러 방식 그대로
       h.emulated = true;
-      h.source = 'hand';
-      const touched = (i) => !!(b[i]?.touched || b[i]?.pressed);
-      this.ctrlHands.sense(h, slot, {
-        grip: h.gripValue,
-        trigger: h.triggerValue,
-        triggerTouch: touched(0),
-        thumbTouch: touched(3) || touched(4) || touched(5) || touched(6),
-      });
-      return;
+      h.native = !!this.ctx?.character?.ctrlNative;
+      h.source = h.native ? 'controller' : 'hand';
+      this.ctrlHands.sense(h, slot, { grip: h.gripValue, trigger: h.triggerValue, thumbBtn: h.btn.a });
+      if (!h.native) return;
+    } else {
+      h.emulated = false;
+      h.native = false;
     }
-    h.emulated = false;
     // 컨트롤러도 대략적인 손 모양을 제공
     const g = h.btn.grip && h.btn.trigger ? 'fist' : h.btn.trigger ? 'point' : h.btn.grip ? 'fist' : 'open';
     this._setGesture(h, g, dt);

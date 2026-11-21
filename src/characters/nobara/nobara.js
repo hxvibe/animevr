@@ -11,7 +11,7 @@ import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { getModel, loadModel } from '../../core/assets.js';
 import { makeGlowSprite } from '../../core/fx.js';
-import { bodyOf } from '../../core/body.js';
+import { bodyOf, gripPoint } from '../../core/body.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -185,7 +185,27 @@ function nailGeometry() {
 }
 const nailMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.3 });
 
+// 못: 받은 못 모델(wpn_nail)을 +Z = 뾰족한 끝, 원점 = 못대가리로 맞춰 한 번 굽고 복제해 쓴다
+let _nailTpl;
 function makeNail() {
+  if (_nailTpl === undefined) {
+    _nailTpl = null;
+    const w = bakeWeapon('wpn_nail', { length: 0.125, grip: 0, faceZ: false, outline: 0.0015 });
+    if (w) {
+      const g = new THREE.Group();
+      w.rotation.x = -Math.PI / 2; // 머리(+Y) → -Z
+      w.position.z = w.userData.len; // 머리를 원점으로
+      g.add(w);
+      _nailTpl = g;
+    }
+  }
+  if (_nailTpl) {
+    const m = _nailTpl.clone(true);
+    m.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
+    return m;
+  }
   const m = new THREE.Mesh(nailGeometry(), nailMat);
   m.castShadow = true;
   return m;
@@ -271,7 +291,8 @@ class Hammer {
     const side = _v.crossVectors(this.axis, this.face).normalize();
     _m.makeBasis(side, this.axis, _v2.crossVectors(side, this.axis));
     this.g.quaternion.setFromRotationMatrix(_m);
-    this.g.position.copy(h.palm).addScaledVector(h.source === 'hand' ? h.palmNormal : UP, h.source === 'hand' ? 0.03 : 0);
+    if (h.source === 'hand') gripPoint(h, this.ctx.rig, this.g.position);
+    else this.g.position.copy(h.palm);
     if (this.swingK > 0) {
       // 데스크톱: 내리치는 동작 (손목을 앞으로 꺾는다)
       this.g.rotateOnAxis(_v.set(1, 0, 0), -Math.sin(this.swingK * Math.PI) * 1.3);
@@ -555,7 +576,7 @@ export class Nobara extends Caster {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '추령주법', color: '#8ab4ff', text: '1 못 띄우고 망치로 쏘기 · 2 簪 · 3 共鳴り · V 망치로 치기' },
       ];
     }
@@ -620,6 +641,8 @@ export class Nobara extends Caster {
     this.nails = this.nails.filter((n) => n.update(dt));
     for (const [t, time] of this.marked) if (!t.alive || this.ctx.world.time - time > 30) this.marked.delete(t);
     this.aura.set('right', this.hammer.k > 0.5 ? 0.25 + Math.min(0.6, this.hammer.speed * 0.08) : 0);
+    // 못을 쥔 왼손도 주력이 감싼다 (못에 주력을 싣는다)
+    this.aura.set('left', this.held.length ? 0.55 : 0);
     this.aura.update(dt);
   }
 

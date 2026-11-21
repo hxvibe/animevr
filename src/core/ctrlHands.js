@@ -7,7 +7,7 @@
 //  손 추적으로도 컨트롤러로도 만들 수 없는 수인(손가락 꼬기·깍지·마름모 …)은
 //  현실에서 비슷한 자세를 잡으면(두 손을 맞대기 등) 가상 손이 그 수인 모양으로 맞물린다 → 같은 판정으로 발동
 import * as THREE from 'three';
-import { DemoHand, SHAPES, demoPose, loadHandModels, mix, resolve } from './handDemo.js';
+import { DemoHand, SHAPES, demoPose, loadHandModels, resolve } from './handDemo.js';
 import { JOINT_NAMES } from './gestures.js';
 
 const _v = new THREE.Vector3();
@@ -16,13 +16,16 @@ const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 
-// 버튼 → 손 모양 (SHAPES 의 이름 + 판정에 쓰는 이름)
+// 버튼 → 손 모양 (누른 버튼만으로 정한다 · 버튼에 손가락이 닿았는지는 보지 않는다)
+//  아무것도 = 편 손 · 트리거 = 집기 · 그립 = 검지 · 그립+A(X) = 검지·중지
+//  그립+트리거 = 주먹 · 그립+트리거+A(X) = 엄지 세운 주먹
 function shapeOf(b) {
-  const thumb = b.thumbTouch;
-  if (b.grip > 0.55 && b.trigger > 0.55) return thumb || !b.touchKnown ? 'fist' : 'fistUp';
-  if (b.grip > 0.55) return thumb || !b.touchKnown ? 'point' : 'two';
-  if (b.trigger > 0.55) return thumb ? 'pinch' : 'hook';
-  return thumb ? 'flat' : 'open';
+  const g = b.grip > 0.55;
+  const t = b.trigger > 0.55;
+  if (g && t) return b.thumbBtn ? 'fistUp' : 'fist';
+  if (g) return b.thumbBtn ? 'two' : 'point';
+  if (t) return 'pinch';
+  return 'open';
 }
 
 // 판정용 이름 (gestures.js 의 결과와 같은 말)
@@ -59,11 +62,6 @@ export const CTRL_MUDRAS = {
   sukuna: [{ demo: 'sukuna.domain', test: (L, R, inp) => idxLike(L.shape) && idxLike(R.shape) && together(L, R, 0.2) && facing(L, R) && chest(inp, L, R) }],
   // 이타도리: 두 손(검지를 뗀 채)을 가슴 앞에서 맞대고 위로 → 깍지 + 검지 세우기
   itadori: [{ demo: 'itadori.domain', test: (L, R, inp) => idxLike(L.shape) && idxLike(R.shape) && together(L, R, 0.2) && L.F.y > 0.4 && R.F.y > 0.4 && chest(inp, L, R) }],
-  // 메구미: 두 주먹을 허리 아래에서, 팔을 앞으로 뻗어 맞댄다 / 가슴 높이면 마허라
-  megumi: [
-    { demo: 'megumi.domain', test: (L, R, inp) => fistLike(L.shape) && fistLike(R.shape) && together(L, R, 0.26) && rel(inp, mid(L, R)).drop > 0.6 && rel(inp, mid(L, R)).front > 0.28 },
-    { demo: 'megumi.mahoraga', test: (L, R, inp) => fistLike(L.shape) && fistLike(R.shape) && together(L, R, 0.22) && rel(inp, mid(L, R)).drop > 0.15 && rel(inp, mid(L, R)).drop <= 0.5 },
-  ],
   // 마히토: 편 두 손을 가슴 앞에서 맞대고 손끝을 위로 → 마름모
   mahito: [{ demo: 'mahito.domain', test: (L, R, inp) => openLike(L.shape) && openLike(R.shape) && together(L, R, 0.2) && L.F.y > 0.45 && R.F.y > 0.45 && chest(inp, L, R) }],
   // 죠고: 편 두 손 손끝을 서로 맞은편으로 엇갈려 (지붕)
@@ -86,17 +84,50 @@ function chest(inp, L, R) {
   return r.drop > 0.1 && r.drop < 0.6 && r.front > 0.1;
 }
 
-// 조작법: 컨트롤러로 수인을 맺는 법 (시연 이름 → 설명)
+// 조작법: 컨트롤러 버튼 범례 · 기술마다 무엇을 누르는지
+export const CTRL_LEGEND = '아무것도 안 누름 = 편 손 · 트리거 = 집기 · 그립 = 검지 · 그립+A(X) = 검지·중지\n그립+트리거 = 주먹 · 그립+트리거+A(X) = 엄지 세운 주먹\nY 메뉴 · 왼쪽 스틱 이동 · 오른쪽 스틱 회전';
+const N = '아무것도 누르지 않은';
 export const CTRL_HELP = {
-  'gojo.domain': '컨트롤러: 그립만 쥐고(검지를 떼고) 손을 얼굴 앞에 세우면 꼰 손가락으로 맞물린다 → 6초',
-  'gojo.purple': '컨트롤러: 그립 + 트리거를 쥐고 엄지를 버튼에서 뗀다 (검지·중지를 접고 엄지를 세운 모양)',
-  'sukuna.domain': '컨트롤러: 그립만 쥔(검지를 뗀) 두 손을 가슴~얼굴 앞에서 손바닥을 마주 대고 세운다',
-  'itadori.domain': '컨트롤러: 그립만 쥔 두 손을 가슴 앞에서 맞대고 위로 세운다',
-  'megumi.domain': '컨트롤러: 그립 + 트리거로 두 주먹 → 팔을 앞으로 뻗어 허리 아래에서 맞댄다',
-  'megumi.mahoraga': '컨트롤러: 두 주먹(그립 + 트리거)을 가슴 높이에서 맞댄다',
-  'mahito.domain': '컨트롤러: 아무것도 누르지 않은(편) 두 손을 가슴 앞에서 맞대고 손끝을 위로',
-  'jogo.domain': '컨트롤러: 편 두 손을 가슴 앞에서 손끝이 서로 엇갈리게 (지붕)',
-  'yuta.domain': '컨트롤러: 왼손 주먹(그립 + 트리거)을 턱 앞에, 편 오른손을 세워 그 앞에',
+  'sukuna.dismantle': `${N} 손으로 컨트롤러를 빠르게 휘두르기 → 휘두른 방향으로 참격 (연속 가능)`,
+  'sukuna.cleave': `${N} 손으로 적을 직접 건드리기`,
+  'sukuna.fuga': `한 손은 ${N} 채, 다른 손 트리거를 당겨 그 손 앞에서 활처럼 뒤로 당겼다가 트리거를 놓기`,
+  'sukuna.world': `오른손은 ${N} 채 앞으로 뻗고, 왼손 그립+트리거(주먹)로 오른 손목을 잡은 채 1.3초 (영창) → 오른손을 크게 휘두르기`,
+  'sukuna.domain': '두 손 모두 그립만 쥐고, 얼굴 앞에서 두 컨트롤러 옆면을 맞대 세워 1.5초',
+  'common.grab': '적에 대고 그립+트리거 → 잡기, 놓으면 던지기 · 그립+트리거로 빠르게 치면 흑섬',
+  'gojo.blue': '그립+A(X)로 앞을 가리키면 생성 → 버튼을 모두 놓으면 창이 손을 따라 멀리',
+  'gojo.red': '그립만 쥐어 충전 → 앞으로 찌르거나 버튼을 모두 놓으면 발사',
+  'gojo.switch': '창일 때 그립만 → 혁 · 혁일 때 그립+A(X) → 창 · 그립+트리거 → 사라짐',
+  'gojo.purple': '그립+트리거+A(X) (엄지 세운 주먹) → 창과 혁이 합쳐져 茈 → 버튼을 모두 놓거나 앞으로 밀어 발사',
+  'gojo.domain': '그립만 쥐고 컨트롤러를 얼굴 앞에 세워 6초 (손가락이 꼬인 수인으로 바뀐다)',
+  'gojo.infinity': `무하한: ${N} 두 손을 앞으로 1초 · 육안: 컨트롤러로 눈을 0.5초 가리기 · 잡기·흑섬: 그립+트리거`,
+  'itadori.punch': '그립+트리거로 쥐고 치기 → 한 박자 뒤 한 번 더 (2타)',
+  'itadori.blackflash': `${N} 채 휘두르다 닿기 직전에 그립+트리거 → 흑섬 확정`,
+  'itadori.cut': '그립+A(X)(가위 손)로 적을 건드리기',
+  'itadori.blood': `${N} 두 손을 맞대고 앞으로 0.5초 → 두 손을 떼면 발사`,
+  'itadori.domain': '두 손 모두 그립만 쥐고, 가슴 앞에서 맞대 위로 세워 1.5초',
+  'jogo.insects': '그립+트리거 → 앞으로 휙 던지며 모두 놓기',
+  'jogo.ray': '그립만(또는 그립+A(X))으로 가리키고 있기',
+  'jogo.head': `${N} 두 컨트롤러를 정수리에 0.4초`,
+  'jogo.erupt': `${N} 채 손바닥 쪽(컨트롤러 안쪽)을 아래로 해 빠르게 내리찍기`,
+  'jogo.purgatory': `${N} 두 손을 마주 보게 모았다가 앞으로 밀기`,
+  'jogo.meteor': `${N} 두 손을 머리 위로 높이 들고 1.5초`,
+  'jogo.domain': `${N} 두 손을 가슴 앞에서 컨트롤러 앞쪽이 서로 엇갈리게 1.2초`,
+  'yuta.sword': '왼쪽 허리 칼집의 손잡이에 오른 컨트롤러를 대고 그립+트리거 → 칼집 끝까지 뽑아야 빠진다 → 휘둘러 베기 · 왼손 그립으로 칼집을 잡을 수 있다 · 칼집에 다시 꽂고 놓으면 납도',
+  'yuta.rika': '왼손 그립+트리거(주먹)를 입술에 0.5초 → 리카 · 왼손 그립만으로 적을 가리키면 그 적에게',
+  'yuta.beam': `리카 현현 중: ${N} 두 손을 마주 보게 모았다가 앞으로 밀기`,
+  'yuta.speech': `${N} 손으로 입을 가렸다가 떼며 앞으로 내밀기`,
+  'yuta.domain': `왼손 그립+트리거(주먹)를 턱 앞에, 오른손은 ${N} 채 세워 그 앞에 1.2초`,
+  'nobara.hammer': '오른쪽 허리의 망치 손잡이에 대고 그립+트리거 → 휘둘러 치기 · 허리에 대고 놓으면 다시 찬다',
+  'nobara.nails': '왼쪽 허리 못 주머니에 대고 트리거 → 못 세 개 → 트리거를 놓으며 위로 띄우기 → 망치로 후려치기',
+  'nobara.kanzashi': `못이 박혀 있을 때: 왼손 ${N} 채 있다가 그립+트리거`,
+  'nobara.resonance': `왼손 ${N} 채 손바닥 쪽(컨트롤러 안쪽)을 하늘로 → 짚인형 → 망치로 내리치기`,
+  'mahito.touch': `${N} 손을 적에 0.2초 대기`,
+  'mahito.blade': '그립+A(X)(검지·중지)를 옆으로 세워 0.35초 → 칼날 → 휘둘러 베기',
+  'mahito.drill': '그립+트리거를 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르기',
+  'mahito.stretch': '그립만 쥐고 앞으로 빠르게 찌르기 → 팔이 늘어난다',
+  'mahito.launch': '그립+트리거를 입에 0.25초 → 앞으로 던지며 모두 놓기',
+  'mahito.repel': `${N} 두 손을 가슴 앞에서 맞대 0.4초 → 앞으로 밀기`,
+  'mahito.domain': `${N} 두 손을 가슴 앞에서 맞대고 위로 세워 1.2초`,
 };
 
 // 캐릭터별 한 손 모양 바꾸기 (예: 고죠는 그립+트리거에 엄지를 떼면 허식 「茈」 수인)
@@ -142,8 +173,6 @@ export class CtrlHands {
 
   /** 한 손의 컨트롤러 → 손 모양 (먼저 두 손 모두 이걸 부른다) */
   sense(h, slot, b) {
-    if (b.thumbTouch) this.touchKnown = true;
-    b.touchKnown = this.touchKnown;
     const S = this.state[h.side];
     // 손 방향: 조준 방향(-Z)이 손등에서 본 손가락 방향, 손바닥은 안쪽(오른손 -X / 왼손 +X)
     slot.controller.getWorldQuaternion(_q);
@@ -243,8 +272,15 @@ export class CtrlHands {
     if (S.snapK > 0 && S.mudra) {
       const dp = demoPose(S.mudra, side);
       if (dp) {
-        const target = this._stageToRig(dp);
-        pose = mix(pose, target, S.snapK);
+        // 손은 컨트롤러가 잡은 자리 그대로 — 손가락 모양만 수인으로 바뀐다
+        const e = S.snapK * S.snapK * (3 - 2 * S.snapK);
+        pose = {
+          ...pose,
+          c: pose.c.map((x, i) => x + (dp.c[i] - x) * e),
+          s: pose.s + (dp.s - pose.s) * e,
+          o: pose.o + (dp.o - pose.o) * e,
+          thumbUp: pose.thumbUp + ((dp.thumbUp ?? 0) - pose.thumbUp) * e,
+        };
       }
     }
     S.cur = pose;

@@ -10,7 +10,7 @@
 //      (해 · 주언 · 야곱의 사다리 중 무작위) / 수인: 손날을 펴 손등을 앞으로, 다른 손 주먹을 턱 앞에
 import * as THREE from 'three';
 import { cool } from '../../core/cooldown.js';
-import { bodyOf } from '../../core/body.js';
+import { bodyOf, gripPoint } from '../../core/body.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
@@ -118,7 +118,8 @@ class Katana {
     const side = _v3.crossVectors(this.dir, edge).normalize();
     _m.makeBasis(edge, side, this.dir);
     this.group.quaternion.setFromRotationMatrix(_m);
-    this.group.position.copy(h.palm).addScaledVector(N, 0.035);
+    // 자루는 손가락이 감싼 안쪽을 지난다
+    gripPoint(h, this.ctx.rig, this.group.position);
     this.group.scale.setScalar(Math.max(0.01, ease(this.k)));
     this.base.copy(this.group.position).addScaledVector(this.dir, BASE * this.k);
     this.tip.copy(this.group.position).addScaledVector(this.dir, TIP * this.k);
@@ -146,6 +147,22 @@ class Katana {
     A.needsUpdate = true;
     this.trailMesh.visible = true;
     return speed;
+  }
+
+  /** 칼집에 물린 채 뽑는/꽂는 중: 칼집 축 위에 고정 (손이 아니라 칼집이 칼의 방향을 정한다) */
+  setPose(pos, quat) {
+    this.k = 1;
+    this.group.visible = true;
+    this.group.position.copy(pos);
+    this.group.quaternion.copy(quat);
+    this.group.scale.setScalar(1);
+    this.dir.set(0, 0, 1).applyQuaternion(quat);
+    this.base.copy(pos).addScaledVector(this.dir, BASE);
+    this.tip.copy(pos).addScaledVector(this.dir, TIP);
+    this.prevTip.copy(this.tip);
+    this.tipVel.set(0, 0, 0);
+    this.trail.length = 0;
+    this.trailMesh.visible = false;
   }
 
   dispose() {
@@ -184,6 +201,16 @@ function sheathMesh() {
 }
 // 몸 기준: 칼집 입구 근처의 손잡이 가운데 · 칼끝 방향 (뒤·아래)
 const HILT = [-0.2, 0.02, -0.16];
+const HOLD_AT = 0.3; // 칼집을 쥐는 곳: 손잡이 원점에서 칼집 쪽으로
+const DRAW_LEN = TIP - BASE + 0.04; // 칼날이 칼집을 다 빠져나오는 거리
+/** 주먹을 꿰뚫는 축(엄지 쪽). 컨트롤러는 가리키는 방향 */
+function fistAxis(h, out) {
+  if (h.source === 'hand') {
+    out.crossVectors(h.fingersDir, h.palmNormal);
+    if (h.side === 'left') out.negate();
+  } else out.copy(h.dir);
+  return out.normalize();
+}
 const SHEATH_DIR = [0.18, -0.55, 1];
 class Sheath {
   constructor(ctx) {
@@ -198,10 +225,19 @@ class Sheath {
     this.flash = 0;
   }
 
-  update(dt, drawn) {
+  /** drawn: 칼이 칼집 밖(또는 뽑는 중) · hand: 칼집을 쥔 손 (없으면 허리춤) */
+  update(dt, drawn, hand = null) {
     const B = bodyOf(this.ctx).update(dt);
-    B.point(...HILT, this.hilt);
-    B.dir(...SHEATH_DIR, this.dir);
+    if (hand?.active) {
+      // 쥔 손: 주먹을 꿰뚫는 축이 칼집 방향, 손은 칼집 입구 바로 아래(코이구치)를 쥔다
+      fistAxis(hand, this.dir);
+      gripPoint(hand, this.ctx.rig, this.hilt).addScaledVector(this.dir, -HOLD_AT);
+      this.held = hand.side;
+    } else {
+      B.point(...HILT, this.hilt);
+      B.dir(...SHEATH_DIR, this.dir);
+      this.held = null;
+    }
     // 칼날 면은 위(칼등이 위)
     const side = _v.crossVectors(this.dir, UP).normalize();
     const edge = _v2.crossVectors(side, this.dir).normalize().negate();
@@ -776,6 +812,8 @@ export class Yuta extends Caster {
     this.charge = { on: false, t: 0, s: null };
     this._keys = {};
     this.mouthCover = 0;
+    this.draw = { by: null, free: false, s: 0, minS: 0 }; // 칼을 쥔 손 · 칼집 밖으로 다 나왔나 · 나온 거리
+    this.sheathBy = null; // 칼집을 쥔 손
     this.mega = new Megaphone(ctx);
     this.shell = new ShellDomain(ctx, {
       radius: 18,
@@ -841,7 +879,7 @@ export class Yuta extends Caster {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '왼쪽 허리춤 칼집에서 비스듬히 나온 손잡이에 손을 대고 주먹을 쥐면 칼이 뽑힌다 → 휘둘러 벤다 (칼끝이 빠를수록 깊게)\n아주 세게 휘두르면 칼날의 주력이 터져 검기가 날아간다 · 손을 펴면 칼이 칼집으로 돌아간다' },
+        { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '왼쪽 허리 칼집의 손잡이를 주먹으로 쥐고 칼집을 따라 끝까지 당겨 뽑는다 (덜 뽑고 놓으면 도로 들어감) · 다른 손으로 칼집을 쥘 수 있다\n휘둘러 벤다 (칼끝이 빠를수록 깊게) · 아주 세게 휘두르면 검기 · 칼끝을 칼집 입구에 대고 밀어 넣거나 손을 펴면 납도' },
         { head: '리카 현현', demo: 'yuta.rika', color: '#c8a0ff', text: '왼손 주먹(반지)을 입술에 0.5초 → 리카 완전현현, 곁에서 싸운다 (1분)\n왼손 검지로 적을 가리키면 그 적에게 · 다시 하면 돌려보낸다' },
         { head: '순애빔', demo: 'yuta.beam', color: '#ff7ac0', text: '리카 완전현현 중에: 두 손바닥을 마주 보게 모았다가 앞으로 밀기\n리카의 입에서 주력의 고출력 지향 방출 (오래 모을수록 굵다)' },
         { head: '주언 「動くな」', demo: 'yuta.speech', color: '#ffe080', text: '편 손바닥으로 입을 가렸다가 떼며 앞으로 내밀기 → 그 손에 확성기가 쥐어지고 외친다\n바라본 적들이 3초 동안 멈춘다 (특급은 절반)' },
@@ -851,7 +889,7 @@ export class Yuta extends Caster {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '기술', color: '#e0e8ff', text: 'E 누르고 있기: 칼 뽑기(마우스를 휙 돌려 베기) · F 리카 · 1 순애빔(누르고 떼기) · 2 주언 「動くな」 · Q 1.2초 영역전개' },
       ];
     }
@@ -886,7 +924,7 @@ export class Yuta extends Caster {
       this.swords = { left: new Katana(this.ctx, 'left'), right: new Katana(this.ctx, 'right') };
       this.sheath = new Sheath(this.ctx);
     }
-    this.sheath?.update(dt, !!this.drawnBy);
+    this.sheath?.update(dt, !!this.draw.by, this.sheathBy ? inp[this.sheathBy] : null);
     if (!this.swords) {
       // 칼 모델을 받는 중
     } else if (!ui.menuOpen) {
@@ -904,6 +942,95 @@ export class Yuta extends Caster {
     this.aura.update(dt);
   }
 
+  /**
+   * 칼집에서 뽑기 · 꽂기 (실제처럼)
+   *  손잡이를 쥐고 칼집 축을 따라 끝까지 당겨야 빠진다 — 덜 뽑고 손을 놓으면 도로 들어간다
+   *  뽑은 칼끝을 칼집 입구에 맞춰 밀어 넣으면 꽂힌다 (그냥 손을 펴도 칼집으로 돌아간다)
+   *  다른 손으로 칼집을 쥐면 칼집이 손을 따라온다
+   */
+  _drawLogic(h, S, fistNow, dt) {
+    const D = this.draw;
+    const sh = this.sheath;
+    const grip = gripPoint(h, this.ctx.rig, _v3);
+    const out = _v.subVectors(grip, sh.hilt).dot(sh.dir) * -1; // 칼집 밖으로 나온 거리
+    // 칼집 쥐기: 칼을 쥐지 않은 손으로 칼집 입구 아래를 주먹
+    if (D.by !== h.side) {
+      const mid = _v2.copy(sh.hilt).addScaledVector(sh.dir, HOLD_AT);
+      if (this.sheathBy === h.side && !fistNow) this.sheathBy = null;
+      else if (!this.sheathBy && fistNow && h.gestureTime < 0.5 && grip.distanceTo(mid) < 0.13) {
+        this.sheathBy = h.side;
+        this.ctx.sfx.play('click', { at: grip, vol: 0.4, rate: 0.9 });
+        h.pulse?.(0.3, 30);
+      }
+    }
+    if (!D.by) {
+      // 손잡이를 쥔다
+      if (this.sheathBy !== h.side && fistNow && (h.gestureTime < 0.5 || h.source === 'controller') && grip.distanceTo(sh.hilt) < 0.13) {
+        D.by = h.side;
+        D.free = false;
+        D.s = 0;
+        D.minS = 0;
+        this.ctx.sfx.play('click', { at: grip, vol: 0.7, rate: 0.55 });
+        h.pulse?.(0.5, 40);
+      }
+      return;
+    }
+    if (D.by !== h.side) return;
+    if (!D.free) {
+      // 칼집 축을 따라서만 움직인다
+      const prev = D.s;
+      D.s = THREE.MathUtils.clamp(out, 0, DRAW_LEN);
+      D.minS = Math.min(D.minS, D.s);
+      if (Math.abs(D.s - prev) > 0.01) this._scrape = (this._scrape ?? 0) + Math.abs(D.s - prev);
+      if (this._scrape > 0.12) {
+        this._scrape = 0;
+        this.ctx.sfx.play('click', { at: grip, vol: 0.2, rate: 1.6 + D.s });
+        h.pulse?.(0.15, 10);
+      }
+      // 손이 칼집 축에서 크게 벗어나면 놓친다
+      const off = _v2.copy(grip).sub(sh.hilt).addScaledVector(sh.dir, out).length();
+      if (!fistNow || off > 0.3) {
+        // 덜 뽑았거나(놓침) 다 꽂았다 → 칼집 속으로
+        D.by = null;
+        D.s = 0;
+        S.k = 0;
+        this.ctx.sfx.play('click', { at: sh.hilt, vol: 0.6, rate: 0.7 });
+        return;
+      }
+      if (D.s >= DRAW_LEN - 0.01 && D.minS < DRAW_LEN - 0.2) {
+        // 칼끝이 칼집을 빠져나왔다 — 「シャキン」
+        D.free = true;
+        S.k = 1;
+        this._sheatheT = 0;
+        this.ctx.sfx.whoosh(grip, 0.7, 1.8);
+        this.ctx.sfx.play('click', { at: grip, vol: 0.8, rate: 2.2 });
+        h.pulse?.(0.8, 70);
+      }
+      return;
+    }
+    // 뽑은 칼: 칼끝을 칼집 입구에 맞춰 칼집 방향으로 밀어 넣으면 다시 칼집에 물린다
+    const mouth = _v2.copy(sh.hilt).addScaledVector(sh.dir, BASE);
+    if (S.k > 0.9 && S.tip.distanceTo(mouth) < 0.09 && S.dir.dot(sh.dir) > 0.8) {
+      D.free = false;
+      D.s = DRAW_LEN - 0.02;
+      D.minS = D.s;
+      this.ctx.sfx.play('click', { at: mouth, vol: 0.5, rate: 1.4 });
+      h.pulse?.(0.4, 30);
+      return;
+    }
+    // 그냥 손을 펴면 칼은 칼집으로 돌아간다
+    if (!fistNow) {
+      this._sheatheT = (this._sheatheT ?? 0) + dt;
+      if (this._sheatheT > 0.15) {
+        D.by = null;
+        D.free = false;
+        D.s = 0;
+        S.k = 0;
+        this.ctx.sfx.play('click', { at: sh.hilt, vol: 0.6, rate: 0.7 });
+      }
+    } else this._sheatheT = 0;
+  }
+
   _hand(h, dt) {
     const inp = this.ctx.input;
     const S = this.swords[h.side];
@@ -916,28 +1043,14 @@ export class Yuta extends Caster {
     const nearFace = h.palm.distanceTo(inp.head) < 0.2;
     // 칼: 허리춤 칼집의 손잡이를 쥐면 뽑힌다 → 쥔 동안 손에. 손을 펴면 칼집으로 돌아간다 (데스크톱은 E)
     const fistNow = ctrl ? h.btn.grip : h.gesture === 'fist';
-    if (!desk && this.sheath) {
-      const grabAt = _v3.copy(h.palm);
-      if (!this.drawnBy && fistNow && h.palm.distanceTo(this.sheath.hilt) < 0.14 && (h.gestureTime < 0.4 || ctrl)) {
-        this.drawnBy = h.side;
-        this._sheatheT = 0;
-        this.ctx.sfx.play('click', { at: grabAt, vol: 0.7, rate: 0.55 });
-        this.ctx.sfx.whoosh(grabAt, 0.6, 1.6);
-        h.pulse?.(0.6, 60);
-        S.k = 1; // 칼집에서 그대로 뽑아 든다 (커지며 나타나지 않게)
-      }
-      if (this.drawnBy === h.side && !fistNow) {
-        this._sheatheT = (this._sheatheT ?? 0) + dt;
-        if (this._sheatheT > 0.15) {
-          this.drawnBy = null;
-          S.k = 0;
-          this.ctx.sfx.play('click', { at: this.sheath.hilt, vol: 0.6, rate: 0.7 });
-        }
-      } else if (this.drawnBy === h.side) this._sheatheT = 0;
-    }
-    let want = desk ? h.side === 'right' && inp.keyDown('KeyE') : this.drawnBy === h.side && fistNow && !(h.side === 'left' && nearFace);
+    if (!desk && this.sheath) this._drawLogic(h, S, fistNow, dt);
+    const D = this.draw;
+    const inSheath = !desk && D.by === h.side && !D.free; // 칼집에 물린 채 뽑는/꽂는 중
+    let want = desk ? h.side === 'right' && inp.keyDown('KeyE') : D.by === h.side && D.free && fistNow && !(h.side === 'left' && nearFace);
     if (this.charge.on || (this.mega.t > 0 && this.mega.side === h.side)) want = false;
-    const speed = S.update(dt, desk ? { ...h, source: 'controller', dir: _v.copy(inp.headDir).add(_v2.set(0, 0.2, 0)).normalize() } : h, want);
+    let speed = 0;
+    if (inSheath) S.setPose(_v.copy(this.sheath.hilt).addScaledVector(this.sheath.dir, -D.s), this.sheath.g.quaternion);
+    else speed = S.update(dt, desk ? { ...h, source: 'controller', dir: _v.copy(inp.headDir).add(_v2.set(0, 0.2, 0)).normalize() } : h, want);
     if (want && speed > 2.6) this._slash(S, speed);
     // 아주 세게 휘두르면 검기
     if (want && speed > 7 && S.k > 0.9 && (this.cds[h.side + 'qi'] ?? 0) <= 0 && this.energy > 12) {

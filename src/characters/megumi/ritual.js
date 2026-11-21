@@ -36,8 +36,10 @@ export const RITUAL = {
   end: 40.5,
 };
 
+// 울부짖는 늑대: 뒷다리를 접어 앉고 앞다리로 가슴을 받친 채 목을 하늘로 길게 뺀다
+export const HOWL = { pitch: -0.5, y: 0, thigh: -1.15, calf: 1.9, link: -0.9, arm: 0.5, fore: 0.05, neck: -0.6, head: -0.5, jaw: 0.55, tail: 0.5, spine: -0.1 };
 // 머리 날개(눈 자리의 두 쌍) · 턱 — 축과 각도는 모델 공간 기준
-export const WING = { axis: 'Z', down: 2.3, up: -0.3, grow: 1.4, jaw: 0.5 };
+export const WING = { axis: 'Z', down: 2.3, up: -0.3, grow: 4.2, jaw: 0.5 };
 
 // 번데기: 붕대처럼 감긴 결 · 먹선 · 속에서 비치는 빛 · 입 자리 찢김 · 위에서부터 풀림
 const COCOON_VERT = /* glsl */ `
@@ -230,6 +232,27 @@ export class MahoragaRitual {
     return t;
   }
 
+  /** 늑대의 울부짖는 자세 (k: 0 쉼 → 1 가장 크게 울부짖음) */
+  _howl(S, k) {
+    const H = HOWL;
+    const R = S.rig;
+    R.begin();
+    S.model.rotation.x = H.pitch;
+    S.model.position.y = H.y * S.scale;
+    for (const sd of ['L', 'R']) {
+      R.rot(`Bip002_${sd}_Thigh`, AX.X, H.thigh);
+      R.rot(`Bip002_${sd}_Calf`, AX.X, H.calf);
+      R.rot(`Bip002_${sd}_HorseLink`, AX.X, H.link);
+      R.rot(`Bip002_${sd}_UpperArm`, AX.X, H.arm);
+      R.rot(`Bip002_${sd}_Forearm`, AX.X, H.fore);
+    }
+    R.rot('Bip002_Spine', AX.X, H.spine);
+    R.rot('Bip002_Neck', AX.X, H.neck - 0.15 * k);
+    R.rot('Bip002_Head', AX.X, H.head - 0.15 * k);
+    R.rot('Bone015', AX.X, H.jaw * (0.4 + 0.6 * k));
+    for (const n of ['Bone017', 'Bone018', 'Bone019']) R.rot(n, AX.X, H.tail * 0.4);
+  }
+
   _spawnPack(key, x, z, h, frog) {
     const S = makeShiki(key, h, { outline: 0.018, toonShade: false });
     if (!S) return;
@@ -249,7 +272,7 @@ export class MahoragaRitual {
     const toMe = Math.atan2(-this.fwd.x, -this.fwd.z);
     const look = toMe + (frog ? (x < 0 ? 0.35 : -0.35) : x < 0 ? 0.9 : -0.9);
     S.root.quaternion.setFromAxisAngle(UP, look);
-    if (!frog) S.model.rotation.x = -0.45; // 앞을 들어 하늘로
+    if (!frog) this._howl(S, 0);
     else {
       // 두꺼비: 웅크려 앉은 자세 (가마와 같은 자세, 혀는 입속에)
       const R = S.rig;
@@ -304,8 +327,8 @@ export class MahoragaRitual {
         const s = 1 + Math.sin(t * 5 + P.phase) * 0.03;
         P.S.model.scale.setScalar(P.S.scale * s);
       } else {
-        // 울부짖을 때 고개를 더 치켜든다
-        P.S.model.rotation.x = -0.45 - Math.max(0, Math.sin(t * 0.9 + P.phase)) * 0.15;
+        // 울부짖을 때 고개를 더 치켜들고 입을 벌린다 (숨을 들이쉬었다가 길게)
+        this._howl(P.S, Math.max(0, Math.sin(t * 0.9 + P.phase)));
       }
     }
     // 번데기

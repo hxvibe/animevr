@@ -104,7 +104,7 @@ export class Gojo {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '蒼 / 赫', color: '#7fc4ff', text: '우클릭 유지: 창 (휠: 거리) · 좌클릭 충전 후 놓기: 혁' },
         { head: '茈', color: '#c89bff', text: 'E 유지 → 창·혁이 섞여 茈 완성 → E를 놓으면 발사' },
         { head: '無量空処 / 토글', color: '#e8f0ff', text: 'Q 6초: 영역전개 · I 무하한 · O 육안 · V 주먹(흑섬)' },
@@ -115,7 +115,7 @@ export class Gojo {
       { head: '술식반전 「赫」 — 척력', color: '#ff7a7a', text: '오른쪽 트리거로 충전 → 놓거나 앞으로 찌르면 발사' },
       { head: '허식 「茈」 — 소멸', color: '#c89bff', text: '창 + 혁 유지 상태로 두 컨트롤러를 맞대기 → 밀거나 트리거를 놓아 발사' },
       { head: '영역전개 「無量空処」', color: '#e8f0ff', text: '양쪽 스틱을 눌러 6초 (1초째부터 영창, 메뉴에서도 발동)' },
-      { head: '버튼', color: '#9fe8ff', text: 'X 무하한 · A 육안 · B 더미 소환 · Y 메뉴\n그립: 더미 잡기/던지기 · 그립 쥐고 휘둘러 치기 → 흑섬' },
+      { head: '버튼', color: '#9fe8ff', text: 'X 무하한 · A 육안 · Y 메뉴\n그립: 더미 잡기/던지기 · 그립 쥐고 휘둘러 치기 → 흑섬' },
     ];
   }
 

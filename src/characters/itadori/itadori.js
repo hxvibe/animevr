@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { cool } from '../../core/cooldown.js';
 import { HandAura } from '../../core/handAura.js';
+import { Vessel } from '../../core/vessel.js';
 import { CutMarks, BloodOrb, spawnBloodBeam, HometownDomain } from './vfx.js';
 
 const _v = new THREE.Vector3();
@@ -74,7 +75,7 @@ export class Itadori {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '주먹 · 흑섬', color: '#7fb0ff', text: '좌클릭: 조준한 2.6m 이내 더미를 친다 (경정권 2타, 확률적으로 흑섬)' },
         { head: '어주자 「解」', color: '#ff6070', text: '우클릭: 조준한 2.6m 이내 더미에 절취선 (영역 안에서는 거리 무관)' },
         { head: '穿血 / 영역', color: '#d0001a', text: 'C 길게 눌러 모으기 → 떼면 발사 · Q 1.5초: 영역전개' },
@@ -85,7 +86,7 @@ export class Itadori {
       { head: '어주자 「解」', color: '#ff6070', text: '컨트롤러를 더미에 대고 A/X 버튼 (영역 안에서는 겨누고 A/X)' },
       { head: '적혈조술 「穿血」', color: '#d0001a', text: '두 컨트롤러를 맞대고 양쪽 그립 유지 → 하나를 놓으면 발사' },
       { head: '영역전개', color: '#ffb070', text: '양쪽 스틱을 눌러 1.5초 (메뉴에서도 발동)' },
-      { head: '버튼', color: '#ffd0d0', text: 'B 더미 소환 · Y 메뉴' },
+      { head: '버튼', color: '#ffd0d0', text: 'Y 메뉴' },
     ];
   }
 
@@ -103,6 +104,7 @@ export class Itadori {
       { label: '흑섬', text: `연속 ${this.bf.streak} · 최고 ${this.bf.best}${zone}`, color: '#ff5060' },
       { label: '영역', text: dom },
       { label: '처치', text: `${w.kills}` },
+      ...(this.vessel ? [this.vessel.hudRow()] : []),
     ];
   }
 
@@ -113,6 +115,7 @@ export class Itadori {
     this.energy = Math.min(this.maxEnergy, this.energy + (this.bf.zone > 0 ? 20 : 13) * dt);
     for (const k in this._mangaCd) this._mangaCd[k] -= dt;
     this.bf.zone = Math.max(0, this.bf.zone - dt);
+    (this.vessel ??= new Vessel(this)).update(dt);
 
     // 주먹을 쥔 순간 기록 (흑섬 타이밍)
     for (const side of ['left', 'right']) {
@@ -513,15 +516,24 @@ export class Itadori {
   }
 
   cancelDomain() {
+    this.vessel?.cancelDomain();
     this.town.cancel();
     this.ctx.world.domain = null;
   }
 
-  handBusy() {
+  /** 지금 펼친 영역 (스쿠나의 손가락을 먹었으면 복마어주자가 겹친다) */
+  domainInfo() {
+    const T = this.town;
+    return T.state === 'active' ? { center: T.center, radius: T.radius } : null;
+  }
+
+  handBusy(side) {
+    if (side && this.vessel?.holds(side)) return true;
     return this.blood.charge > 0;
   }
 
   dispose() {
+    this.vessel?.dispose();
     this._endBlood();
     this.cancelDomain();
     this.aura.dispose();

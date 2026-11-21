@@ -142,12 +142,21 @@ function aoe(e, p, r, dmg, type = 'impact') {
 }
 
 const bonePos = (e, name, out = new THREE.Vector3()) => (e.rig?.bones[name] ? e.rig.bones[name].getWorldPosition(out) : null);
+// 모델을 아직 못 받아 기본 더미 몸으로 나온 적도 있다 → 관절이 없으면 몸 기준 대략 위치
+function approx(e, S, up, fwd, out) {
+  const sc = e.scale ?? 1;
+  const side = S === 'R' ? -1 : 1;
+  const yaw = e.yaw ?? 0;
+  const p = e.root?.position ?? e.pos ?? _v3.set(0, 0, 0);
+  return out.set(p.x + Math.sin(yaw) * fwd * sc + Math.cos(yaw) * 0.22 * side * sc, (p.y ?? 0) + up * sc, p.z + Math.cos(yaw) * fwd * sc - Math.sin(yaw) * 0.22 * side * sc);
+}
 function handPos(e, S, out = new THREE.Vector3()) {
-  const j = e.rig.J['hd' + S];
-  return j.getWorldPosition(out);
+  const j = e.rig?.J?.['hd' + S] ?? e['hand' + S];
+  return j ? j.getWorldPosition(out) : approx(e, S, 1.2, 0.35, out);
 }
 function footPos(e, S, out = new THREE.Vector3()) {
-  return e.rig.J['ft' + S].getWorldPosition(out);
+  const j = e.rig?.J?.['ft' + S];
+  return j ? j.getWorldPosition(out) : approx(e, S, 0.05, 0, out);
 }
 function fwdOf(e, out = new THREE.Vector3()) {
   return out.set(Math.sin(e.yaw), 0, Math.cos(e.yaw));

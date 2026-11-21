@@ -331,7 +331,7 @@ export class Jogo extends Caster {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '불', color: '#ff9a40', text: '1 화력충 · 2 열선(누르고 있기) · 3 화산두 · 4 분화 · 5 연옥(누르고 떼기) · 6 극번 「隕」 · Q 1.2초 영역전개' },
       ];
     }

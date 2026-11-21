@@ -2498,6 +2498,308 @@ export class MahoragaWheel {
 
 const RING_AXLE = new THREE.Vector3(0, 0.714, 0.7).normalize();
 
+// ───────────────── 마허라의 기술 ─────────────────
+//  자세 통로: J.(hips|spine).rotation.y 비틀기 · J.sh(L|R).rotation.x 팔 앞뒤(−가 앞/위) · .z 옆으로 들기
+//  J.el(L|R).rotation.x 팔꿈치(−가 굽힘) · J.hp(L|R).rotation.x 다리 앞뒤 · J.kn(L|R) 무릎 · G.lean 숙임 · G.bob 몸 높이 · G.lunge 앞으로
+const sm = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
+const crouch = (G, J, c) => {
+  // 두 무릎을 굽혀 무게를 낮춘다
+  J.hpL.rotation.x += 0.45 * c;
+  J.hpR.rotation.x += 0.35 * c;
+  J.knL.rotation.x += 0.9 * c;
+  J.knR.rotation.x += 0.95 * c;
+  G.anL -= 0.35 * c;
+  G.anR -= 0.4 * c;
+  G.bob -= 0.42 * c;
+  G.lean += 0.22 * c;
+};
+const MOVES = {
+  // 돌진 찌르기: 칼을 허리로 당겨 낮게 웅크렸다가 → 땅을 박차고 미끄러지듯 돌진하며 팔을 곧게 뻗어 찌른다
+  thrust: {
+    dur: 1.35,
+    cd: 3.5,
+    events: [[0.36, 'go'], [0.62, 'land']],
+    pose(e, k) {
+      const { J, G } = e;
+      const wind = sm(0, 0.34, k) * (1 - sm(0.36, 0.44, k));
+      const hit = sm(0.36, 0.46, k) * (1 - sm(0.72, 1, k));
+      crouch(G, J, wind * 0.8 + hit * 0.6);
+      J.shR.rotation.x = 0.7 * wind - 1.5 * hit;
+      J.shR.rotation.z = 0.25 * wind;
+      J.elR.rotation.x = -1.7 * wind - 0.05 * hit;
+      G.wrist = -0.5 * wind - 1.2 * hit;
+      J.shL.rotation.x = -0.9 * wind + 0.5 * hit;
+      J.shL.rotation.z = 0.2 * wind + 0.35 * hit;
+      J.elL.rotation.x = -0.4 * wind - 0.8 * hit;
+      J.spine.rotation.y = 0.65 * wind - 0.45 * hit;
+      J.hips.rotation.y = 0.3 * wind - 0.25 * hit;
+      J.hpL.rotation.x += 0.55 * hit;
+      J.hpR.rotation.x -= 0.6 * hit;
+      J.knR.rotation.x -= 0.5 * hit;
+      G.lean += 0.25 * hit - 0.1 * wind;
+      J.head.rotation.x = -0.15 * wind;
+    },
+    root(e, k, m, dt) {
+      // 돌진: 0.38~0.6 사이에 거리만큼 미끄러진다
+      const P = e.root.position;
+      const fwd = _v4.set(Math.sin(e.yaw), 0, Math.cos(e.yaw));
+      const total = Math.max(0, Math.min(m.dist - 1.8, 5.5));
+      const s = sm(0.38, 0.6, k);
+      const prev = m.s ?? 0;
+      P.addScaledVector(fwd, (s - prev) * total);
+      m.s = s;
+      if (k > 0.4 && k < 0.66) e._hitZone((c) => e._front(c, 4.3, 1.0), { dmg: 160, pdmg: 35, type: 'slash', push: fwd, force: 7 });
+      if (k > 0.38 && k < 0.6) {
+        e.ctx.fx.fire.smoke(_v3.copy(P).setY(0.1), _v2.set(0, 0.4, 0), { size0: 0.4, size1: 1.3, life: 0.7, shade: 0.6, lit: 0, opacity: 0.25, drag: 2, rise: 0.2 });
+        e._swordTrail();
+      }
+      void dt;
+    },
+    go(e) {
+      e.ctx.sfx.play('whoosh_3', { at: e.root.position, vol: 0.9, rate: 0.5 });
+      e.ctx.sfx.play('punch_2', { at: e.root.position, vol: 0.5, rate: 0.4 });
+    },
+    land(e) {
+      e.ctx.sfx.rumble(0.2, 0.3);
+    },
+  },
+  // 왼손 훅: 상체를 크게 감았다가 풀며 왼 주먹을 휘두른다 — 맞으면 멀리 날아간다
+  hook: {
+    dur: 1.05,
+    cd: 2.5,
+    events: [[0.42, 'impact']],
+    pose(e, k) {
+      const { J, G } = e;
+      const wind = sm(0, 0.34, k) * (1 - sm(0.36, 0.44, k));
+      const hit = sm(0.36, 0.46, k) * (1 - sm(0.66, 1, k));
+      crouch(G, J, 0.35 * wind + 0.3 * hit);
+      J.spine.rotation.y = -0.6 * wind + 0.75 * hit;
+      J.hips.rotation.y = -0.25 * wind + 0.35 * hit;
+      J.shL.rotation.x = 0.35 * wind - 1.35 * hit;
+      J.shL.rotation.z = 0.75 * wind + 0.45 * hit;
+      J.elL.rotation.x = -1.6 * wind - 0.6 * hit;
+      J.shR.rotation.x = -0.5 * wind + 0.4 * hit;
+      J.elR.rotation.x = -0.9 * wind - 0.4 * hit;
+      J.hpL.rotation.x += 0.45 * hit;
+      J.hpR.rotation.x -= 0.2 * hit;
+      G.lean += 0.18 * hit;
+      G.lunge = 0.4 * hit;
+      J.head.rotation.x = -0.1 * wind;
+    },
+    impact(e) {
+      const fwd = _v4.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)).clone();
+      const side = new THREE.Vector3(fwd.z, 0, -fwd.x).multiplyScalar(-0.6);
+      e._hitZone((c) => e._front(c, 3.4, 1.6), { dmg: 110, pdmg: 25, type: 'impact', push: fwd.add(side).normalize(), force: 11, up: 3 });
+      e.ctx.sfx.play('punch_3', { at: e.root.position, vol: 0.9, rate: 0.45 });
+      e.ctx.sfx.whoosh(e.root.position, 0.8, 0.5);
+    },
+  },
+  // 회전베기: 칼을 옆으로 뻗고 웅크렸다가 몸째 한 바퀴 돌며 주위를 쓸어버린다
+  spin: {
+    dur: 1.6,
+    cd: 5,
+    events: [[0.3, 'go']],
+    pose(e, k) {
+      const { J, G } = e;
+      const wind = sm(0, 0.28, k) * (1 - sm(0.3, 0.36, k));
+      const sweep = sm(0.3, 0.36, k) * (1 - sm(0.72, 0.95, k));
+      crouch(G, J, 0.7 * wind + 0.55 * sweep);
+      J.shR.rotation.z = 0.9 * wind + 1.35 * sweep;
+      J.shR.rotation.x = 0.3 * wind - 0.15 * sweep;
+      J.elR.rotation.x = -0.8 * wind - 0.05 * sweep;
+      G.wrist = -1.2 * sweep;
+      J.shL.rotation.z = 0.6 * sweep;
+      J.shL.rotation.x = -0.6 * wind - 0.3 * sweep;
+      J.elL.rotation.x = -1.2 * (wind + sweep);
+      J.spine.rotation.y = 0.9 * wind - 0.3 * sweep;
+      J.hips.rotation.y = 0.35 * wind;
+      G.lean += -0.1 * wind + 0.1 * sweep;
+    },
+    root(e, k, m) {
+      // 0.3~0.72 동안 한 바퀴
+      const s = sm(0.3, 0.72, k);
+      const prev = m.s ?? 0;
+      e.yaw += (s - prev) * Math.PI * 2;
+      e.root.quaternion.setFromAxisAngle(UP, e.yaw);
+      m.s = s;
+      if (k > 0.32 && k < 0.74) {
+        const P = e.root.position;
+        e._hitZone((c) => _v2.subVectors(c, P).setY(0).length() < 4.4 * e.growth, { dmg: 130, pdmg: 30, type: 'slash', push: _v2.subVectors(e.ctx.input.head, P).setY(0).normalize(), force: 6 });
+        e._swordTrail();
+      }
+    },
+    go(e) {
+      e.ctx.sfx.play('whoosh_3', { at: e.root.position, vol: 1, rate: 0.4 });
+      e.ctx.sfx.slash(e.root.position, 0.5);
+    },
+  },
+  // 짓밟기: 한 발을 높이 들었다가 내리찍어 땅을 울린다 (가까이 몰려 있으면)
+  stomp: {
+    dur: 1.2,
+    cd: 6,
+    events: [[0.45, 'impact']],
+    pose(e, k) {
+      const { J, G } = e;
+      const lift = sm(0, 0.38, k) * (1 - sm(0.4, 0.46, k));
+      const down = sm(0.4, 0.46, k) * (1 - sm(0.7, 1, k));
+      J.hpR.rotation.x = 1.25 * lift + 0.35 * down;
+      J.knR.rotation.x = 1.4 * lift + 0.2 * down;
+      G.anR = -0.4 * lift;
+      J.knL.rotation.x = 0.15 * lift + 0.55 * down;
+      G.roll = -0.08 * lift;
+      G.lean = -0.12 * lift + 0.3 * down;
+      G.bob = 0.08 * lift - 0.35 * down;
+      J.shL.rotation.z = 0.5 * lift;
+      J.shR.rotation.z = 0.4 * lift;
+      J.shL.rotation.x = -0.3 * lift + 0.3 * down;
+      J.shR.rotation.x = -0.4 * lift + 0.2 * down;
+      J.head.rotation.x = 0.25 * down;
+    },
+    impact(e) {
+      const P = e.root.position;
+      const at = e.M ? e.M.rig.pos('R_toe', new THREE.Vector3()) ?? P.clone() : P.clone();
+      at.y = 0.05;
+      e._hitZone((c) => _v2.subVectors(c, at).setY(0).length() < 3.6 * e.growth, { dmg: 90, pdmg: 25, type: 'impact', push: new THREE.Vector3(0, 0, 0), up: 6, force: 3 });
+      shockRing(e.ctx, at, 4.5);
+      e.ctx.sfx.explosion(at, 0.6);
+      e.ctx.sfx.rumble(0.6, 0.6);
+    },
+  },
+  // 도약 내려베기: 깊이 웅크렸다가 높이 뛰어올라 두 손으로 칼을 치켜들고 → 상대 앞에 떨어지며 내려벤다
+  leap: {
+    dur: 2.1,
+    cd: 7,
+    events: [[0.26, 'jump'], [0.66, 'slam']],
+    start(e, m) {
+      const fwd = _v4.set(Math.sin(e.yaw), 0, Math.cos(e.yaw));
+      m.from = e.root.position.clone();
+      m.to = m.goal.clone().addScaledVector(fwd, -2.2 * e.growth);
+    },
+    pose(e, k) {
+      const { J, G } = e;
+      const pre = sm(0, 0.24, k) * (1 - sm(0.26, 0.3, k));
+      const air = sm(0.26, 0.34, k) * (1 - sm(0.64, 0.67, k));
+      const slam = sm(0.64, 0.68, k) * (1 - sm(0.82, 1, k));
+      crouch(G, J, 1.1 * pre + 1.0 * slam);
+      J.shL.rotation.x = 0.8 * pre - 2.7 * air - 0.6 * slam;
+      J.shR.rotation.x = 0.9 * pre - 2.9 * air - 0.4 * slam;
+      J.elL.rotation.x = -0.3 * pre - 0.6 * air - 0.3 * slam;
+      J.elR.rotation.x = -0.2 * pre - 0.4 * air - 0.1 * slam;
+      G.wrist = 0.5 * air - 0.6 * slam;
+      J.hpL.rotation.x += 0.9 * air;
+      J.hpR.rotation.x += 0.5 * air;
+      J.knL.rotation.x += 1.3 * air;
+      J.knR.rotation.x += 1.0 * air;
+      G.lean += -0.15 * air + 0.45 * slam;
+      J.head.rotation.x = -0.25 * air + 0.2 * slam;
+    },
+    root(e, k, m) {
+      const s = sm(0.28, 0.66, k);
+      const P = e.root.position;
+      P.x = lerp(m.from.x, m.to.x, s);
+      P.z = lerp(m.from.z, m.to.z, s);
+      P.y = k > 0.28 && k < 0.66 ? Math.sin(((k - 0.28) / 0.38) * Math.PI) * 4.2 : 0;
+      e.faceTo(m.goal);
+    },
+    jump(e) {
+      const P = e.root.position;
+      e.ctx.sfx.play('punch_2', { at: P, vol: 0.8, rate: 0.3 });
+      e.ctx.sfx.whoosh(P, 1, 0.4);
+      for (let i = 0; i < 8; i++) e.ctx.fx.fire.smoke(_v3.copy(P).add(_v2.set((Math.random() - 0.5) * 2, 0.1, (Math.random() - 0.5) * 2)), _v2.set(0, 0.6, 0), { size0: 0.5, size1: 1.6, life: 1, shade: 0.6, lit: 0, opacity: 0.3, drag: 2, rise: 0.2 });
+    },
+    slam(e) {
+      const P = e.root.position.clone().setY(0);
+      const fwd = _v4.set(Math.sin(e.yaw), 0, Math.cos(e.yaw));
+      const at = P.clone().addScaledVector(fwd, 2.2 * e.growth);
+      e._hitZone((c) => _v2.subVectors(c, at).setY(0).length() < 4.2 * e.growth, { dmg: 170, pdmg: 40, type: 'slash', push: fwd.clone(), force: 8, up: 4 });
+      shockRing(e.ctx, at, 6);
+      e.ctx.fx.burst(at.clone().setY(0.2), 50, new THREE.Color(0x6a5a4a), 6, 0.08, 0.9, { up: 1, grav: 5 });
+      e.ctx.sfx.explosion(at, 1);
+      e.ctx.sfx.rumble(1, 0.8);
+      e.ctx.sfx.slash(at, 0.5);
+    },
+  },
+  // 검파: 멀리 있는 상대에게 칼을 내려그어 정(正)의 주력을 실은 참격을 날린다
+  wave: {
+    dur: 1.3,
+    cd: 5,
+    events: [[0.45, 'fire']],
+    pose(e, k) {
+      const { J, G } = e;
+      const wind = sm(0, 0.36, k) * (1 - sm(0.38, 0.46, k));
+      const follow = sm(0.38, 0.48, k) * (1 - sm(0.7, 1, k));
+      crouch(G, J, 0.3 * wind + 0.5 * follow);
+      J.shR.rotation.x = -2.8 * wind + 0.3 * follow;
+      J.shR.rotation.z = -0.4 * wind + 0.5 * follow;
+      J.elR.rotation.x = -0.8 * wind - 0.1 * follow;
+      G.wrist = 0.6 * wind - 0.6 * follow;
+      J.shL.rotation.x = -0.8 * wind + 0.3 * follow;
+      J.elL.rotation.x = -0.7 * wind - 0.4 * follow;
+      J.spine.rotation.y = 0.45 * wind - 0.5 * follow;
+      J.hips.rotation.y = 0.15 * wind - 0.2 * follow;
+      J.hpL.rotation.x += 0.45 * follow;
+      J.hpR.rotation.x -= 0.3 * follow;
+      G.lean += -0.12 * wind + 0.3 * follow;
+    },
+    fire(e) {
+      const fwd = new THREE.Vector3(Math.sin(e.yaw), 0, Math.cos(e.yaw));
+      const from = e.root.position.clone().setY(1.6 * e.growth).addScaledVector(fwd, 2);
+      swordWave(e, from, fwd);
+      e.ctx.sfx.slash(from, 0.7);
+      e.ctx.sfx.whoosh(from, 1, 0.6);
+    },
+  },
+};
+
+/** 땅을 울리는 충격파 고리 */
+function shockRing(ctx, at, r) {
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+  ring.position.copy(at).setY(0.06);
+  ctx.fx.addTransient(ring, 0.6, (k) => {
+    ring.scale.setScalar(0.3 + k * r);
+    ring.material.opacity = 0.8 * (1 - k);
+  }, () => {
+    ring.geometry.dispose();
+    ring.material.dispose();
+  });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    ctx.fx.fire.smoke(_v3.set(at.x + Math.cos(a) * 1.2, 0.1, at.z + Math.sin(a) * 1.2), _v2.set(Math.cos(a) * 2, 0.3, Math.sin(a) * 2), { size0: 0.4, size1: 1.5, life: 0.9, shade: 0.6, lit: 0, opacity: 0.28, drag: 2.5, rise: 0.15 });
+  }
+}
+
+/** 마허라의 검파: 세운 초승달 참격이 앞으로 날아가며 닿는 것을 벤다 */
+function swordWave(e, from, dir) {
+  const ctx = e.ctx;
+  const g = new THREE.Mesh(
+    new THREE.RingGeometry(1.6, 2.0, 32, 1, -Math.PI * 0.42, Math.PI * 0.84),
+    new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
+  );
+  g.position.copy(from);
+  g.lookAt(from.clone().add(dir));
+  g.rotateY(Math.PI / 2);
+  g.rotateZ(0.5);
+  const pos = from.clone();
+  const hit = new Set();
+  const m = { hitSet: hit };
+  ctx.fx.addTransient(g, 1.5, (k, dt) => {
+    pos.addScaledVector(dir, 16 * dt);
+    g.position.copy(pos);
+    g.material.opacity = 0.9 * (1 - k * k);
+    if (Math.random() < 0.5) ctx.fx.spawn(pos.clone().add(_v2.randomDirection().multiplyScalar(1.2)), _v3.copy(dir).multiplyScalar(2), new THREE.Color(0xffe8a0), 0.06, 0.3, 1.5, 0);
+    const prev = e.move;
+    e.move = m;
+    e._hitZone((c) => {
+      const rel = _v4.subVectors(c, pos);
+      return Math.abs(rel.dot(dir)) < 1.0 && rel.setY(0).length() < 2.2;
+    }, { dmg: 110, pdmg: 20, type: 'slash', push: dir, force: 5 });
+    e.move = prev;
+  }, () => {
+    g.geometry.dispose();
+    g.material.dispose();
+  });
+}
+
 export class Mahoraga extends Shiki {
   constructor(owner, inherit = null) {
     super(owner, { height: 4.6, riseDur: 2.2, sinkDur: 1.2, poolR: 2.6 });
@@ -2605,10 +2907,14 @@ export class Mahoraga extends Shiki {
     this.swingT = 0;
     this.swingCd = 0.5;
     this.idleT = 0;
-    this.hostile = false;
+    // 조복 전: 다른 무엇보다 먼저 술사를 노린다 (조복의 의식). 술사가 쓰러지면 술사가 마허라가 된다
+    this.hostile = !this.tamed;
     this.speed = 0;
     this.phase = 0;
-    this.life = 30;
+    this.life = this.tamed ? 30 : 1e9;
+    this.move = null; // 지금 하는 기술
+    this.moveCds = {};
+    this.moveCd = 0.8;
     this.wheelTarget = this.wheelAngle = (this.ad.turns * Math.PI) / 4;
   }
 
@@ -2806,37 +3112,47 @@ export class Mahoraga extends Shiki {
       this._legs(0, dt);
       return true;
     }
-    if (this.swingT > 0) {
-      this._swing(dt);
-      this._legs(0, dt);
+    if (this.hostile && !this.tamed && !this._announced) {
+      this._announced = true;
+      this.ctx.ui.callout('조복의 의식 — 마허라가 술사부터 노린다 · 쓰러뜨리면 조복, 쓰러지면 술사가 마허라가 된다', { color: '#ffb0b0', dur: 3.5 });
+    }
+    for (const k in this.moveCds) this.moveCds[k] -= dt;
+    if (this.move) {
+      this._runMove(dt);
       return true;
     }
-    if (!this.target || !this.target.alive || this.target.heldBy || this.target === this.tgt) {
-      this.target = this.owner.pickTarget(P, 40, false, (x) => x !== this.tgt);
+    if (this.swingT > 0) {
+      this._swing(dt);
+      this._pose(dt);
+      return true;
     }
-    const t = this.target;
+    // 상대 고르기: 조복 전이면 무조건 술사 (마허라가 된 뒤의 술사는 노리지 않는다)
+    let t = null;
     let goal = null;
     let reach = 2.3;
-    if (t) {
-      this.idleT = 0;
-      this.hostile = false;
-      goal = groundOf(t, _v);
-      reach = 2.1 + 0.3 * (t.scale ?? 1) + this.reach * 0.5;
-    } else {
-      this.idleT += dt;
-      if (this.tamed) {
-        // 조복된 마허라: 술사 곁을 지킨다
-        const side = _v.set(inp.head.x + Math.cos(this.yaw) * 2.8, 0, inp.head.z - Math.sin(this.yaw) * 2.8);
-        if (side.distanceTo(_v2.copy(P).setY(0)) > 1.2) goal = side;
-        reach = 0.6;
-      } else if (this.idleT > 2.5) {
-        // 조복되지 않은 식신: 싸울 상대가 없으면 술사에게 칼을 겨눈다
-        if (!this.hostile) {
-          this.hostile = true;
-          this.ctx.ui.callout('마허라가 술사를 노린다 — 같은 수인으로 돌려보내기', { color: '#ffb0b0' });
-        }
+    if (this.hostile && !this.tamed) {
+      if (!this.ctx.character?.possessed) {
+        t = this._playerTgt();
         goal = _v.copy(inp.head).setY(0);
         reach = 2.2 + this.reach;
+      }
+    } else {
+      if (!this.target || !this.target.alive || this.target.heldBy || this.target === this.tgt) {
+        this.target = this.owner.pickTarget(P, 40, false, (x) => x !== this.tgt);
+      }
+      t = this.target;
+      if (t) {
+        this.idleT = 0;
+        goal = groundOf(t, _v);
+        reach = 2.1 + 0.3 * (t.scale ?? 1) + this.reach * 0.5;
+      } else {
+        this.idleT += dt;
+        if (this.tamed) {
+          // 조복된 마허라: 술사 곁을 지킨다
+          const side = _v.set(inp.head.x + Math.cos(this.yaw) * 2.8, 0, inp.head.z - Math.sin(this.yaw) * 2.8);
+          if (side.distanceTo(_v2.copy(P).setY(0)) > 1.2) goal = side;
+          reach = 0.6;
+        }
       }
     }
     if (goal) {
@@ -2845,21 +3161,15 @@ export class Mahoraga extends Shiki {
       const want = Math.atan2(to.x, to.z);
       this.G.look = damp(this.G.look, THREE.MathUtils.clamp(Math.atan2(Math.sin(want - this.yaw), Math.cos(want - this.yaw)), -0.8, 0.8), 5, dt);
       this.faceTo(goal);
-      if (d > reach) {
-        move = 2.6;
+      this.moveCd -= dt;
+      const pick = t && this.moveCd <= 0 ? this._pickMove(d, reach, goal) : null;
+      if (pick) {
+        this._startMove(pick, goal, d);
+      } else if (d > reach) {
+        move = d > 9 ? 3.6 : 2.6; // 멀면 성큼성큼 뛴다
         P.addScaledVector(to.normalize(), Math.min(d - reach, move * dt));
-      } else {
-        this.swingCd -= dt;
-        if (this.swingCd <= 0) {
-          this.swingDur = SWING_DUR / this.swingRate;
-          this.swingT = this.swingDur;
-          this.swingCd = 0.9 / this.swingRate;
-          this._hit = false;
-          this.swingTarget = t;
-          this.ctx.sfx.play('whoosh_3', { at: P, vol: 0.8, rate: 0.55 });
-        }
       }
-    }
+    } else this.G.look = damp(this.G.look, Math.sin(this.breathT ?? 0) * 0.3, 1.5, dt); // 할 일이 없으면 주위를 둘러본다
     this.speed = damp(this.speed, move, 4, dt);
     this._legs(this.speed, dt);
     J.head.rotation.x = damp(J.head.rotation.x, 0.08, 4, dt);
@@ -2927,6 +3237,154 @@ export class Mahoraga extends Shiki {
     }
   }
 
+  /** 술사를 겨눌 때 쓰는 가짜 대상 */
+  _playerTgt() {
+    const inp = this.ctx.input;
+    return (this._pt ??= {
+      isPlayer: true,
+      alive: true,
+      scale: 1,
+      center: (o = new THREE.Vector3()) => o.copy(inp.head).add(_v4.set(0, -0.45, 0)),
+    });
+  }
+
+  /** 거리 · 주변에 맞춰 기술을 고른다 (기술마다 재사용 대기) */
+  _pickMove(d, reach, goal) {
+    const ok = (k) => (this.moveCds[k] ?? 0) <= 0;
+    const crowd = this._crowd(4.2);
+    const opts = [];
+    if (d <= reach + 0.3) {
+      opts.push(['slash', 3]);
+      if (ok('hook')) opts.push(['hook', 2]);
+      if (ok('spin') && crowd >= 2) opts.push(['spin', 4]);
+      if (ok('stomp')) opts.push(['stomp', 1.2]);
+    } else if (d < 7.5) {
+      if (ok('thrust')) opts.push(['thrust', 3]);
+    } else if (d < 18) {
+      if (ok('leap')) opts.push(['leap', 3]);
+      if (ok('wave')) opts.push(['wave', 2]);
+    }
+    if (!opts.length) return null;
+    let sum = opts.reduce((a, o) => a + o[1], 0) * Math.random();
+    for (const [k, w] of opts) if ((sum -= w) <= 0) return k;
+    return opts[0][0];
+  }
+
+  _crowd(r) {
+    const P = this.root.position;
+    let n = 0;
+    if (this.hostile && !this.tamed) {
+      if (_v4.copy(this.ctx.input.head).setY(0).distanceTo(_v3.copy(P).setY(0)) < r) n++;
+      for (const s2 of this.owner.list) if (s2 !== this && s2.hittable && s2.root.position.distanceTo(P) < r) n++;
+    } else for (const t of this.ctx.world.enemies()) if (t.alive && groundOf(t, _v4).distanceTo(_v3.copy(P).setY(0)) < r) n++;
+    return n;
+  }
+
+  _startMove(name, goal, d) {
+    this.moveCd = 0.6 / this.swingRate;
+    if (name === 'slash') {
+      // 기존 내려베기
+      this.swingDur = SWING_DUR / this.swingRate;
+      this.swingT = this.swingDur;
+      this._hit = false;
+      this.ctx.sfx.play('whoosh_3', { at: this.root.position, vol: 0.8, rate: 0.55 });
+      return;
+    }
+    const M = MOVES[name];
+    const dur = M.dur / Math.min(1.4, this.swingRate);
+    this.move = { name, M, t: 0, dur, k: 0, goal: goal.clone(), dist: d, start: this.root.position.clone(), hitSet: new Set(), ev: {} };
+    this.moveCds[name] = M.cd ?? 0;
+    M.start?.(this, this.move);
+  }
+
+  _runMove(dt) {
+    const m = this.move;
+    m.t += dt;
+    const k = Math.min(1, m.t / m.dur);
+    m.k = k;
+    const J = this.J;
+    const G = this.G;
+    // 매 프레임 자세를 새로 정한다 (기본 자세 위에 기술 자세)
+    for (const n of ['shL', 'shR']) J[n].rotation.set(0, 0, 0);
+    J.elL.rotation.x = J.elR.rotation.x = -0.2;
+    J.hpL.rotation.x = J.hpR.rotation.x = 0;
+    J.knL.rotation.x = J.knR.rotation.x = 0.06;
+    J.spine.rotation.y = J.hips.rotation.y = 0;
+    G.lean = G.bob = G.lunge = G.roll = G.wrist = G.anL = G.anR = 0;
+    m.M.pose(this, k, m, dt);
+    this._pose(dt);
+    if (m.M.root) m.M.root(this, k, m, dt);
+    for (const [at, name] of m.M.events ?? []) {
+      if (k >= at && !m.ev[name]) {
+        m.ev[name] = true;
+        m.M[name]?.(this, m);
+      }
+    }
+    if (k >= 1) {
+      m.M.end?.(this, m);
+      this.root.position.y = 0;
+      this.move = null;
+    }
+  }
+
+  /**
+   * 기술의 타격: test(점) 이 참인 곳의 적(조복 의식 중이면 술사·술사의 식신)에게
+   * o: { dmg, pdmg(술사에게), type, push(방향), up, plane }
+   */
+  _hitZone(test, o) {
+    const { world, fx, input: inp } = this.ctx;
+    const m = this.move;
+    let any = false;
+    if (this.hostile && !this.tamed) {
+      const ph = _v4.copy(inp.head).add(_v3.set(0, -0.5, 0));
+      if (!this.ctx.character?.possessed && !m?.hitSet.has('player') && test(ph)) {
+        m?.hitSet.add('player');
+        world.hitPlayer(o.pdmg ?? 30, { type: o.type ?? 'slash', src: this });
+        fx.burst(ph, 24, new THREE.Color(0xff3030), 3, 0.04, 0.4);
+        any = true;
+      }
+      for (const s2 of this.owner.list) {
+        if (s2 === this || !s2.hittable || m?.hitSet.has(s2) || !test(s2.aimPoint(_v4))) continue;
+        m?.hitSet.add(s2);
+        s2.hurt(o.dmg * 0.5, { type: o.type ?? 'slash' });
+        any = true;
+      }
+      if (!any && m && !m.missed) {
+        m.missed = true;
+        if (++this.misses >= 2) {
+          this.misses = 0;
+          this.ad.expose('evade');
+        }
+      } else if (any) this.misses = 0;
+      return any;
+    }
+    for (const t of world.enemies()) {
+      if (t.heldBy || t === this.tgt || m?.hitSet.has(t)) continue;
+      const c = t.center(new THREE.Vector3());
+      if (!test(c)) continue;
+      m?.hitSet.add(t);
+      const key = t.type ?? t.kind;
+      const a = this.adapt.get(key) ?? 0;
+      const dmg = o.dmg * (1 + a * 0.35) * this.growth;
+      const plane = o.plane ?? new THREE.Plane().setFromNormalAndCoplanarPoint(_v3.randomDirection(), c);
+      t.damage(dmg, { type: o.type ?? 'slash', plane: o.type === 'slash' ? plane : undefined, push: o.push?.clone().multiplyScalar(2), color: '#ffe0a0' });
+      if (o.push) t.impulse?.(o.push.clone().multiplyScalar(o.force ?? 4).add(_v4.set(0, o.up ?? 2, 0)), o.force ?? 4);
+      if (t.kind !== 'prop') this.ad.expose('atk:' + key);
+      fx.burst(c, 20, new THREE.Color(0xffffff), 4, 0.03, 0.3);
+      any = true;
+    }
+    return any;
+  }
+
+  /** 몸 앞쪽 부채꼴/띠 안인가 */
+  _front(c, range, half, behind = -0.3) {
+    const P = this.root.position;
+    const fwd = _v3.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    const rel = _v2.subVectors(c, P).setY(0);
+    const along = rel.dot(fwd);
+    return along > behind && along < range * this.growth && Math.abs(rel.x * fwd.z - rel.z * fwd.x) < half * this.growth;
+  }
+
   _swordTrail() {
     const tip = this.M ? this.M.rig.pos('R_sword_end', _v4) ?? this.M.rig.pos('R_sword', _v4) : this.sword?.getWorldPosition(_v4);
     if (!tip) return;
@@ -2951,7 +3409,7 @@ export class Mahoraga extends Shiki {
     if (this.hostile && !this.tamed) {
       // 조복 의식: 술사와 술사의 식신을 벤다. 빗나가면 피하는 패턴을 분석한다
       if (_v2.copy(inp.head).setY(0).distanceTo(_v4.copy(P).setY(0)) < (2.9 + this.reach) * this.growth) {
-        world.hitPlayer(30, { type: 'slash' });
+        world.hitPlayer(30, { type: 'slash', src: this });
         fx.burst(inp.head.clone().add(_v2.set(0, -0.3, 0)), 30, new THREE.Color(0xff3030), 3, 0.04, 0.4);
         this.misses = 0;
       } else if (++this.misses >= 2) {

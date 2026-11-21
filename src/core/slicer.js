@@ -117,6 +117,24 @@ export class Slicer {
     }
     const center = o.center ? o.center.clone() : new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
     const out = [];
+    // 바닥 충돌용 표본점: 모든 메시의 꼭짓점 일부 (obj 로컬 좌표) — 조각마다 남는 쪽만 골라 쓴다
+    const invObj = new THREE.Matrix4().copy(obj.matrixWorld).invert();
+    const all = [];
+    obj.traverse((m) => {
+      if (!m.isMesh || !m.geometry?.attributes?.position) return;
+      const n = m.geometry.attributes.position.count;
+      const step = Math.max(1, Math.ceil(n / 300));
+      for (let i = 0; i < n; i += step) {
+        const v = new THREE.Vector3();
+        try {
+          if (m.getVertexPosition) m.getVertexPosition(i, v);
+          else v.fromBufferAttribute(m.geometry.attributes.position, i);
+        } catch (_) {
+          v.fromBufferAttribute(m.geometry.attributes.position, i);
+        }
+        all.push(v.applyMatrix4(m.matrixWorld).applyMatrix4(invObj));
+      }
+    });
     for (const s of [1, -1]) {
       const clone = obj.clone(true);
       const matMap = new Map();
@@ -167,6 +185,7 @@ export class Slicer {
         color: o.color ?? 0xff3311,
         radius: o.radius ?? 0.3,
         grounded: false,
+        samples: pickSamples(all, localPlanes),
       };
       this._updatePlanes(piece);
       this.pieces.push(piece);
@@ -223,18 +242,71 @@ export class Slicer {
       if (forceFn) forceFn(p, dt);
       p.vel.y -= 9.8 * dt;
       p.pivot.position.addScaledVector(p.vel, dt);
-      if (p.pivot.position.y < p.radius * 0.6) {
-        p.pivot.position.y = p.radius * 0.6;
-        if (p.vel.y < 0) p.vel.y = -p.vel.y * 0.25;
-        p.vel.x *= Math.max(0, 1 - dt * 5);
-        p.vel.z *= Math.max(0, 1 - dt * 5);
-        p.spin.multiplyScalar(Math.max(0, 1 - dt * 5));
-      }
       _e.set(p.spin.x * dt, p.spin.y * dt, p.spin.z * dt);
       p.pivot.quaternion.multiply(_q.setFromEuler(_e));
+      if (p.wspin) {
+        const w = p.wspin.length();
+        if (w > 1e-4) p.pivot.quaternion.premultiply(_q.setFromAxisAngle(_v2.copy(p.wspin).divideScalar(w), w * dt));
+        p.wspin.multiplyScalar(Math.max(0, 1 - dt * 5));
+      }
+      // 바닥: 실제 남은 조각의 가장 낮은 점이 땅 위에 오도록 (조각이 땅에 박히지 않게)
+      let low = null;
+      if (p.samples?.length) {
+        p.pivot.updateMatrixWorld(true);
+        const mw = p.obj.matrixWorld;
+        let minY = Infinity;
+        for (const q of p.samples) {
+          _v2.copy(q).applyMatrix4(mw);
+          if (_v2.y < minY) {
+            minY = _v2.y;
+            low = _v.copy(_v2);
+          }
+        }
+        if (minY < 0) p.pivot.position.y -= minY;
+        else low = null;
+      } else if (p.pivot.position.y < p.radius * 0.6) {
+        p.pivot.position.y = p.radius * 0.6;
+        low = _v.copy(p.pivot.position).setY(0);
+      }
+      if (low) {
+        if (p.vel.y < 0) p.vel.y = -p.vel.y * 0.2;
+        if (Math.abs(p.vel.y) < 0.4) p.vel.y = 0;
+        // 마찰
+        p.vel.x *= Math.max(0, 1 - dt * 6);
+        p.vel.z *= Math.max(0, 1 - dt * 6);
+        // 넘어짐: 닿은 점을 축으로 무게중심이 아래로 가도록 돈다
+        const rx = p.pivot.position.x - low.x;
+        const rz = p.pivot.position.z - low.z;
+        p.wspin ??= new THREE.Vector3();
+        p.wspin.x += rz * 40 * dt;
+        p.wspin.z -= rx * 40 * dt;
+        p.spin.multiplyScalar(Math.max(0, 1 - dt * 6));
+        // 지면을 구르는 만큼만 미끄러진다
+        p.grounded = true;
+      }
       this._updatePlanes(p);
     }
   }
+}
+
+/** 남는 쪽(모든 절단면의 앞)에 있는 표본만, 최대 96개 */
+function pickSamples(all, planes) {
+  const keep = [];
+  for (const v of all) {
+    let ok = true;
+    for (const pl of planes) {
+      if (pl.distanceToPoint(v) < -0.002) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) keep.push(v);
+  }
+  if (keep.length <= 96) return keep;
+  const out = [];
+  const step = keep.length / 96;
+  for (let i = 0; i < 96; i++) out.push(keep[Math.floor(i * step)]);
+  return out;
 }
 
 export { MAX_PIECES };

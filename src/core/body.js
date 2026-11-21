@@ -53,3 +53,20 @@ export class BodyFrame {
 export function bodyOf(ctx) {
   return (ctx._body ??= new BodyFrame(ctx));
 }
+
+const _gj = ['middle-finger-phalanx-proximal', 'middle-finger-phalanx-intermediate', 'middle-finger-phalanx-distal', 'middle-finger-tip', 'ring-finger-phalanx-proximal', 'ring-finger-phalanx-intermediate', 'ring-finger-phalanx-distal', 'ring-finger-tip'];
+/**
+ * 쥔 손 안쪽(손가락이 감싼 구멍)의 중심 — 칼자루·망치 자루가 지나는 곳 (월드)
+ *  관절이 있으면 중지·약지 마디들의 가운데, 없으면 손바닥 앞 3.5cm
+ */
+export function gripPoint(h, rig, out) {
+  const J = h.joints;
+  if (J && J['middle-finger-tip']) {
+    out.set(0, 0, 0);
+    for (const n of _gj) out.add(J[n]);
+    out.multiplyScalar(1 / _gj.length);
+    rig.updateMatrixWorld();
+    return out.applyMatrix4(rig.matrixWorld);
+  }
+  return out.copy(h.palm).addScaledVector(h.palmNormal, 0.035);
+}

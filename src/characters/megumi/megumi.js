@@ -10,6 +10,8 @@ import { DivineDog, DogTotality, Nue, Toad, Orochi, MaxElephant, RabbitEscape, M
 import { SlashLines } from '../sukuna/vfx.js';
 import { preloadShikigami } from './models.js';
 import { MahoragaRitual } from './ritual.js';
+import { Vessel } from '../../core/vessel.js';
+import { MahoragaSelf } from './possess.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -35,6 +37,7 @@ export class Megumi {
   constructor(ctx) {
     this.ctx = ctx;
     this.id = 'megumi';
+    this.ctrlNative = true; // 컨트롤러: 손 모델은 그리되 조작은 원래 컨트롤러 방식 (소환은 트리거)
     this.name = '후시구로 메구미';
     this.domainLabel = '영역전개';
     this.reviveText = '쓰러졌다… 그림자 속에서 다시 일어선다';
@@ -138,7 +141,7 @@ export class Megumi {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '玉犬 옥견 · 鵺 누에', demo: ['megumi.dogs', 'megumi.nue'], color: '#a8b8ff', text: '옥견: 한 손 손날을 아래로 세워 네 손가락을 앞으로 곧게, 엄지만 위로 (개 머리와 귀)\n누에: 두 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 펴기 (엄지를 걸어도 OK)' },
+        { head: '玉犬 옥견 · 鵺 누에', demo: ['megumi.dogs', 'megumi.nue'], color: '#a8b8ff', text: '옥견: 두 손을 포개 손날을 세우고 네 손가락을 앞으로 곧게, 엄지를 세운다 (개 머리와 귀)\n누에: 두 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 펴기 (엄지를 걸어도 OK)' },
         { head: '蝦蟇 가마 · 脱兎 탈토', demo: ['megumi.toad', 'megumi.rabbits'], color: '#a8b8ff', text: '가마: 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다' },
         { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)' },
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
@@ -149,7 +152,7 @@ export class Megumi {
     }
     if (mode === 'desktop') {
       return [
-        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴 · R 더미 소환' },
+        { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
         { head: '식신', color: '#a8b8ff', text: '1 옥견 · 2 누에 · 3 가마 · 4 오로치 · 5 만상 · 6 탈토 · 7 관우 · 8 마허라\n(다시 누르면 돌려보내기 · 조준한 대상을 노린다)' },
         { head: '영역 / 주먹', color: '#6f86ff', text: 'Q 1.2초: 嵌合暗翳庭 · V 주먹' },
       ];
@@ -157,11 +160,12 @@ export class Megumi {
     return [
       { head: '식신 고르기 · 부르기', color: '#a8b8ff', text: '왼쪽 트리거: 식신 고르기 · 오른쪽 트리거: 부르기 (바라본 대상을 노린다)\n다시 부르면 돌려보내기' },
       { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: '양쪽 스틱을 눌러 1.2초 (메뉴에서도 발동)' },
-      { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · B 더미 소환 · Y 메뉴' },
+      { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · Y 메뉴' },
     ];
   }
 
   hudRows() {
+    if (this.possessed) return this.possessed.hudRows();
     const w = this.ctx.world;
     const d = this.domain;
     let dom = '준비';
@@ -183,6 +187,7 @@ export class Megumi {
     if (m) rows.push({ label: m.tamed ? '마허라' : '마허라 (조복 의식)', bar: m.hp / m.maxHp, color: '#ffd28a' });
     if (ad) rows.push({ label: m ? '적응' : '법진 적응', text: (ad.summary() || '—') + (ad.spin ? ' · 무한회전' : ''), color: '#ffe0a0' });
     if (this.ctx.input.hands.some((h) => h.source === 'controller')) rows.splice(3, 0, { label: '선택', text: SIGNS[ORDER[this.ctrlSel]].label, color: '#c0ccff' });
+    if (this.vessel) rows.push(this.vessel.hudRow());
     return rows;
   }
 
@@ -192,8 +197,12 @@ export class Megumi {
     const blocked = this.ctx.ui.menuOpen;
     this.energy = Math.min(this.maxEnergy, this.energy + 12 * dt);
     for (const k in this.cds) this.cds[k] -= dt;
+    if (this.possessed) {
+      // 술사가 마허라가 된 동안: 식신·수인 없이 마허라의 몸으로 싸운다
+      this.possessed.update(dt);
+    } else (this.vessel ??= new Vessel(this)).update(dt);
     this.domain.cd = Math.max(0, this.domain.cd - dt);
-    if (!blocked) {
+    if (!blocked && !this.possessed) {
       if (inp.left.source === 'hand' || inp.right.source === 'hand') this._updateSigns(dt);
       this._controller(dt);
       if (inp.mode === 'desktop') this._desktop(dt);
@@ -271,6 +280,8 @@ export class Megumi {
       const lt = J(L, 'thumb-tip');
       const rt = J(R, 'thumb-tip');
       if (li && ri && lt && rt && li.distanceTo(ri) < 0.055 && lt.distanceTo(rt) < 0.065 && (li.y + ri.y) / 2 - (lt.y + rt.y) / 2 > 0.03 && front(L) > 0.12) return 'toad';
+      // 옥견 (그림자 개): 두 손을 포개 손날을 세우고 네 손가락을 앞으로 (주둥이), 엄지를 세운다 (귀)
+      if (nf(L) && nf(R) && d < 0.13 && Math.abs(L.palmNormal.y) < 0.55 && Math.abs(R.palmNormal.y) < 0.55 && L.fingersDir.dot(fwd) > 0.5 && R.fingersDir.dot(fwd) > 0.5 && (thumbUp(L) || thumbUp(R)) && front(L) > 0.15) return 'dogs';
       // 누에 (그림): 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 편다
       //   엄지를 거는 원래 수인은 손가락이 가려 인식이 흔들리므로, 손목이 교차했는지로 본다
       if (nf(L) && nf(R) && d < 0.22 && facing(L) > 0.25 && facing(R) > 0.25) {
@@ -286,8 +297,6 @@ export class Megumi {
       this._signSide = h.side;
       // 탈토: 검지·중지를 토끼 귀처럼 세운다
       if (h.gesture === 'two' && h.dir.y > 0.7 && Math.abs(h.palm.y - head.y) < 0.35 && fr > 0.12) return 'rabbits';
-      // 옥견 (변형): 손날을 아래로 세우고 네 손가락을 앞으로 곧게 (개 주둥이), 엄지만 위로 (귀)
-      if (h.gesture === 'open' && Math.abs(h.palmNormal.y) < 0.5 && h.fingersDir.dot(fwd) > 0.6 && thumbUp(h) && fr > 0.15) return 'dogs';
       // 만상 (그림): 손등을 위로 하고 검지·중지를 아래로 늘어뜨린다 (코끼리 코)
       if ((h.gesture === 'two' || h.gesture === 'point') && h.dir.y < -0.55 && fr > 0.18 && h.palm.y < head.y - 0.15) return 'elephantT';
       // 오로치 (변형): 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 아래에 붙인다 (뱀 머리 · 입)
@@ -298,7 +307,7 @@ export class Megumi {
   }
 
   _signHands(id) {
-    if (this._signSide && (id === 'rabbits' || id === 'orochi' || id === 'dogs' || id === 'elephantT')) return [this._signSide];
+    if (this._signSide && (id === 'rabbits' || id === 'orochi' || id === 'elephantT')) return [this._signSide];
     return ['left', 'right'];
   }
 
@@ -343,8 +352,42 @@ export class Megumi {
     }
   }
 
-  handBusy() {
-    return this.sign.t > 0 || this.elephant.armed > 0;
+  /** 술사가 쓰러졌다: 조복 전 마허라에게 당했으면 술사가 마허라가 된다 */
+  onPlayerDown(info) {
+    if (this.possessed) {
+      this.possessed.exit('dead');
+      return true;
+    }
+    const m = info?.src;
+    if (m instanceof Mahoraga && !m.tamed && m.alive) {
+      const { fx, sfx } = this.ctx;
+      const c = m.aimPoint(new THREE.Vector3());
+      fx.burst(c, 60, new THREE.Color(0x0c0c12), 5, 0.08, 1, { spread: 1.2 });
+      for (let i = 0; i < 12; i++) fx.fire.smoke(c.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(1.2)), new THREE.Vector3(0, 0.8, 0), { size0: 0.5, size1: 1.8, life: 1.2, shade: 1, lit: 0, opacity: 0.35, drag: 2, rise: 0.4 });
+      sfx.play('whoosh_2', { at: c, vol: 0.8, rate: 0.5 });
+      m.destroy();
+      this.list = this.list.filter((s) => s !== m);
+      // 다른 식신들은 그림자로 돌아간다
+      for (const s of this.list) s.dismiss?.();
+      this.possessed = new MahoragaSelf(this, m);
+      return true;
+    }
+    return false;
+  }
+
+  /** 마허라가 된 동안의 주먹 */
+  meleeHit(target, pos, dir, speed, hand) {
+    return this.possessed ? this.possessed.meleeHit(target, pos, dir, speed, hand) : false;
+  }
+
+  handBusy(side) {
+    return this.sign.t > 0 || this.elephant.armed > 0 || (side && this.vessel?.holds(side));
+  }
+
+  /** 지금 펼친 영역 (스쿠나의 손가락을 먹었으면 복마어주자가 겹친다) */
+  domainInfo() {
+    const G = this.garden;
+    return G.state === 'active' ? { center: G.center, radius: G.radius } : null;
   }
 
   // ───────────────── 컨트롤러 / 데스크톱 ─────────────────
@@ -655,6 +698,7 @@ export class Megumi {
   }
 
   cancelDomain() {
+    this.vessel?.cancelDomain();
     this.domain.chant?.voice?.stop(0.2);
     this.domain.chant = null;
     this.domainCasting = false;
@@ -663,6 +707,8 @@ export class Megumi {
   }
 
   dispose() {
+    this.possessed?.exit('back');
+    this.vessel?.dispose();
     this.ritual?.cancel();
     this.ritual = null;
     for (const s of this.list) s.destroy();

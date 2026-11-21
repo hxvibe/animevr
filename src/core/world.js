@@ -1,5 +1,7 @@
 // 시뮬레이터 월드: 더미 · 소품(파괴 가능) · 더미 탄환 · 절단 조각 · 파편 · 플레이어 상태
 import * as THREE from 'three';
+const _cm = new THREE.Vector3();
+const _cp = new THREE.Vector3();
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Dummy, DUMMY_TYPES } from './dummy.js';
 import { RiggedEnemy } from './enemies.js';
@@ -287,6 +289,7 @@ export class World {
 
   // ── 소품 ──
   addProp(obj, opts) {
+    obj.traverse((o) => (o.userData.noCollide = true)); // 움직이는 소품은 고정물 상자가 아니다 (소품 충돌로 따로)
     const p = new Prop(this, obj, opts);
     obj.traverse((o) => {
       if (o.isMesh) {
@@ -410,6 +413,82 @@ export class World {
       // 캐릭터가 쓰러짐을 따로 다룰 수 있다 (예: 조복 전 마허라에게 쓰러지면 술사가 마허라가 된다)
       if (this.ctx.character?.onPlayerDown?.(info)) return;
       this.ctx.ui.callout(this.ctx.character?.reviveText ?? '쓰러졌다… 반전술식으로 회복', { color: '#ff8a8a' });
+    }
+  }
+
+  /**
+   * 원(바닥 xz) 충돌: pos 를 벽(경계) · 고정물 · 소품 밖으로 민다 (사람 · 적이 물체를 통과하지 못하게)
+   *  가벼운 소품(상자·콘)은 밀려나고, 무거운 소품(차)은 버틴다. 반환: 밀린 양(xz)
+   */
+  collideActor(pos, r, { height = 1.7, push = true } = {}) {
+    const ox = pos.x;
+    const oz = pos.z;
+    const env = this.ctx.env;
+    for (const b of env.colliders ?? []) {
+      if (b.maxY < pos.y + 0.15) continue; // 위로 넘어갈 만큼 낮다
+      const cx = THREE.MathUtils.clamp(pos.x, b.minX, b.maxX);
+      const cz = THREE.MathUtils.clamp(pos.z, b.minZ, b.maxZ);
+      let dx = pos.x - cx;
+      let dz = pos.z - cz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      if (d2 < 1e-8) {
+        // 상자 속: 가장 가까운 면으로
+        const pen = [pos.x - b.minX, b.maxX - pos.x, pos.z - b.minZ, b.maxZ - pos.z];
+        const k = pen.indexOf(Math.min(...pen));
+        if (k === 0) pos.x = b.minX - r;
+        else if (k === 1) pos.x = b.maxX + r;
+        else if (k === 2) pos.z = b.minZ - r;
+        else pos.z = b.maxZ + r;
+        continue;
+      }
+      const d = Math.sqrt(d2);
+      pos.x = cx + (dx / d) * r;
+      pos.z = cz + (dz / d) * r;
+    }
+    for (const p of this.props) {
+      if (!p.alive || p.held) continue;
+      const pc = p.pos;
+      const top = pc.y + (p.halfH ?? p.radius);
+      if (top < pos.y + 0.2 || pc.y - (p.halfH ?? p.radius) > pos.y + height) continue;
+      let dx = pos.x - pc.x;
+      let dz = pos.z - pc.z;
+      const R = r + p.radius * 0.85;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= R * R) continue;
+      const d = Math.sqrt(d2) || 1e-4;
+      if (d2 < 1e-8) dx = 1;
+      const over = R - d;
+      const light = !p.fixed && p.mass < 4 && push;
+      const share = light ? 0.35 : 1;
+      pos.x += (dx / d) * over * share;
+      pos.z += (dz / d) * over * share;
+      if (light) {
+        // 가벼운 소품은 밀린다
+        pc.x -= (dx / d) * over * (1 - share);
+        pc.z -= (dz / d) * over * (1 - share);
+        p.asleep = false;
+        p.restT = 0;
+      }
+    }
+    const B = env.bounds;
+    if (B) {
+      pos.x = THREE.MathUtils.clamp(pos.x, B.minX + r, B.maxX - r);
+      pos.z = THREE.MathUtils.clamp(pos.z, B.minZ + r, B.maxZ - r);
+    }
+    return _cm.set(pos.x - ox, 0, pos.z - oz);
+  }
+
+  /** 플레이어: 머리(몸통) 위치가 벽·물체에 들어가면 리그를 밀어낸다 (걸어도, 실제로 움직여도) */
+  collidePlayer() {
+    const inp = this.ctx.input;
+    if (!this.ctx.character || inp.mode === 'none') return;
+    _cp.copy(inp.head);
+    _cp.y = Math.max(0, inp.head.y - 1.6);
+    const d = this.collideActor(_cp, 0.25, { height: 1.8 });
+    if (d.lengthSq() > 1e-10) {
+      this.ctx.rig.position.x += d.x;
+      this.ctx.rig.position.z += d.z;
     }
   }
 

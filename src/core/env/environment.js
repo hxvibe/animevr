@@ -50,6 +50,8 @@ export class Environment {
     this.id = bg.id;
     this.scene.add(bg.group, bg.sky);
     this.bounds = bg.bounds;
+    // 고정된 물체(기둥·나무·자판기·벤치…): 배경이 직접 주지 않으면 바닥에 선 작은 메시들의 상자로 만든다
+    this.colliders = bg.colliders ?? autoColliders(bg.group, bg.bounds);
     this.base = {
       fog: { color: new THREE.Color(bg.fog.color), near: bg.fog.near, far: bg.fog.far },
       hemi: { sky: new THREE.Color(bg.hemi.sky), ground: new THREE.Color(bg.hemi.ground), intensity: bg.hemi.intensity },
@@ -129,4 +131,34 @@ export class Environment {
       this.sun.target.updateMatrixWorld();
     }
   }
+}
+
+/**
+ * 바닥에 선 작은 물체들의 xz 상자 (사람·적이 통과하지 못하게)
+ *  바닥에 닿아 있고(아래 0.6m 안), 키가 0.35m 넘고, 바닥 면적이 너무 크지 않은(벽·건물·땅 제외) 메시만
+ */
+function autoColliders(group, bounds) {
+  const out = [];
+  const box = new THREE.Box3();
+  const m4 = new THREE.Matrix4();
+  group.updateMatrixWorld(true);
+  const add = (b) => {
+    const w = b.max.x - b.min.x;
+    const d = b.max.z - b.min.z;
+    if (b.min.y > 0.6 || b.max.y - b.min.y < 0.35 || w * d > 30 || w > 9 || d > 9 || w * d < 0.004) return;
+    if (bounds && (b.max.x < bounds.minX - 1 || b.min.x > bounds.maxX + 1 || b.max.z < bounds.minZ - 1 || b.min.z > bounds.maxZ + 1)) return;
+    out.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, maxY: b.max.y });
+  };
+  group.traverse((o) => {
+    if (!o.isMesh || o.userData.noCollide || !o.geometry) return;
+    if (o.material?.transparent && (o.material.opacity ?? 1) < 0.6) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    if (o.isInstancedMesh) {
+      for (let i = 0; i < Math.min(o.count, 400); i++) {
+        o.getMatrixAt(i, m4);
+        add(box.copy(o.geometry.boundingBox).applyMatrix4(m4.premultiply(o.matrixWorld)));
+      }
+    } else add(box.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
+  return out.length > 600 ? out.slice(0, 600) : out;
 }

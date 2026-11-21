@@ -345,6 +345,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 1 / 30);
   const inp = ctx.input;
   guard('input', () => inp.update(dt));
+  guard('collide', () => ctx.world.collidePlayer());
 
   if (inp.mode === 'none') {
     idleT += dt;

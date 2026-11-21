@@ -111,10 +111,9 @@ export class Slicer {
    */
   slice(obj, plane, o = {}) {
     obj.updateMatrixWorld(true);
-    if (this.pieces.length >= MAX_PIECES) {
-      this.shatter.emit(o.center ?? obj.getWorldPosition(_v), 40, o.color ?? 0xff3311, { spread: 0.5 });
-      return [];
-    }
+    // 조각이 너무 많으면 가장 오래된 것부터 파편으로 흩어 자리를 만든다
+    //  (예전엔 그냥 돌아가서, 자르려던 원본(죽은 더미)이 장면에 그대로 남아 사라지지 않았다)
+    while (this.pieces.length >= MAX_PIECES - 1) this.shatterPiece(this.pieces[0], 8);
     const center = o.center ? o.center.clone() : new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
     const out = [];
     // 바닥 충돌용 표본점: 모든 메시의 꼭짓점 일부 (obj 로컬 좌표) — 조각마다 남는 쪽만 골라 쓴다

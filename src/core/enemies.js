@@ -1049,12 +1049,16 @@ const FB_SLING = {
           p.y = 0.05;
         }
         if (life <= 0) {
-          W.ctx.scene.remove(blob);
-          blob.geometry.dispose();
-          blob.material.dispose();
+          this.dispose();
           return false;
         }
         return true;
+      },
+      dispose() {
+        if (!blob.parent) return;
+        W.ctx.scene.remove(blob);
+        blob.geometry.dispose();
+        blob.material.dispose();
       },
     });
   },
@@ -1257,6 +1261,7 @@ export class RiggedEnemy extends Dummy {
   }
 
   _dispose() {
+    this._cancel(); // 하던 기술이 만든 것(빔·덩어리 등)도 치운다
     super._dispose();
     for (const f of this.fxs) f.dispose?.();
     this.fxs = [];

@@ -1,14 +1,15 @@
 // 마히토 — 「無為転変(무위전변)」 영혼의 형태를 바꾸면 몸이 따라 바뀐다
 //  · 맨손바닥으로 상대를 만지면 영혼을 비틀어 개조 인간으로 (변형한 손이나 주먹으로는 발동하지 않는다)
 //  · 자기 몸은 마음대로: 손날을 세우면 칼날 팔 · 주먹을 앞으로 겨누면 드릴 팔 · 검지로 찌르면 팔이 늘어난다
-//  · 다중혼 「撥体(발체)」: 두 손바닥을 맞댔다가 밀면 뭉친 영혼 덩어리가 튀어나간다
+//  · 개조 인간 스톡: 몸속에 체스 말만 하게 줄여 넣어 둔 개조 인간을 입에서 꺼내 던지면 풀려나 벌레 같은 개조 인간이 된다
+//  · 다중혼 「撥体(발체)」: 스톡 8개를 꺼내 두 손 사이에 모아 영혼을 합친다 → 밀면 8마리가 한 덩어리로 꼬여 튀어나간다
 //  · 영역전개 「自閉円頓裹(자폐원돈과)」: 손으로 가득한 영역 — 안의 모든 영혼에 무위전변이 필중
 import * as THREE from 'three';
-import { cool } from '../../core/cooldown.js';
+import { cool, coolLeft } from '../../core/cooldown.js';
 import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
-import { TransfiguredWorm } from '../../core/transfigured.js';
+import { TransfiguredWorm, StockPiece, MergedWorms } from '../../core/transfigured.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -330,6 +331,8 @@ export class Mahito extends Caster {
     this.forms = { left: new HandForm(ctx), right: new HandForm(ctx) };
     this.arms = { left: new StretchArm(ctx), right: new StretchArm(ctx) };
     this.effects = [];
+    this.stocks = { left: null, right: null, desk: null }; // 손에 쥔 개조 인간 스톡
+    this.stockFx = [];
     this.twists = [];
     this.cuts = new Map(); // 같은 대상을 한 번 휘두를 때 한 번만
     this.touchCd = 0;
@@ -405,6 +408,8 @@ export class Mahito extends Caster {
     }
     this.effects = this.effects.filter((e) => e.update(dt));
     this.worms = (this.worms ?? []).filter((w) => w.update(dt));
+    this.stockFx = this.stockFx.filter((S) => S.update(dt));
+    this._tickIsomer(dt);
     this.twists = this.twists.filter((t) => t.update(dt));
     if (this.runDomain(this.shell, dt)) this._domainTick(dt);
     this.aura.update(dt);
@@ -451,44 +456,83 @@ export class Mahito extends Caster {
     }
     if (this.held(h.side + 'touch', !!touching, dt, ctrl ? 0.05 : 0.2)) this.transfigure(touching, h);
     if (touching) this.aura.set(h.side, 0.3 + this.holdK(h.side + 'touch', 0.2) * 0.7);
-    // 개조인간 발사: 주먹을 입에 대 0.25초 (몸속의 개조인간을 꺼낸다) → 앞으로 던진다
-    const mouth = _v.copy(inp.head).add(_v2.set(0, -0.09, 0)).addScaledVector(inp.headDir, 0.05);
+    // 개조 인간 스톡: 주먹을 입에 대 0.25초 → 입에서 스톡(체스 말만 한 개조 인간)을 꺼내 쥔다 → 던지면 풀려난다
+    const mouth = this.mouthPos(_v);
     const ak = h.side + 'pull';
+    const S = this.stocks[h.side];
     if (ctrl) {
-      if (h.side === 'left' && h.pressed('a')) this.launchWorm(h.palm, inp.headDir);
+      // 왼쪽 A 를 누르면 입에서 꺼내 쥐고, 떼면 던진다 (1.5초 넘게 쥐고 있으면 저절로)
+      if (h.side === 'left' && h.pressed('a') && !S) this.pullStock(h);
+      if (S && S.state !== 'thrown' && (!h.btn.a || S.t > 1.5)) this.throwStock(h, _v2.copy(inp.headDir).multiplyScalar(11).addScaledVector(h.vel, 0.5).add(_v3.set(0, 1.2, 0)));
     } else {
-      if (this.held(ak, g === 'fist' && h.palm.distanceTo(mouth) < 0.14, dt, 0.25)) {
-        this.cds[ak + 'Armed'] = 1.5;
-        h.pulse?.(0.4, 40);
-        this.ctx.sfx.play('grab', { at: h.palm, vol: 0.5, rate: 1.4 });
+      if (!S && this.held(ak, g === 'fist' && h.palm.distanceTo(mouth) < 0.14, dt, 0.25)) {
+        if (this.pullStock(h)) h.pulse?.(0.4, 40);
       }
-      if ((this.cds[ak + 'Armed'] ?? 0) > 0) {
-        this.cds[ak + 'Armed'] -= dt;
-        this.aura.set(h.side, 0.5);
-        if (Math.random() < 0.3) this.ctx.fx.spawn(h.palm, _v2.set(0, 0.2, 0), SOUL, 0.03, 0.3, 1, 0);
-        if (h.palm.distanceTo(mouth) > 0.2 && h.vel.dot(inp.headDir) > 2.0) {
-          this.cds[ak + 'Armed'] = 0;
-          this.launchWorm(h.palm, h.vel.clone().normalize().add(inp.headDir).normalize());
+      if (S && S.state !== 'thrown') {
+        this.aura.set(h.side, 0.4);
+        // 입에서 떼고 앞으로 휘두르면 손을 떠난다 (3초 안에 안 던지면 도로 삼킨다)
+        if (h.palm.distanceTo(mouth) > 0.2 && h.vel.dot(inp.headDir) > 2.0) this.throwStock(h, _v2.copy(h.vel).multiplyScalar(1.3).addScaledVector(inp.headDir, 4));
+        else if (S.t > 3) {
+          S.dispose();
+          this.stocks[h.side] = null;
         }
       }
     }
+    if (S && !S.alive) this.stocks[h.side] = null;
   }
 
-  /** 개조인간을 쏜다 */
-  launchWorm(from, dir) {
-    if ((this.cds.worm ?? 0) > 0 || !cool(this.ctx, 'worm', 2.5, '개조인간') || !this.spend(12)) return;
-    this.cds.worm = 0.6;
+  /** 입 (스톡을 꺼내는 곳) */
+  mouthPos(out) {
     const inp = this.ctx.input;
-    const t = this.gazeTarget(inp.head, inp.headDir, 0.35, 25, false) ?? this.gazeTarget(from, dir, 0.4, 25, false);
-    const w = new TransfiguredWorm(this.ctx, from.clone().addScaledVector(dir, 0.15), { owner: 'player', target: t, dir, dmg: 70 });
-    if (!w.ok) {
-      this.energy += 12;
-      this.ctx.ui.callout('개조인간 모델을 불러오는 중…');
-      return;
-    }
+    return out.copy(inp.head).add(_v3.set(0, -0.09, 0)).addScaledVector(inp.headDir, 0.07);
+  }
+
+  /** 입에서 스톡을 하나 꺼내 손에 쥔다 */
+  pullStock(h) {
+    if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
+    const hp = new THREE.Vector3();
+    const S = new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null));
+    this.stocks[h.side] = S;
+    this.stockFx.push(S);
+    this.ctx.ui.callout('개조 인간 스톡 — 입에서 꺼냈다', { color: '#b088d8', dur: 1 });
+    return S;
+  }
+
+  /** 쥔 스톡을 던진다 → 풀려나 벌레 같은 개조 인간이 되어 바라본 적을 문다 */
+  throwStock(h, vel) {
+    const S = this.stocks[h.side];
+    if (!S) return;
+    this.stocks[h.side] = null;
+    S.throw(vel, (pos, dir) => this._releaseWorm(pos, dir), 0.18);
+  }
+
+  _releaseWorm(pos, dir) {
+    const inp = this.ctx.input;
+    const t = this.gazeTarget(inp.head, inp.headDir, 0.35, 25, false) ?? this.gazeTarget(pos, dir, 0.4, 25, false);
+    const w = new TransfiguredWorm(this.ctx, pos, { owner: 'player', target: t, dir: dir.lengthSq() > 0.1 ? dir : inp.headDir, dmg: 70, grow: true });
+    if (!w.ok) return;
     (this.worms ??= []).push(w);
     this.ctx.ui.manga({ main: '改造人間', ruby: 'かいぞうにんげん', color: '#c8c4bc', dur: 0.8 });
-    this.ctx.sfx.whoosh(from, 0.8, 0.9);
+  }
+
+  /** 데스크톱: 입에서 스톡을 꺼내 잠깐 쥐었다가 앞으로 던진다 */
+  launchWorm(from, dir) {
+    if (this.stocks.desk) return;
+    const inp = this.ctx.input;
+    const hold = new THREE.Vector3();
+    const S = (() => {
+      if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
+      return new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => hold.copy(inp.head).addScaledVector(inp.headDir, 0.4).add(_v2.set(0, -0.15, 0)).addScaledVector(_v3.crossVectors(inp.headDir, UP).normalize(), 0.15));
+    })();
+    if (!S) return;
+    this.stocks.desk = S;
+    this.stockFx.push(S);
+    this.ctx.ui.callout('개조 인간 스톡 — 입에서 꺼냈다', { color: '#b088d8', dur: 1 });
+    this.later(0.35, () => {
+      this.stocks.desk = null;
+      S.throw(_v.copy(dir).multiplyScalar(11).add(_v2.set(0, 1.5, 0)), (pos, d) => this._releaseWorm(pos, d), 0.18);
+    });
+    void from;
   }
 
   /** 영혼을 만졌다 */
@@ -563,32 +607,85 @@ export class Mahito extends Caster {
     let together = false;
     if (ok && L.source === 'hand' && R.source === 'hand') together = L.palm.distanceTo(R.palm) < 0.09 && L.palmNormal.dot(R.palmNormal) < -0.5 && L.gesture !== 'fist' && R.gesture !== 'fist' && L.fingersDir.y < 0.7;
     else if (ok && L.source === 'controller') together = L.btn.grip && R.btn.grip && L.palm.distanceTo(R.palm) < 0.15;
-    if (this.held('repelArm', together, dt, 0.4)) {
-      this._repelArmed = 1.2;
+    if (this.held('repelArm', together, dt, 0.4) && !this._isomer) {
+      // 입에서 스톡 8개를 꺼내 두 손 사이로 모은다
+      const mid = new THREE.Vector3();
+      this._gatherIsomer(() => (L.active && R.active ? mid.lerpVectors(L.palm, R.palm, 0.5) : null), 1.6);
       L.pulse?.(0.5, 40);
       R.pulse?.(0.5, 40);
     }
-    if (this._repelArmed > 0) {
-      this._repelArmed -= dt;
+    const I = this._isomer;
+    if (I && !I.auto) {
       this.aura.set('left', 0.7);
       this.aura.set('right', 0.7);
       const push = (L.vel.dot(inp.headDir) + R.vel.dot(inp.headDir)) / 2;
-      if (push > 1.5) {
-        this._repelArmed = 0;
-        this.bodyRepel();
-      }
+      if (push > 1.5 && I.t > 0.2) this.bodyRepel();
     }
   }
 
+  /** 다중혼: 스톡 8개를 입에서 꺼내 한 점(hold) 둘레로 모은다 (영혼을 합치는 중). life 초 안에 밀지 않으면 삼킨다 */
+  _gatherIsomer(hold, life, auto = false) {
+    if (this._isomer) return this._isomer;
+    if (coolLeft(this.ctx, 'repel') > 0) return cool(this.ctx, 'repel', 7, '撥体'), null;
+    if (this.energy < 25) return null;
+    const I = { stocks: [], t: 0, life, auto, hold };
+    for (let i = 0; i < 8; i++) {
+      const o = new THREE.Vector3();
+      const a = (i / 8) * Math.PI * 2;
+      const S = new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => {
+        const c = hold();
+        if (!c) return null;
+        // 둘레를 돌며 점점 한데 뭉친다
+        const r = 0.09 * Math.max(0.25, 1 - I.t * 0.8);
+        const ang = a + I.t * 7;
+        return o.set(Math.cos(ang) * r, Math.sin(ang * 1.3) * 0.03, Math.sin(ang) * r).add(c);
+      }, { scale: 0.8 });
+      S.t = -i * 0.03; // 하나씩 줄줄이 나온다
+      I.stocks.push(S);
+    }
+    this._isomer = I;
+    this.ctx.ui.callout('다중혼 — 개조 인간 8명의 영혼을 합친다', { color: '#b8a8a4', dur: 1.4 });
+    this.ctx.sfx.play('grab', { at: hold() ?? this.ctx.input.head, vol: 0.7, rate: 0.8 });
+    return I;
+  }
+
+  _tickIsomer(dt) {
+    const I = this._isomer;
+    if (!I) return;
+    I.t += dt;
+    for (const S of I.stocks) S.update(dt);
+    const c = I.hold();
+    if (c && Math.random() < 0.4) this.ctx.fx.spawn(c, _v2.set(rnd(-0.2, 0.2), rnd(0, 0.2), rnd(-0.2, 0.2)), SOUL, 0.03, 0.3, 1, 0);
+    if (I.auto && I.t > 0.45) this.bodyRepel();
+    else if (!c || I.t > I.life) {
+      for (const S of I.stocks) S.dispose();
+      this._isomer = null;
+    }
+  }
+
+  /** 다중혼 「撥体」: 모은 스톡 8개의 영혼을 합쳐 한 덩어리로 내뿜는다 (스톡을 아직 안 모았으면 먼저 꺼내 모은다) */
   bodyRepel() {
-    if (!cool(this.ctx, 'repel', 7, '撥体') || !this.spend(25)) return;
     const inp = this.ctx.input;
-    const from = inp.head.clone().add(_v.set(0, -0.3, 0)).addScaledVector(inp.headDir, 0.5);
-    this.effects.push(new BodyRepel(this.ctx, from, inp.headDir, 11, (t) => {
+    if (!this._isomer) {
+      const p = new THREE.Vector3();
+      this._gatherIsomer(() => p.copy(inp.head).add(_v3.set(0, -0.3, 0)).addScaledVector(inp.headDir, 0.4), 2, true);
+      return;
+    }
+    if (!cool(this.ctx, 'repel', 7, '撥体') || !this.spend(25)) return;
+    const I = this._isomer;
+    this._isomer = null;
+    const from = (I.hold() ?? inp.head.clone().add(_v.set(0, -0.3, 0)).addScaledVector(inp.headDir, 0.5)).clone();
+    for (const S of I.stocks) {
+      this.ctx.fx.burst(S.mesh.position, 6, new THREE.Color(0x8a5ab0), 2, 0.03, 0.3);
+      S.dispose();
+    }
+    const onHit = (t) => {
       t.damage(65, { type: 'impact', dir: inp.headDir.clone() });
       t.impulse?.(_v.copy(inp.headDir).multiplyScalar(11).add(_v2.set(0, 4, 0)), 6);
-    }));
-    this.ctx.ui.manga({ main: '撥体', ruby: 'ばったい', color: '#b8a8a4' });
+    };
+    const M = new MergedWorms(this.ctx, from, inp.headDir, { len: 11, onHit });
+    this.effects.push(M.ok ? M : new BodyRepel(this.ctx, from, inp.headDir, 11, onHit));
+    this.ctx.ui.manga({ main: '多重魂 撥体', ruby: 'たじゅうこん ばったい', color: '#b8a8a4' });
   }
 
   // ───── 영역전개 ─────
@@ -670,6 +767,9 @@ export class Mahito extends Caster {
       this.arms[s].dispose();
     }
     for (const w of this.worms ?? []) w.dispose();
+    for (const S of this.stockFx ?? []) S.dispose();
+    for (const S of this._isomer?.stocks ?? []) S.dispose();
+    this._isomer = null;
     this.aura.dispose();
   }
 }

@@ -337,6 +337,7 @@ const _T = new THREE.Vector3();
 const _U = new THREE.Vector3();
 const _X = new THREE.Vector3();
 const _M = new THREE.Matrix4();
+const _S = new THREE.Vector3();
 export function layChain(chain, pts, up) {
   const n = chain.length;
   if (!chain._order) {
@@ -364,7 +365,7 @@ export function layChain(chain, pts, up) {
     _X.crossVectors(_U, _T).normalize();
     _M.makeBasis(_X, _U, _T);
     _q.setFromRotationMatrix(_M).multiply(b.userData.bindRel);
-    chain._target[k].compose(pts[k], _q, b.userData.worldScale);
+    chain._target[k].compose(pts[k], _q, chain._k != null && chain._k !== 1 ? _S.copy(b.userData.worldScale).multiplyScalar(chain._k) : b.userData.worldScale);
   }
   for (const k of chain._order) {
     const b = chain[k];
@@ -447,8 +448,11 @@ export class ChainBody {
     if (!tr.length) return;
     let seg = 0;
     let acc = 0;
+    // grow: 0→1 이면 작은 것에서 제 크기로 자라난다 (굵기 · 길이)
+    const g = this.grow ?? 1;
+    this.chain._k = g;
     for (let k = 0; k < this.chain.length; k++) {
-      const d = this.dist[k];
+      const d = this.dist[k] * g;
       const P = this.pts[k];
       while (seg < tr.length - 1 && acc + tr[seg].distanceTo(tr[seg + 1]) < d) {
         acc += tr[seg].distanceTo(tr[seg + 1]);

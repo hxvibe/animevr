@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { Dummy } from './dummy.js';
 import { GiantScissors } from '../characters/geto/vfx.js';
-import { TransfiguredWorm } from './transfigured.js';
+import { TransfiguredWorm, StockPiece, MergedWorms } from './transfigured.js';
 import { EnergyOrb } from '../characters/gojo/vfx.js';
 import { ENEMY_DOMAINS, playerDomain } from './domainClash.js';
 
@@ -445,15 +445,86 @@ const M_LAUNCH = {
     T.chest[0] += -0.15 * pull + 0.35 * throwK;
   },
   tick: (e, k, m) => {
-    if (!m.hit && k > 0.52) {
+    const ctx = e.world.ctx;
+    // 손을 입에 댈 때 스톡(체스 말만 한 개조 인간)을 입에서 꺼내 쥔다
+    if (!m.stock && k > 0.3) {
+      const hp = new THREE.Vector3();
+      m.stock = new StockPiece(ctx, e.headPos(new THREE.Vector3()).addScaledVector(fwdOf(e, _v2), 0.1 * e.scale).add(_v.set(0, -0.08 * e.scale, 0)), () => (e.alive && e.state === 'stand' ? handPos(e, 'R', hp) : null), { scale: e.scale });
+      e.fxs.push(m.stock);
+    }
+    // 던진다 → 풀려나 벌레 같은 개조 인간이 되어 플레이어를 문다
+    if (!m.hit && k > 0.55 && m.stock) {
       m.hit = true;
-      const from = handPos(e, 'R', new THREE.Vector3()).addScaledVector(fwdOf(e, _v2), 0.3);
-      const w = new TransfiguredWorm(e.world.ctx, from, { owner: 'enemy', dir: fwdOf(e, new THREE.Vector3()).add(_v.set(0, 0.25, 0)), src: e, dmg: e.dmg(18), length: 3.0 * e.scale, speed: 10 });
-      if (w.ok) e.fxs.push(w);
-      e.world.ctx.sfx.whoosh(from, 0.8, 0.8);
+      const inp = ctx.input;
+      const from = m.stock.mesh.position;
+      const aim = _v3.copy(inp.head).add(_v.set(0, -0.4, 0)).sub(from);
+      const dist = aim.length();
+      const v = aim.normalize().multiplyScalar(10).add(_v.set(0, 1 + dist * 0.15, 0));
+      m.stock.throw(v, (pos, dir) => {
+        const w = new TransfiguredWorm(ctx, pos, { owner: 'enemy', dir: dir.add(_v.set(0, 0.15, 0)), src: e, dmg: e.dmg(18), length: 3.0 * e.scale, speed: 10, grow: true });
+        if (w.ok) e.fxs.push(w);
+      }, 0.18);
+      ctx.sfx.whoosh(from, 0.8, 0.8);
     }
   },
-  fist: { L: 0.3, R: 0.6 },
+  end: (e, m) => {
+    if (m.stock && m.stock.state !== 'thrown') m.stock.dispose();
+  },
+  fist: { L: 0.3, R: 0.75 },
+};
+// 다중혼 「撥体」: 스톡 8개를 꺼내 두 손 사이에서 합쳐 → 한 덩어리로 꼬인 개조 인간 8명을 내뿜는다
+const M_ISOMER = {
+  tech: true,
+  name: '다중혼 발체', range: [2, 10], cd: 11, w: 1.1, dur: 1.6,
+  pose: (T, e, k) => {
+    // 두 손을 가슴 앞에 모았다가(합치는 중) → 앞으로 내민다
+    const hold = sm(0, 0.25, k) * (1 - sm(0.58, 0.68, k));
+    const push = sm(0.58, 0.68, k) * (1 - sm(0.85, 1, k));
+    for (const [S, sg] of [['L', -1], ['R', 1]]) {
+      T['sh' + S] = [-1.1 * hold - 1.5 * push, 0, sg * (0.55 * hold + 0.1 * push)];
+      T['el' + S] = [-1.5 * hold - 0.1 * push, 0, 0];
+    }
+    T.chest[0] += -0.1 * hold + 0.25 * push;
+    T.head[0] += 0.1 * hold;
+  },
+  tick: (e, k, m) => {
+    const ctx = e.world.ctx;
+    const mid = (out) => handPos(e, 'L', out).add(handPos(e, 'R', _v2)).multiplyScalar(0.5);
+    if (!m.stocks && k > 0.12) {
+      m.stocks = [];
+      m.t0 = k;
+      for (let i = 0; i < 8; i++) {
+        const o = new THREE.Vector3();
+        const a = (i / 8) * Math.PI * 2;
+        const S = new StockPiece(ctx, e.headPos(new THREE.Vector3()).addScaledVector(fwdOf(e, _v3), 0.1 * e.scale), () => {
+          if (!e.alive || e.state !== 'stand') return null;
+          const tt = (m.k ?? 0) * 1.6;
+          const r = 0.12 * e.scale * Math.max(0.25, 1 - tt);
+          const ang = a + tt * 8;
+          return mid(o).add(_v3.set(Math.cos(ang) * r, Math.sin(ang * 1.3) * 0.04, Math.sin(ang) * r));
+        }, { scale: 0.8 * e.scale });
+        S.t = -i * 0.03;
+        m.stocks.push(S);
+        e.fxs.push(S);
+      }
+      ctx.ui.callout('마히토가 개조 인간 8명의 영혼을 합친다', { color: '#b8a8a4', dur: 1.2 });
+    }
+    m.k = k;
+    if (m.stocks && !m.hit && k > 0.62) {
+      m.hit = true;
+      const from = mid(new THREE.Vector3());
+      for (const S of m.stocks) S.dispose();
+      const inp = ctx.input;
+      const dir = _v3.copy(inp.head).add(_v.set(0, -0.5, 0)).sub(from).normalize();
+      const M = new MergedWorms(ctx, from, dir, { len: 10 * e.scale, owner: 'enemy', scale: e.scale, onHit: () => ctx.world.hitPlayer(e.dmg(28), { type: 'impact', src: e }) });
+      if (M.ok) e.fxs.push(M);
+      ctx.ui.manga({ main: '多重魂 撥体', ruby: 'たじゅうこん ばったい', color: '#b8a8a4', dur: 0.9 });
+    }
+  },
+  end: (e, m) => {
+    if (!m.hit) for (const S of m.stocks ?? []) S.dispose();
+  },
+  fist: { L: 0.1, R: 0.1 },
 };
 
 // 죠고: 불
@@ -1089,7 +1160,7 @@ const GAIT = {
 // plans: [거리 최소, 최대, 고를 확률] — 몇 초마다 거리 계획을 바꿔 가까이 붙거나(근거리) 적당히 떨어지거나(중거리) 멀리서(원거리) 술식을 쓴다
 const KITS = {
   bagmask: { moves: [JAB, CROSS, HOOK, KICK, COMBO], stance: 'boxer', keep: [0, 1.0] },
-  mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH, M_LAUNCH], stance: 'loose', keep: [0, 1.4], plans: [[0, 1.4, 1.4], [1.8, 3.2, 1], [4, 9, 1]] },
+  mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH, M_LAUNCH, M_ISOMER], stance: 'loose', keep: [0, 1.4], plans: [[0, 1.4, 1.4], [1.8, 3.2, 1], [4, 9, 1]] },
   jogo: { moves: [J_FIREBALL, J_ERUPT, J_INSECTS, J_FLAME], stance: 'volcano', keep: [3.5, 8], plans: [[3.5, 8, 2], [8, 13, 1], [0.5, 2.6, 0.6]] },
   fingerBearer: { moves: [COMBO, SLAM, LUNGE, KICK, FB_BEAM, FB_BARRIER, FB_SLING], stance: 'beast', keep: [0, 1.1], plans: [[0, 1.1, 1.3], [4, 9, 1.2], [9, 14, 0.7]] },
   kuchisake: { moves: [K_SNIP, K_SLASH, LUNGE], stance: 'creep', keep: [0, 1.3], plans: [[0, 1.3, 1.2], [2.5, 6, 1]] },

@@ -129,7 +129,7 @@ btnVR0.disabled = true;
 document.getElementById('status').textContent = '모델 불러오는 중…';
 // 쓰는 3D 모델 전부 (시작하기 전에 다 받는다 — 받기 전에 시작하면 적·무기가 임시 모양으로 나왔다)
 const ALL_MODELS = [
-  'dummy', 'white_room', 'shrine', 'item_sukuna_finger', 'item_megaphone',
+  'dummy', 'shrine', 'item_sukuna_finger', 'item_megaphone',
   'chr_geto', 'chr_gojo', 'chr_nobara', 'chr_toji', 'chr_yuta', 'npc_cathy', 'npc_tsukamoto', 'npc_yaga', 'enemy_bagmask',
   'curse_bignose', 'curse_centipede', 'curse_cyclops', 'curse_finger_bearer', 'curse_inventory', 'curse_jogo', 'curse_kuchisake', 'curse_mahito',
   'curse_rainbow_dragon', 'curse_rika', 'curse_tamamo', 'curse_transfigured', 'curse_worm',

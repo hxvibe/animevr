@@ -44,7 +44,7 @@ function vnoise(L, x, y) {
   return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
 }
 /** 텍스처 크기 N 에서 이어지는 fbm (0~1) */
-function makeFbm(N, base = 4, oct = 5) {
+export function makeFbm(N, base = 4, oct = 5) {
   const Ls = [];
   for (let o = 0; o < oct; o++) Ls.push(lattice(base << o));
   return (px, py) => {
@@ -78,7 +78,7 @@ function toTexture(canvas, srgb) {
  * painter(x, y) → [r, g, b (0~1 sRGB), height (0~1), roughness (0~1), emissive?(0~1 r,g,b)]
  * 높이에서 소벨로 법선을 뽑는다
  */
-function bake(key, N, painter, { normal = 2.5, emissive = false } = {}) {
+export function bake(key, N, painter, { normal = 2.5, emissive = false } = {}) {
   if (_cache.has(key)) return _cache.get(key);
   const cv = (n) => {
     const c = document.createElement('canvas');

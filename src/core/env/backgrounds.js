@@ -5,6 +5,7 @@ import { glowTexture } from '../fx.js';
 import { getModel } from '../assets.js';
 import * as R from './realism.js';
 import { buildCity, buildAlley, buildShibuya, buildShinjuku } from './tokyo.js';
+import { buildTrainingHall } from './training.js';
 
 const skyVert = /* glsl */ `
 varying vec3 vDir;
@@ -209,7 +210,7 @@ function buildPassthrough() {
 }
 
 export const BACKGROUNDS = {
-  white: { label: '하얀 방', build: buildWhiteRoom },
+  white: { label: '연습장', build: buildTrainingHall },
   city: { label: '도쿄 오피스가', build: buildCity },
   alley: { label: '뒷골목', build: buildAlley },
   shibuya: { label: '시부야', build: buildShibuya },

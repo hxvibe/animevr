@@ -1,6 +1,38 @@
 // 절단(클리핑 평면) 조각과 SUPERHOT풍 유리 파편
 import * as THREE from 'three';
 
+/**
+ * 잘린 단면으로 보이는 안쪽(뒷면)을 속이 빈 껍데기 대신 피 · 살로 칠한다.
+ *  어떤 재질이든 조각 셰이더 끝에서 뒷면이면 붉은 살결(지방 얼룩 · 핏물)로 덮는다.
+ */
+export function fleshInside(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev?.call(mat, sh, r);
+    const code = `
+  if (!gl_FrontFacing) {
+    vec2 fq = gl_FragCoord.xy * 0.03;
+    vec2 fi = floor(fq); vec2 ff = fract(fq); ff = ff * ff * (3.0 - 2.0 * ff);
+    #define FH(p) fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)
+    float fn = mix(mix(FH(fi), FH(fi + vec2(1.0, 0.0)), ff.x), mix(FH(fi + vec2(0.0, 1.0)), FH(fi + vec2(1.0, 1.0)), ff.x), ff.y);
+    vec2 gi = floor(fq * 2.3 + 7.0); vec2 gf = fract(fq * 2.3 + 7.0); gf = gf * gf * (3.0 - 2.0 * gf);
+    float fs = mix(mix(FH(gi), FH(gi + vec2(1.0, 0.0)), gf.x), mix(FH(gi + vec2(0.0, 1.0)), FH(gi + vec2(1.0, 1.0)), gf.x), gf.y);
+    vec3 meat = mix(vec3(0.3, 0.02, 0.03), vec3(0.6, 0.07, 0.065), fn);
+    meat = mix(meat, vec3(0.85, 0.6, 0.5), smoothstep(0.74, 0.86, fs) * 0.55); // 지방 · 힘줄
+    meat = mix(meat, vec3(0.14, 0.0, 0.01), smoothstep(0.3, 0.12, fn) * 0.7); // 핏물
+    gl_FragColor = vec4(meat, 1.0);
+  }
+`;
+    const f = sh.fragmentShader;
+    const k = f.lastIndexOf('}');
+    sh.fragmentShader = f.slice(0, k) + code + f.slice(k);
+  };
+  const key = mat.customProgramCacheKey?.bind(mat);
+  mat.customProgramCacheKey = () => (key ? key() : '') + '|flesh';
+  mat.needsUpdate = true;
+  return mat;
+}
+
 const _m = new THREE.Matrix4();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -159,6 +191,7 @@ export class Slicer {
           cm.side = THREE.DoubleSide;
           cm.clippingPlanes = worldPlanes;
           cm.clipShadows = false;
+          fleshInside(cm);
           matMap.set(src, cm);
         }
         m.material = cm;

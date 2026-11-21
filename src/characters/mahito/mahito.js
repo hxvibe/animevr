@@ -114,6 +114,7 @@ class HandForm {
     for (const m of [this.blade, this.drill]) {
       const ol = new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ color: 0x050505, side: THREE.BackSide }));
       ol.scale.setScalar(1.06);
+      ol.visible = false; // 먹선 없음
       m.add(ol);
       this.mats.push(ol.material);
       m.visible = false;

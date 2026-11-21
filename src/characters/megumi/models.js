@@ -80,7 +80,8 @@ export function makeShiki(key, height, { outline = 0.012, toonShade = true, skip
     o.castShadow = true;
     meshes.push(o);
   });
-  if (outline > 0) {
+  // 먹선은 쓰지 않는다 (모든 모델의 겉 먹선 제거)
+  if (outline > 0 && false) {
     const mat = new THREE.ShaderMaterial({ uniforms: { uT: { value: outline / S } }, vertexShader: outlineVert, fragmentShader: outlineFrag, side: THREE.BackSide });
     for (const o of meshes) {
       if (!o.isSkinnedMesh || skip.some((s) => o.name.includes(s))) continue;

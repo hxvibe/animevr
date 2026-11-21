@@ -380,7 +380,7 @@ export class Dummy {
         this.vel.add(_v);
         const dir = v.clone().setY(0);
         if (dir.lengthSq() < 1e-4) dir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).negate();
-        this.flinch = { t: 0, dir: dir.normalize(), k: Math.min(1, 0.35 + s / 8) };
+        this.recoil = { t: 0, dir: dir.normalize(), k: Math.min(1, 0.35 + s / 8) };
         this.onFlinch?.(s);
         return;
       }
@@ -795,8 +795,8 @@ export class Dummy {
       const P = this._poise;
       if (P && this.world.time - P.t > 1.2) P.v = Math.min(this.maxPoise, P.v + this.maxPoise * 0.5 * dt);
       // 움찔: 맞은 쪽 반대로 몸이 젖혀졌다 돌아온다
-      const F = this.flinch;
-      if (F) {
+      const F = this.recoil;
+      if (F && typeof F === 'object') {
         F.t += dt;
         const u = Math.min(1, F.t / 0.32);
         const k = Math.sin(Math.PI * u) * (1 - u * 0.3) * F.k;
@@ -804,7 +804,7 @@ export class Dummy {
         _q.setFromAxisAngle(_v, 0.32 * k);
         this.root.quaternion.setFromAxisAngle(UP, this.yaw).premultiply(_q);
         if (u >= 1) {
-          this.flinch = null;
+          this.recoil = null;
           this.root.quaternion.setFromAxisAngle(UP, this.yaw);
         }
       }

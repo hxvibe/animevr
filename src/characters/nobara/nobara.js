@@ -159,8 +159,8 @@ function bakeWeapon(name, { length, grip = 0.12, headUp = true, faceZ = true, ou
     const mesh = new THREE.Mesh(g, mat);
     mesh.castShadow = true;
     group.add(mesh);
-    if (outline > 0) {
-      // 먹선: 법선으로 부풀린 뒷면
+    if (outline > 0 && false) {
+      // 먹선: 법선으로 부풀린 뒷면 (쓰지 않음)
       const og = g.clone();
       const P = og.attributes.position;
       const N = og.attributes.normal;
@@ -700,6 +700,7 @@ export class Nobara extends Caster {
     box.castShadow = true;
     const ol = new THREE.Mesh(box.geometry, new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide }));
     ol.scale.setScalar(1.08);
+    ol.visible = false; // 먹선 없음
     g.add(box, ol);
     // 위로 삐죽 나온 못대가리
     for (let i = 0; i < 4; i++) {

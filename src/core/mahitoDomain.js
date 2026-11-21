@@ -283,7 +283,8 @@ class HandGroup {
     this.geo = geo;
     this.mesh = new THREE.InstancedMesh(geo, mats.skin, n);
     this.mesh.frustumCulled = false;
-    this.line = outline ? new THREE.InstancedMesh(geo, mats.line, n) : null;
+    this.line = null; // 먹선 없음 (사용자 요청)
+    void outline;
     if (this.line) this.line.frustumCulled = false;
   }
   add(parent) {

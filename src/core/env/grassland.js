@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import * as R from './realism.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const PLAY = 45; // 평평한 싸움터 반지름
+const PLAY = 45;
+const _pc = new THREE.Vector3(); // 평평한 싸움터 반지름
 const rnd = () => R.rnd();
 
 // ── 땅 높이: 싸움터는 0, 바깥은 완만한 언덕 ──
@@ -106,12 +107,17 @@ function bladeGeo(h = 1, w = 0.05, segs = 4) {
 }
 
 const WIND = { value: 0 };
+// 풀을 눕히는 것들 (적 · 더미 · 플레이어): xz 위치 · 반지름 — 쓰러진 적이 풀에 묻혀 안 보이지 않게
+const NPUSH = 12;
+const PUSH = { value: Array.from({ length: NPUSH }, () => new THREE.Vector3(0, 0, -1)) };
 function windMaterial(opts = {}) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.75, metalness: 0, ...opts });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uWind = WIND;
+    sh.uniforms.uPush = PUSH;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
 uniform float uWind;
+uniform vec3 uPush[${NPUSH}];
 float gh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float gn(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(gh(i), gh(i + vec2(1.0, 0.0)), f.x), mix(gh(i + vec2(0.0, 1.0)), gh(i + vec2(1.0, 1.0)), f.x), f.y); }`)
@@ -127,7 +133,19 @@ float gn(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 
   float k = position.y * position.y;
   transformed.x += (gust * 0.55 + flutter) * k;
   transformed.z += (gust * 0.25 + flutter * 0.5) * k;
-  transformed.y -= gust * 0.12 * k;`);
+  transformed.y -= gust * 0.12 * k;
+  // 밟히고 깔린 풀: 가까울수록 바깥으로 눕는다
+  for (int i = 0; i < ${NPUSH}; i++) {
+    vec3 P = uPush[i];
+    if (P.z <= 0.0) continue;
+    vec2 d = root.xz - P.xy;
+    float L = length(d);
+    float f = 1.0 - smoothstep(P.z * 0.45, P.z, L);
+    if (f <= 0.0) continue;
+    vec2 n = L > 1e-3 ? d / L : vec2(1.0, 0.0);
+    transformed.y *= 1.0 - 0.82 * f;
+    transformed.xz += n * f * 0.55 * position.y;
+  }`);
   };
   m.customProgramCacheKey = () => 'wind';
   return m;
@@ -399,6 +417,19 @@ void main() {
     spawn: new THREE.Vector3(0, 0, 1),
     update(dt) {
       WIND.value += dt;
+      // 풀을 눕히는 것: 플레이어 발밑 + 가까운 적 (쓰러진 적은 더 넓게)
+      const P = PUSH.value;
+      let n = 0;
+      const h = ctx.input?.head;
+      if (h) P[n++].set(h.x, h.z, 0.55);
+      const ds = (ctx.world?.dummies ?? []).filter((d) => d.root?.parent).sort((a, b) => (h ? a.root.position.distanceToSquared(h) - b.root.position.distanceToSquared(h) : 0));
+      for (const d of ds) {
+        if (n >= NPUSH) break;
+        const down = d.state !== 'stand' || !d.alive;
+        const c = down && d.center ? d.center(_pc) : d.root.position;
+        P[n++].set(c.x, c.z, (down ? 1.5 : 0.75) * (d.scale ?? 1));
+      }
+      for (; n < NPUSH; n++) P[n].z = -1;
     },
   };
 }

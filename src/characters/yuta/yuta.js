@@ -278,6 +278,7 @@ class Megaphone {
       o.castShadow = true;
       const ol = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ color: 0x060606, side: THREE.BackSide }));
       ol.scale.setScalar(1.03);
+      ol.visible = false; // 먹선 없음
       o.add(ol);
     });
     m.scale.setScalar(MEGA_S);

@@ -161,7 +161,8 @@ export class RiggedBody {
     this.mats = [...mats.values()];
     // 먹선
     this.outlines = [];
-    if (outline > 0) {
+    // 먹선(외곽선)은 쓰지 않는다 — 사용자 요청으로 모든 모델의 겉 먹선 제거
+    if (outline > 0 && false) {
       const mat = new THREE.ShaderMaterial({ uniforms: { uT: { value: outline / S }, uC: { value: new THREE.Color(0x060408) }, uO: { value: 1 } }, vertexShader: OUTLINE_VERT, fragmentShader: OUTLINE_FRAG, side: THREE.BackSide });
       this.outlineMat = mat;
       for (const o of this.meshes) {

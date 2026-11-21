@@ -44,6 +44,7 @@ const _outlines = new Map();
 function outlineMat(th) {
   const key = th.toFixed(4);
   if (_outlines.has(key)) return _outlines.get(key);
+  // 먹선을 쓰지 않는다: 그리지 않는 재질 (사용자 요청)
   const m = new THREE.ShaderMaterial({
     uniforms: { uT: { value: th } },
     vertexShader: 'uniform float uT; void main(){ vec3 p = position + normal * uT; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }',
@@ -51,6 +52,7 @@ function outlineMat(th) {
     side: THREE.BackSide,
   });
   m.userData.shared = true;
+  m.visible = false;
   _outlines.set(key, m);
   return m;
 }

@@ -270,3 +270,57 @@ export class HandAura {
     }
   }
 }
+
+/**
+ * 물건(못 등)을 감싸는 같은 오라: 메시마다 부풀린 껍질 세 겹을 자식으로 붙인다 (재질은 하나를 함께 쓴다)
+ *  size: 부풀림·불꽃 혀 길이 배율 (작은 물건은 작게)
+ */
+export class MeshAura {
+  constructor(colors = 'crimson', size = 1) {
+    this.C = typeof colors === 'string' ? HAND_AURA_COLORS[colors] : colors;
+    this.time = { value: 0 };
+    this.u = HandAura.prototype._uniforms.call(this);
+    this.mats = HandAura.prototype._materials.call(this, this.u);
+    for (const m of this.mats) {
+      m.uniforms.uInflate.value *= size;
+      m.uniforms.uFlame.value *= size;
+      m.uniforms.uLick.value *= size;
+    }
+    this.k = 0;
+    this.target = 0;
+  }
+
+  /** obj 안의 메시마다 껍질을 붙인다 (먹선 메시는 건너뜀) */
+  attach(obj) {
+    const list = [];
+    obj.traverse((m) => {
+      if (!m.isMesh || m.userData.aura || (m.material?.side === THREE.BackSide && m.material.isMeshBasicMaterial)) return;
+      list.push(m);
+    });
+    for (const m of list) {
+      this.mats.forEach((mat, i) => {
+        const a = new THREE.Mesh(m.geometry, mat);
+        a.userData.aura = true;
+        a.renderOrder = 20 + i;
+        a.frustumCulled = false;
+        m.add(a);
+      });
+    }
+  }
+
+  set(k) {
+    this.target = Math.max(this.target, THREE.MathUtils.clamp(k, 0, 1));
+  }
+
+  update(dt) {
+    this.time.value += dt;
+    this.k += (this.target - this.k) * Math.min(1, dt * (this.target > this.k ? 2.5 : 3.5));
+    this.target = 0;
+    this.u.uK.value = this.k;
+    for (const m of this.mats) m.visible = this.k > 0.01;
+  }
+
+  dispose() {
+    for (const m of this.mats) m.dispose();
+  }
+}

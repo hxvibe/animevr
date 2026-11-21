@@ -2365,42 +2365,73 @@ export function makeWheel(ctx, size = 1) {
 // 적응: 같은 성질끼리는 내성을 절반쯤 나눠 갖는다 (참격을 익히면 팔(捌)도 어느 정도 버틴다)
 //  적응은 '술식'이 아니라 '현상의 성질'에 맞춘다: 해(解)와 팔(捌)은 같은 참격이라 내성을 나누지만, 같은 어주자라도 조(竈·불)는 따로.
 //  고죠의 무하한(속도 제어) · 창(인력) · 혁(척력) · 자(가상 질량)는 한 술식에서 나왔어도 성질이 달라 하나하나 따로 적응한다
-export const ADAPT_LABEL = { punch: '타격', impact: '충격', slash: '참격(解)', cleave: '참격(捌)', pierce: '관통', bullet: '총탄', bolt: '전격', fire: '화염', erase: '허식 「茈」', crush: '인력(蒼)', blast: '척력(赫)', infinity: '무하한', evade: '회피 패턴', blood: '피', soul: '영혼' };
-const ADAPT_FAMILY = { slash: 'cut', cleave: 'cut', pierce: 'cut', punch: 'blunt', impact: 'blunt', bullet: 'shot' };
+export const ADAPT_LABEL = { punch: '타격', kick: '발차기', impact: '충격', slash: '참격(解)', cleave: '참격(捌)', pierce: '관통', bullet: '총탄', bolt: '전격', fire: '화염', energy: '주력 방출', erase: '허식 「茈」', crush: '인력(蒼)', blast: '척력(赫)', infinity: '무하한', evade: '회피 패턴', blood: '피', soul: '영혼' };
+// 같은 성질(가족)끼리만 내성을 나눈다: 베기(해·팔) · 둔기(주먹·발·충격) · 꿰뚫기(총탄·관통)
+//  창(蒼 인력) · 혁(赫 척력) · 자(茈) · 무하한(속도 제어) · 불(竈)은 각자 따로 — 같은 술식에서 나왔어도 성질이 다르다
+const ADAPT_FAMILY = { slash: 'cut', cleave: 'cut', punch: 'blunt', kick: 'blunt', impact: 'blunt', bullet: 'pierce', pierce: 'pierce' };
 export function adaptKey(info = {}) {
   return info.adapt ?? ({ burn: 'fire' }[info.type] ?? info.type ?? 'punch');
 }
 const kindLabel = (k) => (k === 'prop' ? '사물' : DUMMY_TYPES[k]?.label.replace(/\(.*\)/, '') ?? k);
 export function adaptLabel(k) {
   if (k.startsWith('atk:')) return `${kindLabel(k.slice(4))} 공략`;
+  if (k.startsWith('pat:')) return `${kindLabel(k.slice(4))}의 패턴`;
   return ADAPT_LABEL[k] ?? k;
 }
-/** 적응 상태: res(성질 → 단계), expo(분석 중: 경과·필요 시간), atk(상대 종류 → 공격 적응 단계) */
+/**
+ * 적응 상태 — 마허라 법진의 규칙 (원작 설정):
+ *  · 한 번 닿은 현상은 시간을 들여 분석하고, 분석한 시간에 비례해 내성이 조금씩 붙는다 (끝나면 한 단계)
+ *  · 술식이 아니라 '현상의 성질'에 적응: 같은 성질(가족)끼리는 내성을 절반 나눈다
+ *  · 적응을 마친 뒤에도 같은 요소에 다시 적응한다 — 단계마다 더 근본적인 해법, 앞의 것과 함께 쓴다
+ *  · 술식뿐 아니라 싸움의 모든 요소: 상대의 공격 패턴(pat:) · 상대 자체를 베는 법(atk:) · 회피 패턴(evade)
+ * res(성질 → 단계), atk(상대 종류 → 공격 적응), pat(상대 종류 → 패턴 간파), expo(분석 중: 경과·필요 시간)
+ */
 export class Adaptation {
   constructor(from) {
     this.res = new Map(from?.res ?? []);
     this.atk = new Map(from?.atk ?? []);
+    this.pat = new Map(from?.pat ?? []);
     this.expo = new Map();
     this.turns = from?.turns ?? 0;
     this.spin = from?.spin ?? false;
+    this._seen = new Map(); // 패턴 셈: '상대|성질' → [시각들]
   }
 
+  /** 분석 진행도 (0~1, 분석 중이 아니면 0) */
+  progress(k) {
+    const e = this.expo.get(k);
+    return e ? Math.min(1, e.t / e.need) : 0;
+  }
+
+  /** 내성 단계: 끝낸 적응 + 분석 중인 만큼 + 같은 성질의 절반 */
   level(k) {
-    let L = this.res.get(k) ?? 0;
+    let L = (this.res.get(k) ?? 0) + this.progress(k);
     const f = ADAPT_FAMILY[k];
-    if (f) for (const [k2, v] of this.res) if (k2 !== k && ADAPT_FAMILY[k2] === f) L += v * 0.5;
+    if (f) for (const k2 of new Set([...this.res.keys(), ...this.expo.keys()])) if (k2 !== k && ADAPT_FAMILY[k2] === f) L += ((this.res.get(k2) ?? 0) + this.progress(k2)) * 0.5;
     return L;
   }
 
-  /** 받는 피해 배율 */
-  mul(k) {
-    return Math.pow(0.42, this.level(k)) * (this.spin ? 0.15 : 1);
+  /** 받는 피해 배율 (src: 공격한 상대의 종류 — 패턴을 간파했으면 더 준다) */
+  mul(k, src = null) {
+    const p = src ? (this.pat.get(src) ?? 0) + this.progress('pat:' + src) : 0;
+    return Math.pow(0.42, this.level(k)) * Math.pow(0.6, p) * (this.spin ? 0.15 : 1);
+  }
+
+  /** 같은 상대가 같은 성질로 거듭 치면(8초 안 3번) 그 상대의 패턴을 분석한다 */
+  noteHit(src, k, now) {
+    if (!src) return;
+    const key = src + '|' + k;
+    const arr = (this._seen.get(key) ?? []).filter((t) => now - t < 8);
+    arr.push(now);
+    this._seen.set(key, arr);
+    if (arr.length >= 3) this.expose('pat:' + src);
   }
 
   /** 처음 닿은 성질은 분석을 시작한다 (분석이 끝나면 법진이 돈다) */
   expose(k) {
     if (this.expo.has(k)) return;
-    const lv = k.startsWith('atk:') ? this.atk.get(k.slice(4)) ?? 0 : this.res.get(k) ?? 0;
+    const pre = k.slice(0, 4);
+    const lv = pre === 'atk:' ? this.atk.get(k.slice(4)) ?? 0 : pre === 'pat:' ? this.pat.get(k.slice(4)) ?? 0 : this.res.get(k) ?? 0;
     if (lv >= 5) return;
     // 무하한은 닿지 않는 '현상' 자체라 분석이 빠르다 (닿을 때마다가 아니라 붙어 있는 동안 계속 분석)
     const need = this.spin ? 0.6 : k === 'infinity' ? 1.4 + lv * 0.9 : 2.2 + lv * 1.4;
@@ -2413,7 +2444,9 @@ export class Adaptation {
       e.t += dt;
       if (e.t >= e.need) {
         this.expo.delete(k);
-        if (k.startsWith('atk:')) this.atk.set(k.slice(4), (this.atk.get(k.slice(4)) ?? 0) + 1);
+        const pre = k.slice(0, 4);
+        if (pre === 'atk:') this.atk.set(k.slice(4), (this.atk.get(k.slice(4)) ?? 0) + 1);
+        else if (pre === 'pat:') this.pat.set(k.slice(4), (this.pat.get(k.slice(4)) ?? 0) + 1);
         else this.res.set(k, (this.res.get(k) ?? 0) + 1);
         this.turns++;
         const spinNow = !this.spin && this.turns >= 8;
@@ -2428,12 +2461,34 @@ export class Adaptation {
     const out = [];
     for (const [k, v] of this.res) out.push(`${adaptLabel(k)}${v > 1 ? '×' + v : ''}`);
     for (const [k, v] of this.atk) out.push(`${kindLabel(k)} 공략${v > 1 ? '×' + v : ''}`);
+    for (const [k, v] of this.pat) out.push(`${kindLabel(k)} 패턴${v > 1 ? '×' + v : ''}`);
     return out.join(' · ');
   }
 
   snapshot() {
-    return { res: [...this.res], atk: [...this.atk], turns: this.turns, spin: this.spin };
+    return { res: [...this.res], atk: [...this.atk], pat: [...this.pat], turns: this.turns, spin: this.spin };
   }
+}
+
+/**
+ * 적응을 마쳤을 때의 해법 (같은 요소에 거듭 적응할수록 더 근본적 · 서로 충돌하지 않으면 함께 쓴다)
+ *  마허라 본체 · 법진(술사 / 빙의한 나) 모두 같은 문구를 쓴다
+ */
+export function adaptHow(ad, k) {
+  const lv = k.startsWith('pat:') ? ad.pat.get(k.slice(4)) ?? 0 : ad.res.get(k) ?? 0;
+  if (k === 'slash' || k === 'cleave') {
+    const L = ad.res.get('slash') ?? 0;
+    if (k === 'slash' && L === 1) return '재생력이 절단력을 웃돈다 — 잘린 살점을 던져 반격';
+    if (k === 'slash' && L === 2) return '몸집을 키워 맷집으로 버틴다';
+    if (L >= 3) return '참격 그 자체에 적응';
+    return null;
+  }
+  if (k === 'infinity') return lv === 1 ? '주력의 성질을 바꿔 무하한을 중화한다' : '공간째 벤다 — 무하한이 의미를 잃는다';
+  if (k === 'evade') return '피하는 패턴을 읽었다 — 더 멀리, 더 빨리 벤다';
+  if (k.startsWith('pat:')) return lv === 1 ? '같은 수만 쓰는 상대의 허점을 읽었다 — 그 공격을 받으면 바로 반격한다' : '수를 읽고 미리 피한다 — 그 상대의 공격이 거의 통하지 않는다';
+  if (k.startsWith('atk:')) return '베는 법을 익혔다 — 그 상대에게 더 깊이 들어간다';
+  if (lv >= 2) return '더 근본적인 내성 — 앞의 적응과 함께 쓴다';
+  return null;
 }
 
 /**
@@ -2462,11 +2517,15 @@ export class MahoragaWheel {
 
   /** 술사가 맞을 때: 적응한 만큼 피해를 줄이고, 처음 보는 성질과 상대는 분석한다 */
   onPlayerHit(type, info) {
-    const k = type ?? 'punch';
-    const m = this.ad.mul(k);
-    this.ad.expose(k);
+    const k = adaptKey({ ...info, type: type ?? info?.type ?? 'punch' });
     const src = info?.src;
-    if (src) this.ad.expose('atk:' + (src.type ?? src.kind ?? '적'));
+    const sk = src ? src.type ?? src.kind ?? '적' : null;
+    const m = this.ad.mul(k, sk) / ((this.growth ?? 1) * (this.growth ?? 1));
+    this.ad.expose(k);
+    if (sk) {
+      this.ad.expose('atk:' + sk);
+      this.ad.noteHit(sk, k, this.ctx.world.time);
+    }
     return m;
   }
 
@@ -2480,7 +2539,12 @@ export class MahoragaWheel {
       const p = this.mesh.position;
       wheelSound(this.ctx.sfx, p);
       this.ctx.fx.flash(p, new THREE.Color(0xffe0a0), 3, 0.25, 5);
-      this.ctx.ui.callout(`법진 적응 · ${adaptLabel(done.key)}`, { color: '#ffe0a0', size: 40, dur: 1 });
+      // 참격 ②: 몸집을 키운다 (빙의한 나도 · 술사 위의 법진도 맷집으로)
+      if (done.key === 'slash' && (this.ad.res.get('slash') ?? 0) === 2) this.growth = Math.min(1.32, (this.growth ?? 1) * 1.14);
+      const how = adaptHow(this.ad, done.key);
+      const lv = done.key.startsWith('pat:') ? this.ad.pat.get(done.key.slice(4)) : done.key.startsWith('atk:') ? this.ad.atk.get(done.key.slice(4)) : this.ad.res.get(done.key);
+      this.ctx.ui.callout(how ? `법진 적응 · ${adaptLabel(done.key)} ${'①②③④⑤'[Math.min(4, (lv ?? 1) - 1)]} — ${how}` : `법진 적응 · ${adaptLabel(done.key)}`, { color: '#ffe0a0', size: how ? 34 : 40, dur: how ? 2 : 1 });
+      this.onAdapt?.(done);
     }
     if (this.ad.spin) this.target += dt * 2.5;
     this.angle = damp(this.angle, this.target, 6, dt);
@@ -3001,8 +3065,22 @@ export class Mahoraga extends Shiki {
   hurt(amount, info = {}) {
     if (!this.hittable || amount <= 0) return 0;
     const k = adaptKey(info);
-    const m = this.ad.mul(k) / (this.growth * this.growth);
+    const src = info.src;
+    const sk = src ? src.type ?? src.kind ?? null : null;
+    const m = this.ad.mul(k, sk) / (this.growth * this.growth);
     const dmg = amount * m;
+    // 같은 상대가 같은 수로 거듭 치면 그 패턴을 분석한다 → 간파하면 그 공격을 받는 즉시 그 상대에게 반격
+    if (sk && sk !== 'prop') {
+      this.ad.noteHit(sk, k, this.ctx.world.time);
+      if ((this.ad.pat.get(sk) ?? 0) >= 1 && src.alive && !src.heldBy && !(this.hostile && !this.tamed)) {
+        this.target = src;
+        this.moveCd = 0;
+        if (!this._toldCounter) {
+          this._toldCounter = true;
+          this.ctx.ui.callout('간파 — 같은 수는 통하지 않는다 · 바로 반격', { color: '#ffe0a0', size: 34, dur: 1.4 });
+        }
+      }
+    }
     const c = info.at ?? this.aimPoint(_v4);
     const { fx, sfx } = this.ctx;
     if (m < 0.25) {
@@ -3035,20 +3113,11 @@ export class Mahoraga extends Shiki {
     this.wheelTarget += Math.PI / 4;
     this.hp = this.maxHp;
     // 같은 성질에 거듭 적응할수록 더 근본적인 해법 — 앞의 것과 충돌하지 않으면 함께 쓴다
-    const lv = this.ad.res.get(k) ?? 0;
-    let how = null;
-    if (k === 'slash' || k === 'cleave') {
-      const L = this.ad.res.get('slash') ?? 0;
-      if (k === 'slash' && L === 1) how = '재생력이 절단력을 웃돈다 — 잘린 살점을 던져 반격';
-      else if (k === 'slash' && L === 2) {
-        how = '몸집을 키워 맷집으로 버틴다';
-        this.growth = Math.min(1.32, this.growth * 1.14);
-      } else if (L >= 3) how = '참격 그 자체에 적응';
-    } else if (k === 'impact') this.growth = Math.min(1.32, this.growth * 1.05);
-    if (k === 'infinity') {
-      this.infStage = Math.min(2, lv);
-      how = lv === 1 ? '주력의 성질을 바꿔 무하한을 중화한다' : '공간째 벤다 — 무하한이 의미를 잃는다';
-    }
+    const lv = k.startsWith('pat:') ? this.ad.pat.get(k.slice(4)) ?? 0 : k.startsWith('atk:') ? this.ad.atk.get(k.slice(4)) ?? 0 : this.ad.res.get(k) ?? 0;
+    const how = adaptHow(this.ad, k);
+    if (k === 'slash' && (this.ad.res.get('slash') ?? 0) === 2) this.growth = Math.min(1.32, this.growth * 1.14);
+    else if (k === 'impact') this.growth = Math.min(1.32, this.growth * 1.05);
+    if (k === 'infinity') this.infStage = Math.min(2, lv);
     if (k === 'evade') {
       // 술사가 피하는 패턴에 적응: 더 멀리, 더 빨리 벤다
       this.reach = Math.min(2.1, this.reach + 0.7);

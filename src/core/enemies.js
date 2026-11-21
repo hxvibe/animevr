@@ -166,10 +166,12 @@ function approx(e, S, up, fwd, out) {
   return out.set(p.x + Math.sin(yaw) * fwd * sc + Math.cos(yaw) * 0.22 * side * sc, (p.y ?? 0) + up * sc, p.z + Math.cos(yaw) * fwd * sc - Math.sin(yaw) * 0.22 * side * sc);
 }
 function handPos(e, S, out = new THREE.Vector3()) {
+  if (e.handless?.(S)) return out.set(0, -100, 0); // 잘려 나간 손으로는 칠 수 없다
   const j = e.rig?.J?.['hd' + S] ?? e['hand' + S];
   return j ? j.getWorldPosition(out) : approx(e, S, 1.2, 0.35, out);
 }
 function footPos(e, S, out = new THREE.Vector3()) {
+  if (e._lost?.().keys.has('ft' + S)) return out.set(0, -100, 0);
   const j = e.rig?.J?.['ft' + S];
   return j ? j.getWorldPosition(out) : approx(e, S, 0.05, 0, out);
 }
@@ -760,7 +762,7 @@ const G_BLUE = {
         fx.implode(p, 40, new THREE.Color(0x6cc4ff), 1.6, 0.35, 0.05);
         fx.sphereBlast(p, 0x6cc4ff, 1.4, 0.3);
         sfx.play('zap', { at: p, vol: 0.8, rate: 0.6 });
-        if (p.distanceTo(e.world.ctx.input.bodyCenter(_v3)) < 1.7) e.world.hitPlayer(e.dmg(13), { type: 'impact', src: e });
+        if (p.distanceTo(e.world.ctx.input.bodyCenter(_v3)) < 1.7) e.world.hitPlayer(e.dmg(13), { type: 'impact', adapt: 'crush', src: e }); // 蒼: 인력
       },
     }));
   },
@@ -799,7 +801,7 @@ const G_RED = {
           t.damage?.(25, { type: 'impact', color: '#ff5a48' });
           t.impulse?.(_v.subVectors(c, p).normalize().multiplyScalar(9).add(_v2.set(0, 3, 0)), 6);
         });
-        if (hit || p.distanceTo(e.world.ctx.input.head) < 2.2) e.world.hitPlayer(e.dmg(20), { type: 'impact', src: e });
+        if (hit || p.distanceTo(e.world.ctx.input.head) < 2.2) e.world.hitPlayer(e.dmg(20), { type: 'impact', adapt: 'blast', src: e }); // 赫: 척력
       },
     }));
   },

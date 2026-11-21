@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { getModel } from './assets.js';
 import { RiggedBody } from './rigged.js';
+import { sever as severPart, regrow as regrowParts, lostKeys, PARENT as JPARENT } from './dismember.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -35,7 +36,7 @@ let _nameIdx = Math.floor(Math.random() * NAMES.length);
 
 // ───────── 래그돌 (위치 기반 물리) ─────────
 // 관절 위치를 입자로 두고 거리 구속으로 몸을 유지한다. 잡은 부위는 손에 고정되고 나머지는 중력에 따라 늘어진다.
-const RAG = ['hips', 'chest', 'neck', 'head', 'shL', 'elL', 'hdL', 'shR', 'elR', 'hdR', 'hpL', 'knL', 'ftL', 'hpR', 'knR', 'ftR'];
+export const RAG = ['hips', 'chest', 'neck', 'head', 'shL', 'elL', 'hdL', 'shR', 'elR', 'hdR', 'hpL', 'knL', 'ftL', 'hpR', 'knR', 'ftR'];
 const RI = Object.fromEntries(RAG.map((k, i) => [k, i]));
 const TORSO = ['hips', 'chest', 'neck', 'shL', 'shR', 'hpL', 'hpR'];
 const LIMBS = [['neck', 'head'], ['shL', 'elL'], ['elL', 'hdL'], ['shR', 'elR'], ['elR', 'hdR'], ['hpL', 'knL'], ['knL', 'ftL'], ['hpR', 'knR'], ['knR', 'ftR']];
@@ -366,6 +367,116 @@ export class Dummy {
     return Math.min(180, 40 + this.maxHp * 0.12);
   }
 
+  /**
+   * 팔다리 맷집: 이보다 약한 참격으로는 팔다리가 잘려 나가지 않는다 (강한 적은 약한 참격에 버틴다)
+   *  머리는 이 두 배가 넘어야 떨어진다
+   */
+  get limbGuard() {
+    if (this.def.limbGuard != null) return this.def.limbGuard;
+    const g = this.def.grade;
+    const base = g === '특급 술사' ? 260 : g === '특급' ? 140 : g === '1급' ? 60 : g === '주저사' ? 22 : 6;
+    return base * Math.pow(Math.max(1, this.scale), 1.5);
+  }
+
+  /** 잃은 관절 (래그돌 입자 번호 · 그 입자가 따라붙을 남은 관절) */
+  _lost() {
+    if (this._lostIdx) return this._lostIdx;
+    const keys = lostKeys(this);
+    const set = new Set();
+    const anchor = new Map();
+    for (const k of keys) {
+      if (RI[k] === undefined) continue;
+      set.add(RI[k]);
+      let a = JPARENT[k];
+      while (a && (keys.has(a) || RI[a] === undefined)) a = JPARENT[a];
+      anchor.set(RI[k], RI[a ?? 'hips']);
+    }
+    this._lostIdx = { set, anchor, keys };
+    return this._lostIdx;
+  }
+
+  _ragIndex() {
+    return RAG;
+  }
+
+  /** 다리(무릎 아래라도)를 잃어 설 수 없다 */
+  get legless() {
+    const k = this._lost().keys;
+    return k.has('knL') || k.has('knR');
+  }
+
+  /** 그 손을 잃었다 (S: 'L' | 'R') */
+  handless(S) {
+    return this._lost().keys.has('hd' + S);
+  }
+
+  /** 관절에서 부위를 떼어 낸다 (dismember.js). 반전술식 · 재생이 있으면 잠시 뒤 되살린다 */
+  sever(root, opts = {}) {
+    const p = severPart(this, root, opts);
+    if (p && !this.dying) {
+      const kind = this.infinite ? 'sandbag' : this.def.rct;
+      const delay = { sandbag: 3, rct: 2.5, reshape: 1.5, regen: 4 }[kind];
+      if (delay) this._regrowAt = this.world.time + delay;
+    }
+    return p;
+  }
+
+  /** 피를 쏟으며 쓰러져 죽는다 (머리를 잃었을 때 · 뜯겨 숨이 다했을 때) */
+  bleedOut() {
+    if (!this.alive || this.dying) return;
+    this.dying = true;
+    this.hp = Math.min(this.hp, 0);
+    this._dropAll();
+    this.heldBy = null;
+    if (this.state !== 'air' || !this.rag) this._ragStart(this.vel);
+    this.state = 'air';
+    this.stateT = 0;
+  }
+
+  /** 참격(평면)이 팔다리 · 목을 지나면 그 부위가 잘려 나간다 — 팔다리 맷집(limbGuard)보다 세야 한다 */
+  _slashSever(amount, info) {
+    const guard = this.limbGuard;
+    if (amount < guard || this.world.time < (this._sevT ?? 0)) return;
+    const planes = info.planes?.length ? info.planes.slice(0, 3) : info.plane ? [info.plane] : [];
+    if (!planes.length) return;
+    this.root.updateMatrixWorld(true);
+    const J = this._jointMap();
+    const lost = this._lost().keys;
+    const sc = this.scale;
+    const SEGS = [['head', 'neck', 'head', 0.9], ['shL', 'shL', 'elL', 0], ['elL', 'elL', 'hdL', 0.35], ['shR', 'shR', 'elR', 0], ['elR', 'elR', 'hdR', 0.35], ['hpL', 'hpL', 'knL', 0], ['knL', 'knL', 'ftL', 0.1], ['hpR', 'hpR', 'knR', 0], ['knR', 'knR', 'ftR', 0.1]];
+    const cands = [];
+    for (const pl of planes) {
+      const anchor = info.point ?? info.at ?? pl.projectPoint(this.center(_v3), new THREE.Vector3());
+      for (const [root, a, b, ext] of SEGS) {
+        if (lost.has(root) || lost.has(b)) continue;
+        if (root === 'head' && amount < guard * 2) continue;
+        const pa = J[a].getWorldPosition(new THREE.Vector3());
+        const pb = J[b].getWorldPosition(new THREE.Vector3());
+        if (ext) pb.addScaledVector(_v.subVectors(pb, pa), ext);
+        const da = pl.distanceToPoint(pa);
+        const db = pl.distanceToPoint(pb);
+        if (da * db >= 0) continue;
+        const x = pa.clone().lerp(pb, da / (da - db));
+        const dist = x.distanceTo(anchor);
+        if (dist > 0.95 * sc) continue;
+        cands.push({ root, dist, side: db > 0 ? 1 : -1, n: pl.normal });
+      }
+    }
+    cands.sort((p, q) => p.dist - q.dist);
+    const done = new Set();
+    let n = 0;
+    for (const c of cands) {
+      const limb = c.root === 'head' ? 'head' : c.root.slice(2); // 'L' | 'R' 팔 · 다리 구분
+      const grp = c.root === 'head' ? 'head' : (c.root[0] === 's' || c.root[0] === 'e' ? 'arm' : 'leg') + limb;
+      if (done.has(grp)) continue;
+      done.add(grp);
+      const vel = (info.push ? info.push.clone().multiplyScalar(0.8) : new THREE.Vector3()).addScaledVector(c.n, c.side * 1.6).add(_v.set(0, 1.4, 0));
+      if (this.sever(c.root, { vel, cause: 'slash', spurt: 1.2, spin: 7 })) n++;
+      if (n >= 2 || !this.alive || this.dying) break;
+    }
+    if (n) this._sevT = this.world.time + 0.2;
+  }
+
   impulse(v, spin = 0) {
     if (!this.alive || this.state === 'held') return;
     // 서 있을 때 맞으면: 맷집으로 버티며 움찔하고 조금 밀린다 (쓰러지지 않는다)
@@ -410,9 +521,14 @@ export class Dummy {
     this.dpsWindow.push([this.world.time, amount]);
     this.world.onDamage?.(this, amount, info);
     this._hurtT = this.world.time;
-    if (this.infinite) return amount;
+    const cut = (info.type === 'slash' || info.type === 'cleave') && (info.plane || info.planes) && !this.dying;
+    if (this.infinite) {
+      if (cut) this._slashSever(amount, info);
+      return amount;
+    }
     this.hp -= amount;
     if (this.hp <= 0) this.kill(info);
+    else if (cut) this._slashSever(amount, info);
     return amount;
   }
 
@@ -436,8 +552,9 @@ export class Dummy {
     let pin = RI.chest;
     if (at) {
       let bd = Infinity;
+      const lost = this._lost().set;
       for (let i = 0; i < RAG.length; i++) {
-        if (R.pins.has(i)) continue;
+        if (R.pins.has(i) || lost.has(i)) continue;
         const d = R.p[i].distanceToSquared(at);
         if (d < bd) {
           bd = d;
@@ -609,6 +726,8 @@ export class Dummy {
           }
         }
       }
+      const LS = this._lost();
+      if (LS.set.size) for (const [i, a] of LS.anchor) R.p[i].copy(R.p[a]);
       for (let i = 0; i < n; i++) {
         R.v[i].subVectors(R.p[i], R.prev[i]).divideScalar(h);
         const r = RAD[RAG[i]] * this.scale;
@@ -639,6 +758,7 @@ export class Dummy {
     const d = _v2.length();
     if (d < 1e-6) return;
     if (mode < 0 && d >= L) return;
+    if (this._lostIdx?.set.size && (this._lostIdx.set.has(a) || this._lostIdx.set.has(c))) return;
     const wa = (R.pins?.size ? R.pins.has(a) : a === R.pin) ? 0 : 1;
     const wc = (R.pins?.size ? R.pins.has(c) : c === R.pin) ? 0 : 1;
     const w = wa + wc;
@@ -779,6 +899,35 @@ export class Dummy {
       this._setEmissive(_c.setRGB(1, 1, 1).multiplyScalar(Math.max(0, this.flash) * 5));
       if (this.flash <= 0) for (const m of this.mats) m.emissive.copy(m.userData.baseEmissive);
     }
+    // 뜯기는 중: 힘줄이 당겨지며 몸이 붉게 달아오른다 (grab.js 가 _strain 을 채운다)
+    if (this._strain > 0) {
+      this._strain = Math.max(0, this._strain - dt * 4);
+      if (this.flash <= 0) {
+        if (this._strain > 0) this._setEmissive(_c.setRGB(0.55, 0.03, 0.02).multiplyScalar(this._strain * 0.28));
+        else for (const m of this.mats) m.emissive.copy(m.userData.baseEmissive);
+      }
+    }
+    // 반전술식 · 재생: 잘린 팔다리를 되살린다
+    if (this._regrowAt && this.world.time > this._regrowAt && !this.dying && this.state !== 'held') {
+      this._regrowAt = 0;
+      if (regrowParts(this)) {
+        const kind = this.def.rct;
+        const W = this.world;
+        W.ctx.sfx.play('shimmer', { at: this.center(_v), vol: 0.4, rate: 1.2 });
+        if (kind && (this._regrowMsgT ?? 0) < W.time) {
+          this._regrowMsgT = W.time + 15;
+          W.ctx.ui.callout(`${this.def.label} — ${kind === 'rct' ? '반전술식으로 잘린 팔다리를 되살린다' : kind === 'reshape' ? '무위전변으로 몸을 다시 빚는다' : '잘린 몸이 다시 자라난다'}`, { color: '#ffd0d0', size: 34, dur: 1.4 });
+        }
+      }
+    }
+    // 다리를 잃으면 설 수 없다
+    if (this.legless && (this.state === 'stand' || this.state === 'getup') && !this.frozen) {
+      this._getupJ = null;
+      this._hipLocal = null;
+      this.state = 'air';
+      this.stateT = 0;
+      this._ragStart(this.vel);
+    }
     if (this.state === 'held') {
       if (!this.rag) this._ragStart(_v.set(0, 0, 0));
       this._ragStep(dt);
@@ -868,7 +1017,7 @@ export class Dummy {
         if (this.stateT > 2.5) this.kill({ type: 'fade' });
         return;
       }
-      if (this.stateT > 1.2) {
+      if (this.stateT > 1.2 && !this.legless) {
         this.state = 'getup';
         this.stateT = 0;
         this._getupFrom = this.root.quaternion.clone();
@@ -1042,7 +1191,7 @@ export class Dummy {
       const aiming = this.shootT < 0.7;
       this.armR.sh.rotation.x = THREE.MathUtils.lerp(this.armR.sh.rotation.x, aiming ? -Math.PI / 2 : 0, dt * 8);
       this.armR.el.rotation.x = THREE.MathUtils.lerp(this.armR.el.rotation.x, 0, dt * 8);
-      if (this.shootT <= 0) {
+      if (this.shootT <= 0 && !this.handless('R')) {
         const cd = this.def.shootCd ?? 2.2;
         this.shootT = cd + Math.random() * cd * 0.7;
         const from = this.gun ? this.gun.localToWorld(_v2.set(0, 0, 0.12)) : this.armR.hd.getWorldPosition(_v2).addScaledVector(_v3.subVectors(head, this.armR.hd.getWorldPosition(_v3)).normalize(), 0.15);
@@ -1059,7 +1208,7 @@ export class Dummy {
         this.armR.el.rotation.x = -0.2 * (1 - ext);
         if (!this._punchHit && k > 0.38) {
           this._punchHit = true;
-          W.dummyMelee(this, this.armR.hd.getWorldPosition(_v2), this.def.punch ?? 8);
+          if (!this.handless('R')) W.dummyMelee(this, this.armR.hd.getWorldPosition(_v2), this.def.punch ?? 8);
         }
         // 마히토: 치는 동안 팔을 칼날로 바꾼다 (무위전변)
         if (this.def.blade && this.rig) {

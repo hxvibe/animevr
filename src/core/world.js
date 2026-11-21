@@ -11,6 +11,10 @@ import { DomainClash } from './domainClash.js';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _n = new THREE.Vector3();
+const _bq = new THREE.Quaternion();
+const _bv = new THREE.Vector3();
+const _bp = new THREE.Vector3();
+const _bloodC = new THREE.Color(0x5a0508);
 
 /**
  * 파괴 가능한 소품 (상자, 드럼통, 블록 등) — 상자 모양 강체.
@@ -214,6 +218,8 @@ export class World {
     // 더미·소품 말고 칠 수 있는 것 (메구미의 조복 의식 중인 마허라 등). { alive, pos, radius, center(), distanceTo(), damage(), noGrab }
     this.extraTargets = [];
     this.bullets = [];
+    this.limbs = []; // 떨어져 나간 팔다리 · 머리 (소품)
+    this.bleeds = []; // 피를 흘리는 단면 { obj, t, dur, rate }
     this.time = 0;
     this.kills = 0;
     this.shield = null; // (obj, dt, center) => void : 캐릭터가 설정 (무하한 등)
@@ -285,6 +291,56 @@ export class World {
   clearDebris() {
     this.slicer.clear();
     this.shatter.clear();
+    for (const p of this.limbs) {
+      p.alive = false;
+      p.obj.parent?.remove(p.obj);
+    }
+    this.limbs = [];
+    this.bleeds = [];
+  }
+
+  /** 떨어져 나간 부위 (너무 많으면 오래된 것부터 부서진다) */
+  addLimb(p) {
+    this.limbs = this.limbs.filter((x) => x.alive);
+    this.limbs.push(p);
+    while (this.limbs.length > 12) {
+      const old = this.limbs.shift();
+      if (!old.held) old.kill({});
+    }
+  }
+
+  /** 단면에서 한동안 피가 흐른다: obj 의 +Y 방향으로 */
+  bleed(obj, dur = 3, rate = 20) {
+    this.bleeds.push({ obj, t: 0, dur, rate });
+  }
+
+  _updateBleeds(dt) {
+    if (!this.bleeds.length) return;
+    const fx = this.ctx.fx;
+    const scene = this.scene;
+    const col = _bloodC;
+    this.bleeds = this.bleeds.filter((b) => {
+      b.t += dt;
+      if (b.t > b.dur) return false;
+      let o = b.obj;
+      while (o && o !== scene) {
+        if (!o.visible) return true; // 숨겨진 동안은 쉰다
+        o = o.parent;
+      }
+      if (!o) return false;
+      const k = 1 - b.t / b.dur;
+      let n = b.rate * k * dt;
+      b.obj.getWorldPosition(_v);
+      _n.set(0, 1, 0).applyQuaternion(b.obj.getWorldQuaternion(_bq));
+      const r = b.obj.userData.r ?? 0.05;
+      while (n > 0) {
+        if (n < 1 && Math.random() > n) break;
+        n -= 1;
+        _v2.copy(_n).multiplyScalar(0.4 + Math.random() * 1.4 * k).add(_bv.randomDirection().multiplyScalar(0.35));
+        fx.spawnDark(_bp.copy(_v).add(_bv.randomDirection().multiplyScalar(r * 0.6)), _v2, col, 0.022 + Math.random() * 0.025, 0.7 + Math.random() * 0.5, 0.4, 9.8);
+      }
+      return true;
+    });
   }
 
   // ── 소품 ──
@@ -521,9 +577,9 @@ export class World {
     // 영역전개 중엔 소품이 영역 안으로 들어오지 않는다 (배경과 함께 사라졌다가 영역이 걷히면 돌아온다)
     const away = !!ctx.env.hidden;
     for (const p of this.props) {
-      if (p.away !== away) {
-        p.away = away;
-        p.obj.visible = !away;
+      if (p.away !== (away && !p.debris)) {
+        p.away = away && !p.debris;
+        p.obj.visible = !p.away;
       }
       if (!p.alive || p.away || p.asleep || p.fixed || p.held) continue;
       const sub = p.vel.lengthSq() > 25 || p.spin.lengthSq() > 25 ? 2 : 1;
@@ -543,6 +599,7 @@ export class World {
       if (a.asleep) continue;
       for (const d of this.dummies) {
         if (!d.alive) continue;
+        if (a.ignoreD === d && this.time < a.ignoreUntil) continue;
         const dc = d.center(_v2);
         _n.subVectors(a.pos, dc);
         const dist = _n.length();
@@ -550,7 +607,8 @@ export class World {
         if (dist < rr && dist > 0) {
           _n.divideScalar(dist);
           const rel = a.vel.dot(_n);
-          if (rel < -6) {
+          if (rel < -6 && !((a.hitCd?.get(d) ?? 0) > this.time)) {
+            (a.hitCd ??= new Map()).set(d, this.time + 0.3);
             d.damage((-rel - 6) * 4, { type: 'impact' });
             d.impulse(_v.copy(_n).multiplyScalar(rel * 0.4 * a.mass / d.mass));
           }
@@ -591,6 +649,7 @@ export class World {
       }
     }
 
+    this._updateBleeds(dt);
     this.clash.update(dt);
     this.slicer.update(dt, this.pieceForce);
     this.shatter.update(dt);

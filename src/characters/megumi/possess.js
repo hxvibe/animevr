@@ -191,6 +191,7 @@ export class MahoragaSelf {
     // 법진: 쓰러진 마허라의 적응을 잇는다
     this.wheel = new MahoragaWheel(megumi);
     if (from?.ad) this.wheel.ad = new Adaptation(from.ad.snapshot());
+    this.wheel.growth = from?.growth ?? 1; // 참격 ②로 키운 몸집도 잇는다
     this.turns = this.wheel.ad.turns;
     // 두 손이 마허라의 팔이 된다 (내 손 모델은 숨긴다)
     this.arms = { left: new MahoragaArm(this.ctx, 'left'), right: new MahoragaArm(this.ctx, 'right') };
@@ -217,7 +218,7 @@ export class MahoragaSelf {
   update(dt) {
     const { input: inp, world, rig, fx, sfx, ui } = this.ctx;
     // 시점이 서서히 높아진다
-    this.lift = Math.min(LIFT, this.lift + dt * 0.8);
+    this.lift = Math.min(LIFT * (this.wheel.growth ?? 1), this.lift + dt * 0.8);
     rig.position.y = this.baseY + this.lift;
     this.wheel.update(dt);
     // 법진이 한 칸 돌면(적응) 몸이 완전히 회복된다
@@ -310,7 +311,11 @@ export class MahoragaSelf {
       if (segSegDist(a, b, foot, headP) > 0.38 * sc) continue;
       this.hitT.set(t, now + 0.35);
       const curse = !!(t.def?.curse || t.curse);
-      const dmg = (60 + speed * 14) * (curse ? 1.6 : 1);
+      // 공략 적응: 같은 종류를 벨 때마다 분석해, 끝나면 그 상대에게 더 깊이 들어간다 (팔다리도 더 잘 잘린다)
+      const key = t.type ?? t.kind;
+      const a = this.wheel.ad.atk.get(key) ?? 0;
+      if (t.kind !== 'prop') this.wheel.ad.expose('atk:' + key);
+      const dmg = (60 + speed * 14) * (curse ? 1.6 : 1) * (1 + a * 0.35);
       const n = new THREE.Vector3().subVectors(b, a).cross(this.swing?.lengthSq() > 1e-8 ? this.swing : _v3.set(0, 1, 0)).normalize();
       // 무하한: 법진이 분석해 적응한다 (① 절반 · ② 전부 들어간다)
       if (t.infinityOn) this.wheel.ad.expose('infinity');
@@ -365,7 +370,7 @@ export class MahoragaSelf {
       { head: '퇴마의 검 (오른팔)', color: '#ffe0a0', text: '오른팔에 늘 붙어 있다 · 휘두르면 칼날이 지난 자리의 적을 벤다 (빠를수록 깊게, 저주에는 1.6배)' },
       { head: '공간 베기 · 무하한', color: '#ffd28a', text: space },
       { head: '거인의 주먹 (왼팔)', color: '#ffd0a0', text: ctrl ? '왼쪽 그립+트리거로 주먹을 쥐고 휘둘러 친다' : '왼손 주먹으로 친다 — 사람 주먹의 2.5배' },
-      { head: '잡기 · 박기 · 뜯기', color: '#ffb0a0', text: (ctrl ? '그립으로 잡기' : '손을 대고 주먹으로 잡기') + ' → 잡은 채로 땅이나 벽에 세게 박으면 큰 피해\n두 손으로 같은 적의 다른 부위를 잡고 세게 벌리면 뜯어낸다' },
+      { head: '잡기 · 박기 · 뜯기', color: '#ffb0a0', text: (ctrl ? '그립으로 잡기' : '손을 대고 주먹으로 잡기') + ' → 잡은 채로 땅이나 벽에 세게 박으면 큰 피해\n한 손은 몸통, 한 손은 팔·다리를 잡고 벌리면 그 부위가 뜯겨 손에 남는다 (양팔을 잡으면 양팔 모두 · 머리는 뽑으면 죽는다)\n뜯긴 부위는 휘둘러 치거나 던질 수 있다' },
       { head: '법진 · 적응', color: '#ffe0a0', text: '맞은 성질을 분석해 적응하면 법진이 한 칸 돌며 몸이 완전히 회복된다' },
       { head: '돌아가기', color: '#ffffff', text: ctrl ? '두 그립+트리거(주먹)를 가슴 앞에서 1초 맞대기' : '두 주먹을 가슴 앞에서 1초 맞대기' },
     ];

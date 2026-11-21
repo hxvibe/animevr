@@ -312,8 +312,10 @@ export class UI {
     g.font = `700 34px ${FONT}`;
     g.fillStyle = '#ffffff';
     g.fillText('배경', 90, 650);
-    Object.entries(BACKGROUNDS).forEach(([id, b], i) => {
-      p.button(90 + i * 300, 675, 270, 100, b.label, 'bg:' + id, { active: this.sel.background === id, size: 34 });
+    const bgs = Object.entries(BACKGROUNDS);
+    const bw = Math.floor((W - 180 - (bgs.length - 1) * 14) / bgs.length);
+    bgs.forEach(([id, b], i) => {
+      p.button(90 + i * (bw + 14), 675, bw, 100, b.label, 'bg:' + id, { active: this.sel.background === id, size: bw < 230 ? 26 : 34 });
     });
     p.button(W - 90 - 420, 820, 420, 120, '시작', 'start', { active: true, accent: '#d6334a', size: 52, weight: 900, r: 28 });
     g.font = `400 26px ${FONT}`;
@@ -372,7 +374,9 @@ export class UI {
     } else if (this.tab === 'settings') {
       g.font = `700 32px ${FONT}`;
       g.fillText('배경', 50, 180);
-      Object.entries(BACKGROUNDS).forEach(([id, b], i) => p.button(50 + i * 258, 200, 240, 90, b.label, 'bg:' + id, { active: this.ctx.env.id === id, size: 32 }));
+      const bgs = Object.entries(BACKGROUNDS);
+      const bw = Math.floor((W - 100 - (bgs.length - 1) * 12) / bgs.length);
+      bgs.forEach(([id, b], i) => p.button(50 + i * (bw + 12), 200, bw, 90, b.label, 'bg:' + id, { active: this.ctx.env.id === id, size: bw < 200 ? 24 : 32 }));
       const toggles = [
         ['hud', '손목 HUD'], ['skillNames', '기술명 표시'], ['damageNumbers', '데미지 숫자'],
         ['invincible', '플레이어 무적'], ['locomotion', '이동 (스틱·엄지척)'], ['domainGesture', `${this.ctx.character?.domainLabel ?? '영역전개'} 손동작`], ['shadows', '그림자'],

@@ -6,6 +6,7 @@ import { getModel } from '../assets.js';
 import * as R from './realism.js';
 import { buildCity, buildAlley, buildShibuya, buildShinjuku } from './tokyo.js';
 import { buildTrainingHall } from './training.js';
+import { buildGrassland } from './grassland.js';
 
 const skyVert = /* glsl */ `
 varying vec3 vDir;
@@ -215,5 +216,6 @@ export const BACKGROUNDS = {
   alley: { label: '뒷골목', build: buildAlley },
   shibuya: { label: '시부야', build: buildShibuya },
   shinjuku: { label: '신주쿠', build: buildShinjuku },
-  passthrough: { label: '패스스루 (현실)', build: buildPassthrough },
+  grassland: { label: '초원', build: buildGrassland },
+  passthrough: { label: '패스스루\n(현실)', build: buildPassthrough },
 };

@@ -55,6 +55,7 @@ export function bakeHand(pose) {
         const sd = new THREE.Vector3().crossVectors(f, n);
         const toHand = new THREE.Matrix4().makeBasis(sd, f, n).invert();
         const len = tip.distanceTo(wrist);
+        const thumbX = W(F[0].bones[F[0].bones.length - 1]).sub(wrist).applyMatrix4(toHand).x;
         fr.applyEach('R', POSES[pose]);
         body.model.updateMatrixWorld(true);
         const keep = new Set();
@@ -108,6 +109,7 @@ export function bakeHand(pose) {
           out = mergeVerts(parts.length > 1 ? mergeGeometries(parts) : parts[0]);
           out.computeVertexNormals();
           out.computeBoundingSphere();
+          out.userData.thumbX = thumbX;
         }
       }
     }
@@ -160,6 +162,22 @@ function fallbackHand() {
   return _fallback;
 }
 
+/** 좌우 거울 (오른손 → 왼손): 면 방향도 뒤집는다 */
+function mirrorX(g) {
+  const o = g.clone();
+  const p = o.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setX(i, -p.getX(i));
+  const idx = o.index.array;
+  for (let i = 0; i < idx.length; i += 3) {
+    const t = idx[i + 1];
+    idx[i + 1] = idx[i + 2];
+    idx[i + 2] = t;
+  }
+  o.index.needsUpdate = true;
+  o.computeVertexNormals();
+  return o;
+}
+
 /** 법선 쪽으로 부풀린 외곽선용 기하 (뒷면을 검게 그려 애니 느낌의 윤곽선) */
 function inflate(g, d) {
   const o = g.clone();
@@ -170,7 +188,7 @@ function inflate(g, d) {
 }
 
 // 살빛: 원작 영역 속 손처럼 창백한 연보랏빛 · 그늘은 짙은 자주
-const SKIN = 0xd9c2cf;
+const SKIN = 0x9c8494;
 
 export class HandMaw {
   /** R: 영역 반지름(m) */
@@ -180,7 +198,7 @@ export class HandMaw {
     this.cluster = new THREE.Group(); // 피어오른 손 무더기 (가장자리 쪽에 세운다)
     this.group.add(this.cluster);
     this.t = 0;
-    this.mat = new THREE.MeshToonMaterial({ color: SKIN, emissive: 0x2a1832, emissiveIntensity: 0.7 });
+    this.mat = new THREE.MeshToonMaterial({ color: SKIN, emissive: 0x1c1024, emissiveIntensity: 0.5 });
     this.lineMat = new THREE.MeshBasicMaterial({ color: 0x120a16, side: THREE.BackSide });
     this.items = [];
     const add = (pos, quat, s, pose, delay, chain = false) => this.items.push({ pos: pos.clone(), quat: quat.clone(), s, pose, delay, ph: Math.random() * 6.28, wob: chain ? 0 : rnd(0.03, 0.08), chain });
@@ -195,12 +213,12 @@ export class HandMaw {
     const C0 = new THREE.Vector3(0, R * 0.36, 0);
     this.C0 = C0;
     const big = R * 0.32;
-    // 앞을 감싸듯 겹겹이 모은 거대한 손
+    // 가운데 손 둘레를 겹겹이 두른 큰 손 (뒤쪽)
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2;
-      const out = new THREE.Vector3(Math.cos(a) * 0.9, Math.sin(a) * 0.9, 0.45).normalize();
-      const pos = C0.clone().addScaledVector(out, big * 0.25);
-      add(pos, look(out.clone().add(new THREE.Vector3(0, 0, 0.6)), new THREE.Vector3(0, 0, 1)), big * 0.75, i % 2 ? 'claw' : 'relax', 0.05 + i * 0.02);
+      const out = new THREE.Vector3(Math.cos(a), Math.sin(a), -0.35).normalize();
+      const pos = C0.clone().addScaledVector(out, big * 0.5).add(new THREE.Vector3(0, 0, -big * 0.15));
+      add(pos, look(out, new THREE.Vector3(0, 0, 1)), big * 0.6, i % 2 ? 'claw' : 'relax', 0.15 + i * 0.02);
     }
     // 둘레로 사방에 피어난 손
     const NB = 44;
@@ -208,27 +226,23 @@ export class HandMaw {
       const y = 1 - ((i + 0.5) / NB) * 2;
       const r = Math.sqrt(1 - y * y);
       const th = i * 2.39996;
-      const d = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r * 0.7 - 0.25).normalize();
+      const d = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r * 0.6 - 0.45).normalize();
       const pos = C0.clone().addScaledVector(d, big * 0.55);
       add(pos, look(d, new THREE.Vector3(0, 0, 1).addScaledVector(d, -0.5)), big * rnd(0.45, 0.62), POSE_KEYS[i % 3], 0.12 + Math.random() * 0.25);
     }
 
-    // ── 2) 깍지 낀 팔의 사슬: 영역을 공 모양으로 두른다 ──
+    // ── 2) 깍지 낀 팔의 사슬: 가로로 여러 겹 둘러 영역을 공 모양으로 감싼다 ──
     const Rs = R * 0.9;
     const HL = 1.25; // 손 길이(m)
     this.arms = [];
     const paths = [];
-    for (let k = 0; k < 5; k++) {
-      // 정수리를 지나는 반원 (바닥 → 정수리 → 반대쪽 바닥)
-      const az = (k / 5) * Math.PI + 0.3;
-      const u = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
-      paths.push({ ring: false, L: Math.PI * Rs, P: (t) => new THREE.Vector3().addScaledVector(u, Math.cos(t * Math.PI) * Rs).add(new THREE.Vector3(0, Math.sin(t * Math.PI) * Rs, 0)) });
-    }
-    // 눈높이 조금 위를 한 바퀴
-    const ringH = R * 0.22;
-    const ringR = Math.sqrt(Rs * Rs - ringH * ringH);
-    paths.push({ ring: true, L: 2 * Math.PI * ringR, P: (t) => new THREE.Vector3(Math.cos(t * Math.PI * 2) * ringR, ringH, Math.sin(t * Math.PI * 2) * ringR) });
-    for (const { ring, L, P } of paths) {
+    [0.1, 0.28, 0.46, 0.63, 0.78, 0.9].forEach((f, li) => {
+      const ringH = Rs * f;
+      const ringR = Math.sqrt(Rs * Rs - ringH * ringH);
+      const off = li * 0.37;
+      paths.push({ ring: true, li, L: 2 * Math.PI * ringR, P: (t) => new THREE.Vector3(Math.cos(t * Math.PI * 2 + off) * ringR, ringH, Math.sin(t * Math.PI * 2 + off) * ringR) });
+    });
+    for (const { ring, li, L, P } of paths) {
       const nJ = Math.max(3, Math.round(L / 4.6));
       const joints = [];
       for (let j = 0; j < nJ; j++) {
@@ -236,7 +250,7 @@ export class HandMaw {
         const p = P(t);
         if (p.y < 0.6) continue;
         const tan = P(t + 0.002).sub(P(t - 0.002)).normalize();
-        joints.push({ p, tan, delay: ring ? 0.45 + (j / nJ) * 0.2 : 0.35 + p.y / (Rs * 2.2) });
+        joints.push({ p, tan, delay: 0.35 + li * 0.09 + (j / nJ) * 0.12 });
       }
       for (const J of joints) {
         // 깍지: 두 손이 손바닥을 맞대고 손가락을 서로의 손등으로 감는다
@@ -276,6 +290,29 @@ export class HandMaw {
       it.mesh = this.meshes[it.pose];
       it.idx = it.mesh.i++;
     }
+    // ── 3) 한가운데: 손바닥을 위아래로 맞댄 거대한 두 손 (영역전개의 손 모양 — 앞에서 보면 엄지가 왼쪽) ──
+    //  앞 손: 오른손, 손가락이 위 · 손등이 앞 / 뒤 손: 왼손(거울), 손가락이 아래 · 손바닥이 앞 손의 손바닥에 닿는다
+    const pairL = big * 1.05;
+    // 앞에서 볼 때 엄지가 왼쪽: 두 손 모두 손 좌표 +X 가 왼쪽으로 가므로, 엄지가 −X 인 모델이면 거울로
+    const g0 = bakeHand('open') ?? fallbackHand();
+    const gR = (g0.userData.thumbX ?? 1) > 0 ? g0 : mirrorX(g0);
+    const gL = gR;
+    this.pair = [];
+    const mk = (geo, fingers, palm, wristY, z) => {
+      const m = new THREE.Mesh(geo, this.mat);
+      const o = new THREE.Mesh(inflate(geo, 0.01), this.lineMat);
+      const q = look(fingers, palm);
+      const wrist = C0.clone().add(new THREE.Vector3(0, wristY * pairL, z * pairL + big * 0.22));
+      for (const x of [m, o]) {
+        x.frustumCulled = false;
+        this.cluster.add(x);
+      }
+      this.pair.push({ m, o, q, wrist });
+    };
+    mk(gR, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), -0.42, 0.045);
+    mk(gL, new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), 0.42, -0.045);
+    this.pairL = pairL;
+
     // 팔: 손목에서 굵어졌다 다시 손목으로 가늘어지는 아래팔
     const prof = [[0.0, 0], [0.62, 0.0], [0.8, 0.1], [1.0, 0.3], [1.0, 0.7], [0.8, 0.9], [0.62, 1], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y));
     const armGeo = new THREE.LatheGeometry(prof, 12);
@@ -315,6 +352,18 @@ export class HandMaw {
       it.mesh.m.setMatrixAt(it.idx, _m);
       it.mesh.o.setMatrixAt(it.idx, _m);
     }
+    // 가운데 두 손: 가장 먼저 맺힌다 (숨 쉬듯 아주 조금 떨린다)
+    const pk = THREE.MathUtils.clamp(open / 0.45, 0, 1);
+    const pe = 1 - Math.pow(1 - pk, 3);
+    for (const P of this.pair ?? []) {
+      const sc = Math.max(0.0001, this.pairL * (0.2 + 0.8 * pe));
+      for (const x of [P.m, P.o]) {
+        x.position.copy(this.C0).lerp(P.wrist, pe);
+        x.position.y += Math.sin(t * 0.9) * 0.05;
+        x.quaternion.copy(P.q);
+        x.scale.setScalar(sc);
+      }
+    }
     this.arms.forEach((A, i) => {
       const k = THREE.MathUtils.clamp((open - A.delay) / 0.3, 0, 1);
       const d = _a.subVectors(A.b, A.a);
@@ -340,6 +389,7 @@ export class HandMaw {
     }
     this.armMesh.geometry.dispose();
     this.armMesh.dispose();
+    for (const P of this.pair ?? []) P.o.geometry.dispose();
     this.mat.dispose();
     this.lineMat.dispose();
   }

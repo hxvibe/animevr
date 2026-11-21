@@ -375,8 +375,8 @@ export class Mahito extends Caster {
         { head: '칼날 팔', demo: 'mahito.blade', color: '#e8e2d8', text: '검지·중지를 곧게 펴 칼처럼 세우고(손바닥을 옆으로) 0.35초 → 손이 칼날로 바뀐다 → 휘둘러 베기\n주먹을 쥐면 되돌아온다' },
         { head: '드릴 팔', demo: 'mahito.drill', color: '#c8c0bc', text: '주먹을 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르면 꿰뚫는다' },
         { head: '늘어나는 팔', demo: 'mahito.stretch', color: '#c8c0bc', text: '검지로 앞을 빠르게 찌르면 팔이 7m까지 늘어나 때리고 끌어당긴다' },
-        { head: '개조인간 발사', demo: 'mahito.launch', color: '#c8c4bc', text: '주먹을 입에 0.25초 (몸속의 개조인간을 꺼낸다) → 앞으로 던지면\n벌레 같은 개조인간이 몸을 늘이며 날아가 바라본 적을 물어뜯는다' },
-        { head: '다중혼 「撥体」', demo: 'mahito.repel', color: '#b8a8a4', text: '두 손바닥을 가슴 앞에서 맞대 0.4초 → 두 손을 앞으로 밀면 영혼 덩어리가 튀어나간다' },
+        { head: '개조인간 발사', demo: 'mahito.launch', color: '#c8c4bc', text: '주먹을 입에 0.25초 → 입에서 개조 인간 스톡(체스 말만 하게 줄여 둔 개조 인간)을 꺼내 쥔다 → 앞으로 던지면\n풀려나 벌레 같은 개조 인간으로 자라나 바라본 적을 물어뜯는다' },
+        { head: '다중혼 「撥体」', demo: 'mahito.repel', color: '#b8a8a4', text: '두 손바닥을 가슴 앞에서 맞대 0.4초 → 입에서 스톡 8개가 나와 두 손 사이에 모인다 (영혼을 합친다)\n두 손을 앞으로 밀면 개조 인간 8명이 한 덩어리로 꼬여 튀어나간다' },
         { head: '영역전개 「自閉円頓裹」', demo: 'mahito.domain', color: '#9fd8ff', text: '두 손 검지 끝을 맞대고 엄지 끝도 맞대 손가락을 위로 (마름모) 1.2초\n안의 모든 영혼에 무위전변이 필중 · 메뉴에서도 발동' },
       ];
     }
@@ -389,7 +389,7 @@ export class Mahito extends Caster {
     }
     return [
       { head: '무위전변', color: '#7ad8ff', text: '그립을 쥐지 않은 손을 대상에 대고 트리거' },
-      { head: '몸 변형', color: '#e8e2d8', text: '오른쪽 그립: 칼날 팔 (휘두르기) · 왼쪽 그립: 드릴 팔 (찌르기) · A: 늘어나는 팔 · X: 개조인간 발사 · 양쪽 그립을 모으고 밀기: 발체' },
+      { head: '몸 변형', color: '#e8e2d8', text: '오른쪽 그립: 칼날 팔 (휘두르기) · 왼쪽 그립: 드릴 팔 (찌르기) · A: 늘어나는 팔 · X: 스톡 꺼내기 → 떼면 던지기 · 양쪽 그립을 모으고 밀기: 발체' },
       { head: '영역전개', color: '#9fd8ff', text: '양쪽 스틱을 눌러 1.2초' },
     ];
   }

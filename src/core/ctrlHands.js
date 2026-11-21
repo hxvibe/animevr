@@ -125,8 +125,8 @@ export const CTRL_HELP = {
   'mahito.blade': '그립+A(X)(검지·중지)를 옆으로 세워 0.35초 → 칼날 → 휘둘러 베기',
   'mahito.drill': '그립+트리거를 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르기',
   'mahito.stretch': '그립만 쥐고 앞으로 빠르게 찌르기 → 팔이 늘어난다',
-  'mahito.launch': '그립+트리거를 입에 0.25초 → 앞으로 던지며 모두 놓기',
-  'mahito.repel': `${N} 두 손을 가슴 앞에서 맞대 0.4초 → 앞으로 밀기`,
+  'mahito.launch': '그립+트리거를 입에 0.25초 (스톡을 꺼내 쥔다) → 앞으로 던지며 모두 놓기',
+  'mahito.repel': `${N} 두 손을 가슴 앞에서 맞대 0.4초 (스톡 8개가 모인다) → 앞으로 밀기`,
   'mahito.domain': `${N} 두 손을 가슴 앞에서 맞대고 위로 세워 1.2초`,
 };
 
@@ -362,8 +362,8 @@ export const DESK_HELP = {
   'mahito:mahito.blade': '1: 칼날 팔로 베기',
   'mahito:mahito.drill': '2: 드릴 팔로 찌르기',
   'mahito:mahito.stretch': '3: 팔을 늘려 때리기',
-  'mahito:mahito.launch': '5: 개조인간 발사',
-  'mahito:mahito.repel': '4: 다중혼 발체',
+  'mahito:mahito.launch': '5: 입에서 스톡을 꺼내 던진다 → 개조 인간',
+  'mahito:mahito.repel': '4: 스톡 8개를 모아 다중혼 발체',
   'mahito:mahito.domain': 'Q 1.2초 누르고 있기',
   'jogo:jogo.insects': '1',
   'jogo:jogo.ray': '2 누르고 있기',

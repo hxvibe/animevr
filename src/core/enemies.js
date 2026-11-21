@@ -964,43 +964,74 @@ const FB_BEAM = {
     m.beam = new THREE.Group();
     m.beam.add(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1, 12, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), mat));
     m.beam.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 10, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), core));
-    m.mats = [mat, core];
-    e.world.ctx.scene.add(m.beam);
+    // 두 손 사이에서 자라는 주력 덩어리
+    m.orb = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff3050, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.orbCore = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8), core);
+    m.orb.add(m.orbCore);
+    m.orb.scale.setScalar(0.001);
+    m.mats = [mat, core, m.orb.material];
+    e.world.ctx.scene.add(m.beam, m.orb);
+    m.beam.visible = false;
     m.hitT = 0;
   },
   pose: (T, e, k) => {
-    const up = sm(0, 0.35, k) * (1 - sm(0.88, 1, k));
-    T.shL = [-1.45 * up, 0, 0.12 * up + e.restZ * (1 - up)];
-    T.shR = [-1.45 * up, 0, -0.12 * up - e.restZ * (1 - up)];
-    T.elL = [-0.2, 0, 0];
-    T.elR = [-0.2, 0, 0];
-    T.chest[0] += 0.15 * up;
-    T.knL[0] += 0.25 * up;
-    T.knR[0] += 0.25 * up;
-    T.hpL[0] += 0.2 * up;
-    T.hpR[0] -= 0.15 * up;
+    // 1) 웅크리며 두 손을 옆구리로 끌어당겨 모은다 → 2) 두 손바닥을 앞으로 내지른다 → 3) 쏘는 동안 반동을 버틴다 → 4) 거둔다
+    const gather = sm(0, 0.3, k) * (1 - sm(0.4, 0.47, k));
+    const thrust = sm(0.4, 0.47, k) * (1 - sm(0.88, 1, k));
+    const recoil = k > 0.47 && k < 0.86 ? Math.sin(k * 90) * 0.03 + 0.08 : 0;
+    T.shL = [0.35 * gather - 1.45 * thrust, 0, (0.25 * gather + 0.1 * thrust) + e.restZ * (1 - gather - thrust)];
+    T.shR = [0.35 * gather - 1.45 * thrust, 0, -(0.25 * gather + 0.1 * thrust) - e.restZ * (1 - gather - thrust)];
+    T.elL = [-1.7 * gather - 0.15 * thrust, 0, 0];
+    T.elR = [-1.7 * gather - 0.15 * thrust, 0, 0];
+    T.chest[0] += 0.35 * gather - 0.05 * thrust - recoil;
+    T.chest[1] += 0.25 * gather;
+    T.head[0] += 0.2 * gather - 0.1 * thrust;
+    T.knL[0] += 0.45 * gather + 0.35 * thrust;
+    T.knR[0] += 0.45 * gather + 0.35 * thrust;
+    T.hpL[0] += 0.35 * gather + 0.3 * thrust;
+    T.hpR[0] -= 0.1 * gather + 0.25 * thrust;
   },
   tick: (e, k, m, dt) => {
     const W = e.world;
     const { fx, sfx, input: inp } = W.ctx;
-    const from = handPos(e, 'L', _v2).add(handPos(e, 'R', _v3)).multiplyScalar(0.5);
+    const from = handPos(e, 'L', _v2).add(handPos(e, 'R', _v3)).multiplyScalar(0.5).addScaledVector(fwdOf(e, _v), 0.12 * e.scale);
+    const from0 = from.clone();
     // 겨눈 곳을 천천히 따라간다 (피할 틈)
     m.aim.lerp(_v.copy(inp.head).add(_v3.set(0, -0.3, 0)), Math.min(1, dt * 1.2));
+    // 주력 덩어리: 모으는 동안 자라며 떨린다 → 쏘는 동안 손끝의 불꽃 → 사라진다
+    const ok = k < 0.45 ? sm(0.05, 0.42, k) : k < 0.86 ? 1 : 1 - sm(0.86, 0.95, k);
+    m.orb.position.copy(from0);
+    m.orb.scale.setScalar(Math.max(0.001, (0.05 + 0.22 * ok) * e.scale * (1 + Math.sin(k * 120) * 0.08)));
+    m.orb.material.opacity = 0.9 * ok;
     if (k < 0.45) {
-      if (Math.random() < 0.8) fx.spawn(from.clone().add(_v.randomDirection().multiplyScalar(0.3)), _v.copy(from).sub(_v3.copy(from).add(_v.randomDirection())).multiplyScalar(0), FB_COL, 0.06 + k * 0.1, 0.25, 0, 0);
-      if (!m.snd && k > 0.1) {
+      // 주위의 주력이 손 사이로 빨려 든다
+      if (Math.random() < 0.9) {
+        const p = _v3.copy(from0).add(_v.randomDirection().multiplyScalar(rnd(0.6, 1.1) * e.scale));
+        fx.spawn(p, _v.subVectors(from0, p).multiplyScalar(2.4), FB_COL, 0.04 + k * 0.08, 0.4, 0, 0);
+      }
+      if (!m.snd && k > 0.06) {
         m.snd = true;
-        sfx.play('charge_rise', { at: from, vol: 0.6, rate: 0.6 });
+        sfx.play('charge_rise', { at: from0, vol: 0.6, rate: 0.6 });
       }
       return;
     }
     const on = k < 0.85;
     const len = Math.min(25, from.distanceTo(m.aim) + 6);
     const dir = _v.subVectors(m.aim, from).normalize();
+    m.beam.visible = true;
     m.beam.position.copy(from);
     m.beam.lookAt(_v3.copy(from).add(dir));
-    m.beam.scale.set(1 + Math.sin(k * 80) * 0.15, 1 + Math.sin(k * 80) * 0.15, on ? len * sm(0.45, 0.52, k) : len);
+    // 가늘게 뚫고 나간 뒤 굵어지고, 끝날 땐 가늘어지며 사그라든다
+    const thick = (0.35 + 0.65 * sm(0.47, 0.55, k)) * (on ? 1 : 1 - sm(0.85, 1, k) * 0.8) * e.scale;
+    const pulse = 1 + Math.sin(k * 80) * 0.12;
+    m.beam.scale.set(thick * pulse, thick * pulse, on ? len * sm(0.45, 0.52, k) : len);
     m.mats[0].opacity = on ? 0.85 : Math.max(0, 0.85 * (1 - (k - 0.85) / 0.15));
+    // 빔이 닿는 곳: 불꽃이 튀고 땅이 그을린다
+    if (on && Math.random() < 0.7) {
+      const endP = _v3.copy(from).addScaledVector(dir, len * sm(0.45, 0.52, k));
+      if (endP.y < 0.2) endP.y = 0.1;
+      fx.spawn(endP, _v.randomDirection().multiplyScalar(3).setY(Math.abs(_v.y) * 3), FB_COL, 0.07, 0.35, 1, 1);
+    }
     m.mats[1].opacity = m.mats[0].opacity;
     if (!m.boom) {
       m.boom = true;
@@ -1020,11 +1051,12 @@ const FB_BEAM = {
     if (Math.random() < 0.6) fx.spawn(_v2.copy(from).addScaledVector(dir, Math.random() * len), _v3.set(0, 0.5, 0), FB_COL, 0.08, 0.3, 1, 0);
   },
   end: (e, m) => {
-    e.world.ctx.scene.remove(m.beam);
+    e.world.ctx.scene.remove(m.beam, m.orb);
     m.beam?.traverse((o) => o.geometry?.dispose());
+    m.orb?.traverse((o) => o.geometry?.dispose());
     for (const x of m.mats ?? []) x.dispose();
   },
-  fist: { L: 0.1, R: 0.1 },
+  fist: { L: 0.35, R: 0.35 }, // 손을 오므려 덩어리를 감싼다
 };
 const FB_BARRIER = {
   tech: true,
@@ -1042,11 +1074,36 @@ const FB_BARRIER = {
     T.head[0] -= 0.3 * o;
   },
   tick: (e, k, m) => {
-    if (m.hit || k < 0.45) return;
-    m.hit = true;
     const W = e.world;
     const { fx, sfx, input: inp } = W.ctx;
+    if (k < 0.45) {
+      // 웅크려 몸 안으로 주력을 눌러 담는다: 몸이 떨리고 붉은 기운이 몸에 달라붙는다
+      const c0 = e.center(_v2);
+      if (Math.random() < 0.7) {
+        const p = _v3.copy(c0).add(_v.randomDirection().multiplyScalar(rnd(0.4, 0.8) * e.scale));
+        fx.spawn(p, _v.subVectors(c0, p).multiplyScalar(2), FB_COL, 0.05, 0.3, 0, 0);
+      }
+      e.root.position.x += Math.sin(k * 140) * 0.004 * e.scale;
+      if (!m.snd && k > 0.1) {
+        m.snd = true;
+        sfx.play('charge_rise', { at: c0, vol: 0.5, rate: 0.9 });
+      }
+      return;
+    }
+    if (m.hit) return;
+    m.hit = true;
     const c = e.center(new THREE.Vector3());
+    // 바닥을 따라 퍼지는 충격 고리
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3050, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    ring.position.set(c.x, 0.04, c.z);
+    fx.addTransient(ring, 0.6, (kk) => {
+      ring.scale.setScalar(0.4 + kk * 5 * e.scale);
+      ring.material.opacity = 0.8 * (1 - kk);
+    }, () => {
+      ring.geometry.dispose();
+      ring.material.dispose();
+    });
+    fx.burst(c, 40, FB_COL, 5, 0.07, 0.5);
     const sh = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color: 0xff2040, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     sh.position.copy(c);
     fx.addTransient(sh, 0.5, (kk) => {
@@ -1057,7 +1114,12 @@ const FB_BARRIER = {
       sh.material.dispose();
     });
     sfx.explosion(c, 0.6);
-    if (inp.bodyCenter(_v2).distanceTo(c) < 3.4 * e.scale && !(W.meleeShield && W.meleeShield(e, _v2))) W.hitPlayer(e.dmg(11), { type: 'energy', src: e });
+    if (inp.bodyCenter(_v2).distanceTo(c) < 3.4 * e.scale && !(W.meleeShield && W.meleeShield(e, _v2))) {
+      W.hitPlayer(e.dmg(11), { type: 'energy', src: e });
+      // 휩쓸려 뒤로 밀려난다
+      const push = _v3.subVectors(inp.head, c).setY(0).normalize().multiplyScalar(0.6);
+      W.ctx.rig.position.add(push);
+    }
   },
   fist: { L: 0.2, R: 0.2 },
 };
@@ -1082,12 +1144,16 @@ const FB_SLING = {
     const W = e.world;
     const { fx, sfx, input: inp } = W.ctx;
     if (k < 0.55 && m.blob) {
-      // 왼손 앞에 붙인 덩어리를 오른손으로 잡아 늘인다
+      // 왼손바닥에서 덩어리가 부풀어 나오고 → 오른손으로 잡아 고무줄처럼 늘인다
       const a = handPos(e, 'L', _v2);
       const b = handPos(e, 'R', _v3);
-      m.blob.position.addVectors(a, b).multiplyScalar(0.5);
+      const grow = sm(0, 0.22, k);
+      const grab = sm(0.15, 0.3, k);
+      m.blob.position.copy(a).lerp(_v.addVectors(a, b).multiplyScalar(0.5), grab);
       m.blob.lookAt(b);
-      m.blob.scale.set(1, 1, Math.max(1, a.distanceTo(b) / 0.36));
+      const g = Math.max(0.01, grow) * e.scale;
+      m.blob.scale.set(g, g, g * Math.max(1, grab * a.distanceTo(b) / (0.36 * e.scale)));
+      if (Math.random() < 0.4) fx.spawn(a.clone(), _v.randomDirection().multiplyScalar(0.4), FB_COL, 0.04, 0.3, 0, 0);
       return;
     }
     if (m.shot) return;

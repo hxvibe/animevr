@@ -387,18 +387,33 @@ export class DivineDog extends Shiki {
           }
         }
       } else {
-        // 플레이어 옆으로 돌아와 앉는다
-        const fwd = _v2.copy(inp.headDir).setY(0);
-        if (fwd.lengthSq() < 1e-3) fwd.set(0, 0, -1);
-        fwd.normalize();
-        const want = _v3.set(inp.head.x + fwd.x * 0.7 - fwd.z * 1.0 * this.slot, 0, inp.head.z + fwd.z * 0.7 + fwd.x * 1.0 * this.slot);
-        const to = want.sub(P).setY(0);
+        // 할 일이 없으면 술사 근처에서 가만히 있거나 어슬렁거린다 (머리를 돌린다고 따라 돌지 않는다)
+        this.wander ??= { at: new THREE.Vector3(), t: 0, rest: 0, face: Math.random() * 6.28 };
+        const Wd = this.wander;
+        Wd.t -= dt;
+        const far = Math.hypot(Wd.at.x - inp.head.x, Wd.at.z - inp.head.z);
+        if (Wd.t <= 0 || far > 4.2 || far < 0.9) {
+          // 새 자리: 술사 둘레 1.3~3.2m 아무 데나 (자기 쪽에 가깝게)
+          const base = Math.atan2(P.z - inp.head.z, P.x - inp.head.x);
+          const a2 = base + (Math.random() - 0.5) * 1.6 + (this.slot ?? 0) * 0.4;
+          const r2 = 1.3 + Math.random() * 1.9;
+          Wd.at.set(inp.head.x + Math.cos(a2) * r2, 0, inp.head.z + Math.sin(a2) * r2);
+          Wd.t = 4 + Math.random() * 6;
+          Wd.face = Math.random() * 6.28;
+        }
+        const to = _v3.subVectors(Wd.at, P).setY(0);
         const dist = to.length();
-        if (dist > 0.3) {
-          moveSpeed = Math.min(6, 1.5 + dist * 2.5);
+        const pFar = Math.hypot(P.x - inp.head.x, P.z - inp.head.z);
+        if (dist > 0.25) {
+          // 멀리 떨어졌으면 달려오고, 가까우면 천천히 걷는다
+          moveSpeed = pFar > 5 ? Math.min(6, 2 + dist * 1.5) : 1.1;
           P.addScaledVector(to.normalize(), Math.min(dist, moveSpeed * dt));
           this.faceTo(_v.copy(P).add(to));
-        } else this.faceTo(_v.copy(P).add(fwd));
+        } else {
+          // 제자리: 가끔 고개를 돌려 두리번
+          Wd.face += Math.sin(performance.now() * 0.0007 + (this.slot ?? 0)) * dt * 0.4;
+          this.faceTo(_v.copy(P).add(_v2.set(Math.cos(Wd.face), 0, Math.sin(Wd.face))));
+        }
       }
       // 플레이어 몸을 뚫고 지나가지 않게
       const hx = P.x - inp.head.x;
@@ -2100,9 +2115,11 @@ function rabbitModelParts() {
   src.traverse((o) => {
     if (!o.isMesh) return;
     const g = o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
     g.deleteAttribute('skinIndex');
     g.deleteAttribute('skinWeight');
-    g.applyMatrix4(o.matrixWorld);
+    // 눈: 모델의 눈 메시가 머리 위(귀 사이)에 떠 있어 얼굴의 눈 자리(앞쪽 · 아래)로 옮긴다 (모델 단위)
+    if (/eye/i.test(o.name)) g.translate(0, -0.6, 0.16);
     g.scale(k, k, k);
     g.userData.shared = true;
     const mat = new THREE.MeshToonMaterial({ map: o.material.map ?? null, color: o.material.map ? 0xffffff : o.material.color, gradientMap: gradient() });

@@ -146,8 +146,8 @@ export class Megumi {
         { head: '蝦蟇 가마 · 脱兎 탈토', demo: ['megumi.toad', 'megumi.rabbits'], color: '#a8b8ff', text: '가마: 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다' },
         { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)' },
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
-        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 주먹을 가슴 높이에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
-        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 앞으로 뻗어 허리 아래에서 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
+        { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 팔을 앞으로 쭉 뻗고 두 주먹을 쥐어 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
+        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 아래로 내리고 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
         { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
       ];
     }
@@ -167,8 +167,9 @@ export class Megumi {
       ];
     }
     return [
-      { head: '식신 고르기 · 부르기', color: '#a8b8ff', text: '왼쪽 트리거: 식신 고르기 · 오른쪽 트리거: 부르기 (바라본 대상을 노린다)\n다시 부르면 돌려보내기' },
-      { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: '양쪽 스틱을 눌러 1.2초 (메뉴에서도 발동)' },
+      { head: '식신 고르기 · 부르기', color: '#a8b8ff', text: '왼쪽 트리거만: 식신 고르기 · 오른쪽 트리거만: 부르기 (바라본 대상을 노린다 · 그립까지 쥐면 주먹이라 부르지 않는다)\n다시 부르면 돌려보내기' },
+      { head: '魔虚羅 마허라', color: '#ffd28a', text: '두 컨트롤러를 앞으로 쭉 뻗고 두 그립+트리거(주먹)를 1초' },
+      { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: '팔을 아래로 내리고 두 그립+트리거(주먹)를 맞대고 1.2초 (메뉴에서도 발동)' },
       { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · Y 메뉴' },
     ];
   }
@@ -212,7 +213,8 @@ export class Megumi {
     } else (this.vessel ??= new Vessel(this)).update(dt);
     this.domain.cd = Math.max(0, this.domain.cd - dt);
     if (!blocked && !this.possessed) {
-      if (inp.left.source === 'hand' || inp.right.source === 'hand') this._updateSigns(dt);
+      // 핸드트래킹 · (원래 조작) 컨트롤러 모두 수인을 본다 — 컨트롤러는 마허라 · 영역전개만
+      if (inp.left.source === 'hand' || inp.right.source === 'hand' || (inp.left.source === 'controller' && inp.right.source === 'controller')) this._updateSigns(dt);
       this._controller(dt);
       if (inp.mode === 'desktop') this._desktop(dt);
     }
@@ -268,6 +270,17 @@ export class Megumi {
       return d > 1e-3 && (t.y - m.y) / d > 0.55;
     };
     this._signSide = null;
+    // 컨트롤러 그대로(원래 조작): 그립+트리거 = 주먹
+    //  마허라: 두 팔을 앞으로 뻗고 두 주먹 / 영역전개: 팔을 내리고 두 주먹을 맞댄다 (컨트롤러는 몸통이 커서 22cm 안이면 맞댄 것으로)
+    if (L.active && R.active && L.source === 'controller' && R.source === 'controller' && !L.uiBlock && !R.uiBlock) {
+      const cf = (h) => h.btn.grip && h.btn.trigger;
+      if (cf(L) && cf(R)) {
+        const d = L.palm.distanceTo(R.palm);
+        const drop = head.y - (L.palm.y + R.palm.y) / 2;
+        if (settings.domainGesture && d < 0.22 && drop > 0.68 && drop < 1.4) return 'domain';
+        if (front(L) > 0.36 && front(R) > 0.36 && drop > 0.0 && drop < 0.6 && d < 0.6) return 'mahoraga';
+      }
+    }
     // 컨트롤러 손: 맞물린 수인
     if (inp.ctrlMudra === 'megumi.domain' && settings.domainGesture) return 'domain';
     if (inp.ctrlMudra === 'megumi.mahoraga') return 'mahoraga';
@@ -276,10 +289,11 @@ export class Megumi {
       const mid = _v2.addVectors(L.palm, R.palm).multiplyScalar(0.5);
       // 두 주먹을 맞댄다: 팔을 앞으로 뻗어 허리 아래면 영역전개, 가슴 앞이면 마허라
       //  높이는 눈에서 잰다: 가슴 앞 ≈ 눈 아래 0.2~0.45m, 허리 ≈ 0.6m 아래
-      const fists = fist(L) && fist(R) && d < 0.14 && front(L) > 0.08 && front(R) > 0.08;
       const drop = head.y - mid.y;
-      if (settings.domainGesture && fists && drop > 0.6 && drop < 1.15 && front(L) > 0.26 && front(R) > 0.26) return 'domain';
-      if (fists && L.palmNormal.dot(R.palmNormal) > -0.3 && drop > 0.12 && drop <= 0.5 && mid.distanceTo(head) < 0.75) return 'mahoraga';
+      // 영역전개: 팔을 내리고(허리 아래) 두 주먹을 맞댄다
+      if (settings.domainGesture && fist(L) && fist(R) && d < 0.14 && drop > 0.7 && drop < 1.35) return 'domain';
+      // 마허라: 두 팔을 앞으로 쭉 뻗고 두 주먹
+      if (fist(L) && fist(R) && front(L) > 0.4 && front(R) > 0.4 && drop > 0.0 && drop < 0.6 && d < 0.45) return 'mahoraga';
       // 관우 (그림): 한 손 검지를 뿔처럼 세우고, 다른 손을 그 아래에 받친다
       const horn = (H, B) => (H.gesture === 'point' || H.gesture === 'two') && H.dir.y > 0.45 && nf(B) && H.palm.y - B.palm.y > 0.02 && Math.hypot(H.palm.x - B.palm.x, H.palm.z - B.palm.z) < 0.15 && front(H) > 0.12;
       if (horn(L, R) || horn(R, L)) return 'ox';
@@ -404,25 +418,15 @@ export class Megumi {
     const { input: inp, ui } = this.ctx;
     const L = inp.left;
     const R = inp.right;
-    if (L.source === 'controller' && L.active && !L.uiBlock && L.pressed('trigger')) {
+    // 트리거만 눌렀을 때 (그립까지 쥐면 주먹 — 주먹을 쥐었다고 식신이 나가지 않게)
+    if (L.source === 'controller' && L.active && !L.uiBlock && L.pressed('trigger') && !L.btn.grip) {
       this.ctrlSel = (this.ctrlSel + 1) % ORDER.length;
       const s = SIGNS[ORDER[this.ctrlSel]];
       ui.callout(`${s.kanji} ${s.label}`, { color: '#c0ccff', size: 46, dur: 0.8 });
       L.pulse?.(0.3, 30);
     }
-    if (R.source === 'controller' && R.active && !R.uiBlock && R.pressed('trigger')) this.summon(ORDER[this.ctrlSel]);
-    // 영역: 양쪽 스틱
-    const d = this.domain;
-    const both = L.source === 'controller' && R.source === 'controller' && L.btn.stick && R.btn.stick;
-    if (both && this.garden.state === 'idle' && d.cd <= 0) {
-      d.sign += dt;
-      this.aura.set('left', 0.2 + d.sign * 0.7);
-      this.aura.set('right', 0.2 + d.sign * 0.7);
-      if (d.sign >= 1.2) {
-        d.sign = 0;
-        this.castDomain();
-      }
-    } else if (!(inp.mode === 'desktop' && inp.keyDown('KeyQ'))) d.sign = 0;
+    if (R.source === 'controller' && R.active && !R.uiBlock && R.pressed('trigger') && !R.btn.grip) this.summon(ORDER[this.ctrlSel]);
+    // 마허라 · 영역전개는 컨트롤러로도 수인을 맺는다 (_detect: 그립+트리거 = 주먹)
   }
 
   _desktop(dt) {

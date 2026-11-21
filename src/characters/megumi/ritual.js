@@ -12,6 +12,7 @@
 //  번데기는 마허라 체형을 재서 팽팽하게 감싼다 — 다만 오목한 곳(목 · 허리)은 따라 들어가지 않고 곧게 건너간다
 import * as THREE from 'three';
 import { makeShiki, AX } from './models.js';
+import { FingerRig } from '../../core/enemies.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -66,8 +67,9 @@ float n(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 *
   return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
 void main() {
   float az = atan(vL.z, vL.x);
+  vec2 cs = vec2(cos(az), sin(az)); // 둘레를 한 바퀴 돌아도 끊기지 않는 잡음 좌표
   // 위에서부터 풀린다 (들쭉날쭉한 붕대 끝)
-  float cut = uTop - uUnwrap * (uH + 0.6) + (n(vec2(az * 3.0, 0.0)) - 0.5) * 0.8;
+  float cut = uTop - uUnwrap * (uH + 0.6) + (n(cs * 1.5 + 7.0) - 0.5) * 0.8;
   if (vL.y > cut) discard;
   // 날개가 뚫고 나온 구멍 (들쭉날쭉)
   if (uHole > 0.0) {
@@ -81,10 +83,10 @@ void main() {
     if (length(d) < uTear * (0.85 + 0.3 * n(vec2(az * 12.0, vL.y * 12.0)))) discard;
   }
   // 붕대 결: 비스듬히 감긴 띠 + 띠 사이의 먹선
-  float band = vL.y * 3.2 + az * 0.55 + n(vec2(az * 2.0, vL.y)) * 0.8;
+  float band = vL.y * 3.2 + az * 0.4775 + n(cs * 1.0 + vec2(vL.y, 3.0)) * 0.8; // 0.4775 = 3/2π → 한 바퀴에 띠 3칸, 이음매 없음
   float f = fract(band);
   float line = smoothstep(0.06, 0.0, f) + smoothstep(0.94, 1.0, f);
-  float scratch = smoothstep(0.02, 0.0, abs(fract(band * 2.7 + n(vec2(az * 9.0, vL.y * 5.0)) * 1.6) - 0.5)) * 0.6;
+  float scratch = smoothstep(0.02, 0.0, abs(fract(band * 2.7 + n(cs * 4.5 + vec2(vL.y * 5.0, 11.0)) * 1.6) - 0.5)) * 0.6;
   vec3 V = normalize(cameraPosition - vW);
   float facing = abs(dot(normalize(vN), V));
   vec3 base = mix(vec3(0.78, 0.78, 0.68), vec3(1.0, 1.0, 0.93), facing);
@@ -253,7 +255,7 @@ export class MahoragaRitual {
     M.root.traverse((o) => {
       if (!o.isMesh || !o.visible) return;
       const n = o.geometry.attributes.position.count;
-      const step = Math.max(1, Math.floor(n / 5000));
+      const step = 1; // 작은 부품(허리 장식 등)도 빠짐없이 잰다
       for (let i = 0; i < n; i += step) {
         if (o.isSkinnedMesh) o.getVertexPosition(i, v);
         else v.fromBufferAttribute(o.geometry.attributes.position, i);
@@ -300,12 +302,28 @@ export class MahoragaRitual {
         return H[H.length - 1][1];
       };
     };
-    const fx = hull(xm);
-    const fzp = hull(zp);
-    const fzn = hull(zn.map((z) => -z));
+    const fx0 = hull(xm);
+    const fzp0 = hull(zp);
+    const fzn0 = hull(zn.map((z) => -z));
+    // 타원 고리는 모서리(앞 · 옆 사이)가 안으로 깎이므로 — 팔짱 낀 주먹이 비스듬히 튀어나온다 —
+    // 높이마다 모든 점이 타원 안에 들도록 반지름을 키운 뒤 다시 볼록 껍질로 다듬는다
+    const pad0 = 0.1;
+    const sc = new Array(NB).fill(1);
+    for (let i = 0; i < pts.length; i += 3) {
+      const y = pts[i + 1];
+      const b = Math.min(NB - 1, Math.max(0, Math.floor((y / top) * NB)));
+      const yy = Math.min(top, Math.max(0, y));
+      const z = pts[i + 2];
+      const e = Math.hypot(pts[i] / (fx0(yy) + pad0), z / ((z >= 0 ? fzp0(yy) : fzn0(yy)) + pad0));
+      sc[b] = Math.max(sc[b], e);
+    }
+    const mid = (b) => Math.min(top, ((b + 0.5) / NB) * top);
+    const fx = hull(sc.map((k, b) => (fx0(mid(b)) + pad0) * k));
+    const fzp = hull(sc.map((k, b) => (fzp0(mid(b)) + pad0) * k));
+    const fzn = hull(sc.map((k, b) => (fzn0(mid(b)) + pad0) * k));
     // 고리: 아래(발) → 위(정수리 위 둥근 끝)
-    const pad = 0.13;
-    const T = top + 0.3;
+    const pad = 0.05;
+    const T = top + 0.4;
     const rings = [];
     const NR = 46;
     for (let j = 0; j <= NR; j++) {
@@ -539,7 +557,6 @@ export class MahoragaRitual {
           sfx.play('click', { at: this.cocoonPos, vol: 0.5, rate: rnd(0.3, 0.42) });
           sfx.rumble?.(0.15, 0.25);
           // 뚫고 나오는 자리에서 번데기 부스러기
-          for (const H of [this.cU.uHoleL.value, this.cU.uHoleR.value]) if (H.y > -50) fx.burst(H, 10, new THREE.Color(0xf0f0e2), 2.5, 0.05, 0.4);
         }
       }
       up = clamp01(up);
@@ -568,7 +585,7 @@ export class MahoragaRitual {
             H.addScaledVector(out, 0.35);
           }
         }
-        this.cU.uHole.value = Math.max(this.cU.uHole.value, 0.25 + 0.9 * up);
+        // 번데기는 부서지지 않는다 (날개만 비집고 나온다)
       }
     }
     // 번데기가 느슨해지고 → 위에서부터 풀린다
@@ -603,6 +620,10 @@ export class MahoragaRitual {
     R.rot('R_elbow', AX.X, 0.05);
     // 퇴마의 검은 번데기 속에 접어 둔다 (밖으로 삐져나오지 않게)
     R.scale('R_sword', 0.001);
+    // 소환되는 동안 두 손은 주먹을 꽉 쥐고 있다
+    this._fingers ??= new FingerRig({ mapId: 'jjk', clone: this.M.model, bones: R.bones });
+    this._fingers.applyEach('L', [1, 1, 1, 1, 1]);
+    this._fingers.applyEach('R', [1, 1, 1, 1, 1]);
     R.rot('head', AX.X, 0.22);
     R.rot('backhead_A', AX.X, -1.25);
     // 뒤통수의 긴 뿔: 번데기 속에선 작게 접혀 있다가 벗겨지며 제 크기로

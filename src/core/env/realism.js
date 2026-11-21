@@ -145,6 +145,49 @@ function bake(key, N, painter, { normal = 2.5, emissive = false } = {}) {
   return set;
 }
 
+/**
+ * 젖은 바닥: 월드 좌표의 잡음으로 웅덩이를 만든다 → 타일처럼 반복되지 않고, 크기 · 모양이 제각각.
+ *  웅덩이: 거울처럼 매끈(거칠기↓) · 어둡고 · 요철이 잠긴다. 그 둘레는 덜 젖은 얼룩이 번진다. 일부 구역은 거의 말라 있다.
+ *  amount: 웅덩이 양(0~1), seedOff: 맵마다 다른 무늬
+ */
+export function wetGround(mat, { amount = 0.5, seedOff = 0 } = {}) {
+  mat.userData.wet = { amount, seedOff };
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWetAmt = { value: amount };
+    sh.uniforms.uWetSeed = { value: seedOff };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWetW;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWetW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vWetW; uniform float uWetAmt; uniform float uWetSeed;
+float wh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wn(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(wh(i), wh(i + vec2(1.0, 0.0)), f.x), mix(wh(i + vec2(0.0, 1.0)), wh(i + vec2(1.0, 1.0)), f.x), f.y); }
+float wfbm(vec2 p) { float s = 0.0, a = 0.5; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int i = 0; i < 5; i++) { s += a * wn(p); p = r * p * 2.03 + 1.7; a *= 0.5; } return s; }
+// x: 웅덩이 · y: 젖은 얼룩
+vec2 wetMask(vec2 xz) {
+  vec2 q = xz + uWetSeed * 37.0;
+  vec2 warp = vec2(wfbm(q * 0.11), wfbm(q * 0.11 + 5.2)) - 0.5;
+  float region = smoothstep(0.32, 0.62, wfbm(q * 0.025 + 9.0)); // 넓게 보면 젖은 곳 · 마른 곳
+  float n = wfbm(q * 0.32 + warp * 3.2);
+  float th = mix(0.74, 0.5, uWetAmt * region);
+  float pud = smoothstep(th, th + 0.035, n);
+  float damp = smoothstep(th - 0.16, th, n) * (0.5 + 0.5 * region);
+  return vec2(pud, max(pud, damp));
+}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+vec2 wetM = wetMask(vWetW.xz);
+diffuseColor.rgb *= mix(1.0, 0.72, wetM.y) * mix(1.0, 0.7, wetM.x);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.55, wetM.y);
+roughnessFactor = mix(roughnessFactor, 0.035, wetM.x);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = normalize(mix(normal, nonPerturbedNormal, wetM.x * 0.92));`);
+  };
+  mat.customProgramCacheKey = () => 'wet' + amount + ':' + seedOff;
+  mat.needsUpdate = true;
+  return mat;
+}
+
 /** 텍스처 세트를 쓰는 물리 재질 */
 export function pbrMat(set, o = {}) {
   const m = new THREE.MeshStandardMaterial({
@@ -197,10 +240,9 @@ export function asphaltSet(wet = false) {
       let rough = 0.9 - stone * 0.15 + cr * 0.05;
       let h = f * 0.35 + m * 0.15 - cr * 0.8;
       if (wet) {
-        const p = sstep(0.55, 0.6, puddle(x, y));
-        v *= 0.55;
-        rough = lerp(0.42 - stone * 0.1, 0.03, p);
-        h = lerp(h, 0.2, p);
+        // 젖은 결만 (웅덩이는 반복되지 않게 월드 좌표로 따로 — wetGround)
+        v *= 0.62;
+        rough = 0.5 - stone * 0.12 + (puddle(x, y) - 0.5) * 0.12;
       }
       o[0] = v;
       o[1] = v;

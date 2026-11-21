@@ -124,15 +124,23 @@ function sidewalk(group, B, mats, x0, z0, x1, z1, { tactile = true, axis = 'z' }
   }
 }
 
-function streetMats(wet) {
-  return {
+function streetMats(wet, seedOff = 0) {
+  const S = {
     asphalt: R.pbrMat(R.asphaltSet(wet), { normal: 1, env: wet ? 1.6 : 1 }),
     paver: R.pbrMat(R.paverSet('gray'), { normal: 1 }),
     paverRed: R.pbrMat(R.paverSet('red'), { normal: 1 }),
     tactile: R.pbrMat(R.tactileSet(), { normal: 1 }),
     curb: R.pbrMat(R.concreteSet(0.7)),
-    paint: R.roadPaint(),
+    paint: wet ? R.roadPaint().clone() : R.roadPaint(),
   };
+  if (wet) {
+    // 비 온 뒤: 웅덩이는 월드 좌표 잡음으로 제각각 (아스팔트에 많이, 보도엔 조금)
+    R.wetGround(S.asphalt, { amount: 0.62, seedOff });
+    R.wetGround(S.paver, { amount: 0.3, seedOff: seedOff + 1 });
+    R.wetGround(S.paverRed, { amount: 0.3, seedOff: seedOff + 1 });
+    R.wetGround(S.paint, { amount: 0.4, seedOff });
+  }
+  return S;
 }
 
 /** 횡단보도 (줄무늬). from→to 방향으로 건너는 줄 */
@@ -414,7 +422,7 @@ export function buildShinjuku(ctx) {
   R.seed(1660);
   const group = new THREE.Group();
   const B = new R.Batch();
-  const S = streetMats(true);
+  const S = streetMats(true, 1);
   const F = facadeMats('night');
   const RM = roofMats();
   const atlas = new R.SignAtlas(2048, 8, 16);
@@ -568,7 +576,7 @@ export function buildAlley(ctx) {
   R.seed(37);
   const group = new THREE.Group();
   const B = new R.Batch();
-  const S = streetMats(true);
+  const S = streetMats(true, 2);
   const F = facadeMats('night');
   const RM = roofMats();
   const atlas = new R.SignAtlas(1024, 4, 8);

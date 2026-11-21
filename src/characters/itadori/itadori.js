@@ -215,7 +215,7 @@ export class Itadori {
       s.aimT = 0;
       return;
     }
-    const free = (x) => !x.heldBy && !x.held && !x.dying;
+    const free = (x) => !x.held && !x.dying; // 잡고 있는 적도
     const inDomain = this.town.state === 'active';
     let target = null;
     let point = null;
@@ -264,7 +264,7 @@ export class Itadori {
     let best = null;
     let bs = tan;
     for (const t of this.ctx.world.targets()) {
-      if (t.heldBy || t.dying) continue;
+      if (t.dying) continue;
       const c = t.center(_v3);
       const rel = _v2.subVectors(c, from);
       const along = rel.dot(dir);

@@ -282,7 +282,7 @@ export class Sukuna {
 
     // ── 捌: 편 손으로 접촉 ──
     if (h.source === 'hand' && s.cleaveCd <= 0 && h.gesture !== 'fist' && h.gesture !== 'pinch' && !this.ctx.grab?.isHolding(side)) {
-      const free = (x) => !x.heldBy && !x.held;
+      const free = (x) => !x.held; // 잡고 있는 적도 벨 수 있다
       const t = world.nearestTarget(h.palm, 0.06, free) ?? world.nearestTarget(h.indexTip, 0.04, free);
       if (t && h.speed > 0.6) {
         s.cleaveCd = 0.6;

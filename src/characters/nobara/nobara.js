@@ -816,7 +816,7 @@ export class Nobara extends Caster {
     }
     // 2) 망치 머리로 대상을 직접 친다 (근접 판정은 손바닥 기준이라 머리 쪽은 따로)
     if (H.speed > 2.2 && (this.cds.hammerHit ?? 0) <= 0 && R.source !== 'desktop') {
-      const t = this.ctx.world.nearestTarget(H.head, 0.12, (x) => !x.heldBy && !x.held);
+      const t = this.ctx.world.nearestTarget(H.head, 0.12, (x) => !x.held);
       if (t) {
         this.cds.hammerHit = 0.3;
         this.meleeHit(t, H.head.clone(), _v.copy(H.vel).normalize(), H.speed, R);

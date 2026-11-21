@@ -603,5 +603,6 @@ export default {
  "MR 패스스루로 시작": "Start in MR passthrough",
  "데스크톱으로 체험": "Play on desktop",
  "WebXR 확인 중…": "Checking WebXR…",
- "비공식 팬메이드 시뮬레이터 · 핸드트래킹 권장 · VR 안에서 캐릭터와 배경을 고릅니다": "Unofficial fan-made simulator · hand tracking recommended · choose characters and backgrounds inside VR"
+ "비공식 팬메이드 시뮬레이터 · 핸드트래킹 권장 · VR 안에서 캐릭터와 배경을 고릅니다": "Unofficial fan-made simulator · hand tracking recommended · choose characters and backgrounds inside VR",
+ "허리 둘레  {0}%": "Waist size  {0}%"
 };

@@ -424,15 +424,20 @@ export class Dummy {
    */
   grab(by, at = null) {
     if (!this.alive || this.dying) return false;
-    this.heldBy = by;
+    // 두 손으로 잡기: 이미 다른 손이 잡고 있으면 다른 관절을 하나 더 붙잡는다
+    this.holders ??= new Map();
+    if (this.holders.size && this.holders.has(by)) return false;
+    if (!this.holders.size) this.heldBy = by;
     if (!this.rag) this._ragStart(this.state === 'air' ? this.vel : _v.set(0, 0, 0));
     this.state = 'held';
     this.stateT = 0;
     const R = this.rag;
+    R.pins ??= new Map();
     let pin = RI.chest;
     if (at) {
       let bd = Infinity;
       for (let i = 0; i < RAG.length; i++) {
+        if (R.pins.has(i)) continue;
         const d = R.p[i].distanceToSquared(at);
         if (d < bd) {
           bd = d;
@@ -440,18 +445,57 @@ export class Dummy {
         }
       }
     }
-    R.pin = pin;
-    R.pinTarget.copy(R.p[pin]);
+    R.pins.set(pin, R.p[pin].clone());
+    this.holders.set(by, pin);
+    R.pin = [...R.pins.keys()][0];
+    R.pinTarget.copy(R.pins.get(R.pin));
     this.angVel.set(0, 0, 0);
     return at ? R.p[pin].clone().sub(at) : new THREE.Vector3();
   }
 
-  /** 잡고 있는 동안 고정 관절이 따라갈 위치 */
-  holdAt(p) {
-    if (this.rag) this.rag.pinTarget.copy(p);
+  _dropAll() {
+    const hs = this.holders?.size ? [...this.holders.keys()] : this.heldBy ? [this.heldBy] : [];
+    this.holders?.clear();
+    this.rag?.pins?.clear();
+    for (const b of hs) b?.drop?.();
   }
 
-  release(vel) {
+  /** 지금 잡고 있는 손 수 */
+  holdCount() {
+    return this.holders?.size ?? (this.heldBy ? 1 : 0);
+  }
+
+  /** 잡고 있는 동안 고정 관절이 따라갈 위치 (by: 어느 손 — 없으면 첫 손) */
+  holdAt(p, by = null) {
+    if (!this.rag) return;
+    const pin = by && this.holders?.has(by) ? this.holders.get(by) : this.rag.pin;
+    if (this.rag.pins?.has(pin)) this.rag.pins.get(pin).copy(p);
+    if (pin === this.rag.pin) this.rag.pinTarget.copy(p);
+  }
+
+  /** 관절 하나의 지금 위치 (잡은 손이 다른 부위를 뜯어낼 때 쓴다) */
+  pinPos(by) {
+    const pin = this.holders?.get(by);
+    return pin !== undefined && this.rag ? this.rag.p[pin] : null;
+  }
+
+  release(vel, by = null) {
+    // 한 손만 놓으면 다른 손은 계속 잡고 있다
+    if (by && this.holders?.has(by) && this.holders.size > 1) {
+      const pin = this.holders.get(by);
+      this.holders.delete(by);
+      this.rag?.pins?.delete(pin);
+      const [nb, np] = [...this.holders.entries()][0];
+      this.heldBy = nb;
+      if (this.rag) {
+        this.rag.pin = np;
+        this.rag.pinTarget.copy(this.rag.pins.get(np));
+        this.vel.add(vel.clone().multiplyScalar(0.3));
+      }
+      return;
+    }
+    this.holders?.clear();
+    this.rag?.pins?.clear();
     this.heldBy = null;
     if (!this.alive) return;
     this.state = 'air';
@@ -529,7 +573,9 @@ export class Dummy {
     const n = RAG.length;
     // 외부에서 바뀐 속도(충격·인력 등)를 모든 입자에 반영
     _v.subVectors(this.vel, R.vel);
-    if (_v.lengthSq() > 1e-8) for (let i = 0; i < n; i++) if (i !== R.pin) R.v[i].add(_v);
+    const pins = R.pins?.size ? R.pins : null;
+    const pinned = (i) => (pins ? pins.has(i) : i === R.pin);
+    if (_v.lengthSq() > 1e-8) for (let i = 0; i < n; i++) if (!pinned(i)) R.v[i].add(_v);
     const g = 9.8 * (this.frozen ? 0.15 : 1);
     const damp = this.frozen ? 6 : 0.25;
     const sub = Math.min(4, Math.max(1, Math.ceil(dt / (1 / 90))));
@@ -539,8 +585,8 @@ export class Dummy {
     for (let s = 0; s < sub; s++) {
       for (let i = 0; i < n; i++) {
         R.prev[i].copy(R.p[i]);
-        if (i === R.pin) {
-          R.p[i].lerp(R.pinTarget, 1 - Math.exp(-h * 40));
+        if (pinned(i)) {
+          R.p[i].lerp(pins ? pins.get(i) : R.pinTarget, 1 - Math.exp(-h * 40));
           continue;
         }
         R.v[i].y -= g * h;
@@ -593,8 +639,8 @@ export class Dummy {
     const d = _v2.length();
     if (d < 1e-6) return;
     if (mode < 0 && d >= L) return;
-    const wa = a === R.pin ? 0 : 1;
-    const wc = c === R.pin ? 0 : 1;
+    const wa = (R.pins?.size ? R.pins.has(a) : a === R.pin) ? 0 : 1;
+    const wc = (R.pins?.size ? R.pins.has(c) : c === R.pin) ? 0 : 1;
     const w = wa + wc;
     if (!w) return;
     const k = (d - L) / (d * w);
@@ -645,7 +691,7 @@ export class Dummy {
   heartAttack() {
     if (!this.alive || this.dying) return;
     this.dying = true;
-    this.heldBy?.drop?.();
+    this._dropAll();
     this.heldBy = null;
     this.state = 'heart';
     this.stateT = 0;
@@ -655,7 +701,7 @@ export class Dummy {
   kill(info = {}) {
     if (!this.alive) return;
     this.alive = false;
-    this.heldBy?.drop?.();
+    this._dropAll();
     this.world.onKill?.(this, info);
     const W = this.world;
     const c = this.center();

@@ -31,7 +31,7 @@ export class Melee {
       if (!h.gripping || h.speed < 2.0) continue;
       // 잡고 있는 대상은 치지 않는다
       if (this.ctx.grab?.isHolding(h.side)) continue;
-      const t = world.nearestTarget(h.palm, 0.09, (x) => !x.heldBy && !x.held);
+      const t = world.nearestTarget(h.palm, 0.09, (x) => !x.held); // 다른 손으로 잡은 적도 때릴 수 있다
       if (!t) continue;
       this.cd[h.side] = 0.3;
       this.hit(t, h.palm.clone(), _v.copy(h.vel).normalize(), h.speed, h);

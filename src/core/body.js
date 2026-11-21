@@ -41,7 +41,9 @@ export class BodyFrame {
 
   /** 몸 기준(x 오른쪽, y 위, -z 앞, 허리가 원점) → 월드 */
   point(x, y, z, out = new THREE.Vector3()) {
-    return out.set(x, y, z).applyQuaternion(this.quat).add(this.waist);
+    // 허리 둘레 설정: 옆 · 앞뒤로만 늘이고 줄인다 (높이는 그대로)
+    const w = this.ctx.settings?.waist ?? 1;
+    return out.set(x * w, y, z * w).applyQuaternion(this.quat).add(this.waist);
   }
 
   dir(x, y, z, out = new THREE.Vector3()) {

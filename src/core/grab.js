@@ -10,6 +10,11 @@ export class Grab {
     this.ctx = ctx;
     this.held = { left: null, right: null };
     this.desk = null;
+    // 손마다 잡는 주체 (두 손으로 같은 적의 서로 다른 관절을 잡을 수 있다)
+    this.by = {
+      left: { side: 'left', drop: () => this._release('left', new THREE.Vector3()) },
+      right: { side: 'right', drop: () => this._release('right', new THREE.Vector3()) },
+    };
   }
 
   isHolding(side) {
@@ -26,7 +31,9 @@ export class Grab {
         if (!h.active || h.uiBlock || h.source === 'desktop' || busy(side)) continue;
         const want = h.source === 'hand' ? h.gesture === 'fist' && h.gestureTime < 0.25 : h.pressed('grip');
         if (!want || h.speed > 1.6) continue;
-        const t = world.nearestTarget(h.palm, 0.13, (x) => !x.heldBy && !x.held && !x.dying && !x.noGrab);
+        const other = this.held[side === 'left' ? 'right' : 'left']?.t;
+        // 다른 손이 이미 잡은 적도 한 손 더 잡을 수 있다 (두 손 잡기)
+        const t = world.nearestTarget(h.palm, 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? !x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2) : !x.held));
         if (t) this._grab(side, t, h);
       } else {
         const t = H.t;
@@ -37,7 +44,7 @@ export class Grab {
         const release = !h.active || (h.source === 'hand' ? h.gesture !== 'fist' && h.gestureTime > 0.05 : !h.btn.grip);
         // 손을 따라감 (더미는 잡은 관절만 손에 붙고 나머지는 중력에 늘어진다)
         const target = _v.copy(h.palm).add(H.offset);
-        if (t.kind === 'dummy') t.holdAt(target);
+        if (t.kind === 'dummy') t.holdAt(target, this.by[side]);
         else t.pos.lerp(target, 1 - Math.exp(-dt * 25));
         if (release) this._release(side, h.vel.clone().multiplyScalar(1.7));
       }
@@ -88,9 +95,11 @@ export class Grab {
     let offset = new THREE.Vector3();
     if (t.kind === 'dummy') {
       // 손에 가장 가까운 관절을 잡는다 (손바닥에서 조금만 떨어지게)
-      offset = t.grab({ drop: () => this._release(side, new THREE.Vector3()) }, h.palm);
+      offset = t.grab(this.by[side], h.palm);
       if (!offset) return;
-      if (offset.length() > 0.06) offset.setLength(0.06);
+      // 손이 몸을 뚫지 않게: 관절은 손바닥에서 몸 두께만큼 떨어져 있다 (손은 겉면을 쥔다)
+      if (offset.lengthSq() < 1e-6) offset.copy(h.palmNormal ?? h.dir).multiplyScalar(0.1);
+      offset.setLength(THREE.MathUtils.clamp(offset.length(), 0.085, 0.15) * (t.scale ?? 1));
     } else {
       offset.subVectors(t.pos, h.palm);
       t.held = true;
@@ -108,7 +117,7 @@ export class Grab {
     const t = H.t;
     if (vel.length() > 18) vel.setLength(18);
     if (t.kind === 'dummy') {
-      if (t.heldBy) t.release(vel);
+      if (t.heldBy) t.release(vel, this.by[side]);
     } else {
       t.held = false;
       t.vel.copy(vel);

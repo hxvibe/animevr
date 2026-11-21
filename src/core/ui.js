@@ -405,6 +405,12 @@ export class UI {
       p.button(50, 735, 160, 90, '−5', 'h:-', { size: 36 });
       p.button(230, 735, 160, 90, '+5', 'h:+', { size: 36 });
       p.button(410, 735, 200, 90, '초기화', 'h:0', { size: 30 });
+      // 허리 둘레: 허리춤 소품(칼집 · 망치 · 못 주머니 · 인형 · 손가락)이 몸에서 떨어진 정도
+      g.fillStyle = '#ffffff';
+      g.font = `700 30px ${FONT}`;
+      g.fillText(`허리 둘레  ${Math.round((S.waist ?? 1) * 100)}%`, 630, 710);
+      p.button(630, 735, 120, 90, '−', 'w:-', { size: 40 });
+      p.button(765, 735, 120, 90, '+', 'w:+', { size: 40 });
       g.font = `400 26px ${FONT}`;
       g.fillStyle = 'rgba(255,255,255,0.6)';
       g.fillText('세상이 크거나 작게 느껴지면 높이 보정으로 눈높이를 맞추세요.', 50, 880);
@@ -564,6 +570,8 @@ export class UI {
       S[v] = !optVal(S, v);
       if (v === 'locomotion') ctx.input.locomotion = S.locomotion;
       if (v === 'shadows') ctx.env.applyShadows();
+    } else if (k === 'w') {
+      S.waist = THREE.MathUtils.clamp(Math.round(((S.waist ?? 1) + (v === '+' ? 0.1 : -0.1)) * 10) / 10, 0.6, 1.8);
     } else if (k === 'h') {
       S.heightOffset = v === '0' ? 0 : THREE.MathUtils.clamp(S.heightOffset + (v === '+' ? 0.05 : -0.05), -0.5, 0.5);
       ctx.game.applyHeight();

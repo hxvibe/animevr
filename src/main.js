@@ -21,7 +21,7 @@ const ENEMY_MODELS = [...new Set(Object.values(DUMMY_TYPES).map((d) => d.model).
 // ── 설정 (브라우저에 저장) ──
 const DEFAULTS = {
   character: 'gojo', background: 'white', hud: false, skillNames: true, damageNumbers: true,
-  invincible: false, dummyAI: true, locomotion: true, kaminoRule: false, heightOffset: 0, blackFlashChance: 0.2,
+  invincible: false, dummyAI: true, locomotion: true, kaminoRule: false, heightOffset: 0, waist: 1, blackFlashChance: 0.2,
   domainGesture: true, shadows: true, mahoragaTamed: false, dogTotality: false,
   ctrlHands: true, cooldowns: true, mahoragaRitual: true,
 };

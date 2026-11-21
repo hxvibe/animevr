@@ -7,6 +7,8 @@ import { classifyHand, makeGestureResult, JOINT_NAMES } from './gestures.js';
 import { CtrlHands } from './ctrlHands.js';
 
 const _v = new THREE.Vector3();
+const _rigInv = new THREE.Matrix4();
+const _rigQ = new THREE.Quaternion();
 const _q = new THREE.Quaternion();
 const _fwd = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -325,6 +327,11 @@ export class Input {
     this.camera.getWorldQuaternion(this.headQuat);
     this.headDir.set(0, 0, -1).applyQuaternion(this.headQuat);
 
+    // 이번 프레임 손 위치를 읽을 때의 리그 변환 (이동 · 회전 전) — 손 속도는 리그 기준으로 잰다:
+    //  스틱 · 엄지척 이동이나 회전으로 몸이 움직여도 손을 휘두른 것으로 치지 않는다 (아카 · 해 오발, 수인 끊김 방지)
+    this.rig.updateMatrixWorld();
+    _rigInv.copy(this.rig.matrixWorld).invert();
+    _rigQ.copy(this.rig.quaternion);
     for (const h of this.hands) h.active = false;
     if (this.mode === 'xr') this._updateXR(dt);
     else if (this.mode === 'desktop') this._updateDesktop(dt);
@@ -336,11 +343,13 @@ export class Input {
         h.speed = h.thrust = 0;
         continue;
       }
+      // 리그 기준(몸 기준) 손 위치
+      _v2.copy(h.palm).applyMatrix4(_rigInv);
       if (h._hasPrev && dt > 0) {
-        _v.subVectors(h.palm, h._prev).divideScalar(dt);
+        _v.subVectors(_v2, h._prev).divideScalar(dt).applyQuaternion(_rigQ);
         h.vel.lerp(_v, 0.5);
       }
-      h._prev.copy(h.palm);
+      h._prev.copy(_v2);
       h._hasPrev = true;
       h.speed = h.vel.length();
       h.thrust = h.vel.dot(h.dir);

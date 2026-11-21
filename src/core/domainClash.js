@@ -23,8 +23,8 @@ const clamp = THREE.MathUtils.clamp;
 // 적 영역: ref = 완성도(영역·술식의 정교함 · 상성 · 상태를 합친 값)
 export const ENEMY_DOMAINS = {
   mahito: {
-    name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#7ad8ff', ref: 82, radius: 19, type: 0, dur: 24,
-    lights: { hemi: 0xd0b8c0, ground: 0x3a1820, hemiI: 1.1, sun: 0xffd0d8, sunI: 0.9, fog: 0x2a1018, fogNear: 10, fogFar: 45, exposure: 0.95 },
+    name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#b88ad8', ref: 82, radius: 19, type: 0, dur: 24,
+    lights: { hemi: 0xd8c8e8, ground: 0x2a1a34, hemiI: 0.9, sun: 0xf0e0ff, sunI: 0.9, fog: 0x0a0610, fogNear: 18, fogFar: 55, exposure: 1.0 },
   },
   jogo: {
     name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 80, radius: 19, type: 1, dur: 24,
@@ -101,12 +101,11 @@ uniform float uTime;
 vec3 wallLook(vec3 d) {
   float az = atan(d.z, d.x);
   if (uType == 0) {
-    // 自閉円頓裹: 남색 밤하늘 같은 허공 (손 구조물은 3D 로 따로)
-    vec3 c = mix(vec3(0.05, 0.06, 0.32), vec3(0.02, 0.03, 0.16), smoothstep(-0.1, 0.8, d.y));
-    c += vec3(0.08, 0.06, 0.22) * fbm(d * 3.0 + vec3(0.0, uTime * 0.02, 0.0)) * 0.6;
-    vec3 g = floor(d * 170.0);
-    float star = step(0.9972, dh(g));
-    c += vec3(0.85, 0.88, 1.0) * star * (0.55 + 0.45 * sin(uTime * 2.5 + dh(g) * 40.0));
+    // 自閉円頓裹: 거의 검은 보랏빛 허공 (손 구조물은 3D 로 따로)
+    vec3 c = mix(vec3(0.035, 0.022, 0.06), vec3(0.012, 0.008, 0.022), smoothstep(-0.1, 0.9, d.y));
+    c += vec3(0.18, 0.09, 0.28) * smoothstep(0.45, 0.85, fbm(d * 2.2 + vec3(0.0, uTime * 0.015, 0.0))) * 0.55;
+    vec3 g = floor(d * 150.0);
+    c += vec3(0.75, 0.7, 0.9) * step(0.9984, dh(g)) * (0.4 + 0.3 * sin(uTime * 2.0 + dh(g) * 40.0));
     return c;
   }
   if (uType == 1) {
@@ -151,11 +150,11 @@ vec3 floorLook(vec2 q, float r) {
   if (uType == 0) {
     // 연보랏빛 손바닥이 깔린 바닥 (손가락 마디 결)
     float n = fbm(vec3(q * 0.4, 1.0));
-    vec3 skin = mix(vec3(0.36, 0.32, 0.66), vec3(0.56, 0.52, 0.86), n);
+    vec3 skin = mix(vec3(0.06, 0.04, 0.09), vec3(0.14, 0.09, 0.18), n);
     vec2 cell = fract(q * 0.45) - 0.5;
     float fing = smoothstep(0.06, 0.0, abs(fract((cell.x + fbm(vec3(floor(q * 0.45), 3.0)) * 0.3) * 4.0) - 0.5) - 0.38);
-    skin = mix(skin, vec3(0.22, 0.18, 0.45), fing * 0.35);
-    return skin * (0.5 + 0.2 * smoothstep(1.0, 0.2, r));
+    skin = mix(skin, vec3(0.02, 0.01, 0.03), fing * 0.4);
+    return skin * (0.8 + 0.2 * smoothstep(1.0, 0.2, r));
   }
   if (uType == 1) {
     vec3 p = vec3(q.x, 0.0, q.y) * 0.6;
@@ -355,8 +354,7 @@ export class DomainClash {
       const dx = e.root.position.x - h.x;
       const dz = e.root.position.z - h.z;
       const d = Math.hypot(dx, dz) || 1;
-      view.maw.group.position.set((dx / d) * def.radius * 0.45, 0, (dz / d) * def.radius * 0.45);
-      view.maw.group.rotation.y = Math.atan2(-dx, -dz);
+      view.maw.place(new THREE.Vector3((dx / d) * def.radius * 0.5, 0, (dz / d) * def.radius * 0.5), Math.atan2(-dx, -dz));
     }
     this.enemy = { def, caster: e, view, state: 'opening', t: 0, center: view.center, startedAt: world.time };
     this.cds.set(e, world.time + 45);

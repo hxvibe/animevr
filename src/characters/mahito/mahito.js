@@ -345,19 +345,18 @@ export class Mahito extends Caster {
       radius: 16,
       glsl: HANDS_GLSL + VOID_WALL,
       wall: `vec3 n = normalize(vP); col = mahitoVoid(n, uTime); col = mix(vec3(0.0), col, uOpen);`,
-      floor: `vec2 uv = vW.xz * 0.55; vec2 h = handLayer(uv, uTime, 3.0); vec2 h2 = handLayer(uv * 1.7 + 0.3, uTime, 7.0);
-              vec3 base = mix(vec3(0.3, 0.27, 0.58), vec3(0.46, 0.42, 0.76), dfbm(vec3(vW.xz * 0.2, 1.0)));
-              col = mix(base, vec3(0.74, 0.72, 0.96), max(h.x, h2.x * 0.6) * 0.55); col = mix(col, vec3(0.16, 0.12, 0.36), max(h.y, h2.y * 0.6) * 0.6);
+      floor: `vec2 uv = vW.xz * 0.45; vec2 h = handLayer(uv, uTime, 3.0);
+              vec3 base = mix(vec3(0.06, 0.04, 0.09), vec3(0.13, 0.08, 0.17), dfbm(vec3(vW.xz * 0.2, 1.0)));
+              col = mix(base, vec3(0.3, 0.22, 0.32), h.x * 0.35); col = mix(col, vec3(0.02, 0.01, 0.03), h.y * 0.5);
               float r = length(vP.xz); col *= smoothstep(1.0, 0.85, r) * uOpen;`,
-      lights: { hemi: 0xa8b0ff, ground: 0x382c70, hemiI: 1.0, sunI: 0.7, sun: 0xd8dcff, fog: 0x060a34, fogNear: 14, fogFar: 46, exposure: 1.0 },
+      lights: { hemi: 0xd8c8e8, ground: 0x2a1a34, hemiI: 0.9, sunI: 0.9, sun: 0xf0e0ff, fog: 0x0a0610, fogNear: 16, fogFar: 50, exposure: 1.0 },
       anim: (dt, sh) => {
         const M = this.maw;
         if (sh.state === 'opening' && !this._mawK) {
           // 아가리는 바라보는 쪽(상대 쪽) 가장자리에 서서 이쪽으로 입을 벌린다 — 그 사이의 적은 아가리 속
           const f = this.ctx.input.headDir;
           const fl = Math.hypot(f.x, f.z) || 1;
-          M.group.position.set((f.x / fl) * 16 * 0.5, 0, (f.z / fl) * 16 * 0.5);
-          M.group.rotation.y = Math.atan2(-f.x, -f.z);
+          M.place(new THREE.Vector3((f.x / fl) * 16 * 0.55, 0, (f.z / fl) * 16 * 0.55), Math.atan2(-f.x, -f.z));
         }
         if (sh.state === 'opening' || sh.state === 'active') this._mawK = Math.min(1.2, (this._mawK ?? 0) + dt / 1.6);
         else this._mawK = Math.max(0, Math.min(1, this._mawK ?? 0) - dt / 0.7);

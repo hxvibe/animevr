@@ -10,6 +10,7 @@ import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
 import { TransfiguredWorm, StockPiece, MergedWorms } from '../../core/transfigured.js';
+import { HandMaw, VOID_WALL } from '../../core/mahitoDomain.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -338,14 +339,32 @@ export class Mahito extends Caster {
     this.touchCd = 0;
     this.cds = {};
     this._keys = {};
+    // 영역 「自閉円頓裹」: 남색 밤하늘 허공에 손이 엮인 거대한 아가리 (가운데 손 모양에서 꽃처럼 피어난다)
+    this.maw = new HandMaw(16 * 0.9);
     this.shell = new ShellDomain(ctx, {
       radius: 16,
-      glsl: HANDS_GLSL,
-      wall: `vec3 n = normalize(vP); vec2 uv = vec2(atan(n.z, n.x) * 4.0, asin(clamp(n.y, -1.0, 1.0)) * 4.0); col = handsColor(uv, uTime);
-             col *= 0.6 + 0.4 * smoothstep(-0.2, 0.6, n.y); col = mix(vec3(0.0), col, uOpen);`,
-      floor: `vec2 uv = vW.xz * 0.9; col = handsColor(uv, uTime) * 0.75; float r = length(vP.xz); col *= smoothstep(1.0, 0.85, r);`,
-      lights: { hemi: 0xb0b8c8, ground: 0x302830, hemiI: 0.9, sunI: 0.5, sun: 0xc8d8ff, fog: 0x0a080c, fogNear: 10, fogFar: 40, exposure: 0.9 },
+      glsl: HANDS_GLSL + VOID_WALL,
+      wall: `vec3 n = normalize(vP); col = mahitoVoid(n, uTime); col = mix(vec3(0.0), col, uOpen);`,
+      floor: `vec2 uv = vW.xz * 0.55; vec2 h = handLayer(uv, uTime, 3.0); vec2 h2 = handLayer(uv * 1.7 + 0.3, uTime, 7.0);
+              vec3 base = mix(vec3(0.3, 0.27, 0.58), vec3(0.46, 0.42, 0.76), dfbm(vec3(vW.xz * 0.2, 1.0)));
+              col = mix(base, vec3(0.74, 0.72, 0.96), max(h.x, h2.x * 0.6) * 0.55); col = mix(col, vec3(0.16, 0.12, 0.36), max(h.y, h2.y * 0.6) * 0.6);
+              float r = length(vP.xz); col *= smoothstep(1.0, 0.85, r) * uOpen;`,
+      lights: { hemi: 0xa8b0ff, ground: 0x382c70, hemiI: 1.0, sunI: 0.7, sun: 0xd8dcff, fog: 0x060a34, fogNear: 14, fogFar: 46, exposure: 1.0 },
+      anim: (dt, sh) => {
+        const M = this.maw;
+        if (sh.state === 'opening' && !this._mawK) {
+          // 아가리는 바라보는 쪽(상대 쪽) 가장자리에 서서 이쪽으로 입을 벌린다 — 그 사이의 적은 아가리 속
+          const f = this.ctx.input.headDir;
+          const fl = Math.hypot(f.x, f.z) || 1;
+          M.group.position.set((f.x / fl) * 16 * 0.5, 0, (f.z / fl) * 16 * 0.5);
+          M.group.rotation.y = Math.atan2(-f.x, -f.z);
+        }
+        if (sh.state === 'opening' || sh.state === 'active') this._mawK = Math.min(1.2, (this._mawK ?? 0) + dt / 1.6);
+        else this._mawK = Math.max(0, Math.min(1, this._mawK ?? 0) - dt / 0.7);
+        M.update(dt, this._mawK);
+      },
     });
+    this.shell.group.add(this.maw.group);
   }
 
   // ───── 공통 ─────
@@ -762,6 +781,7 @@ export class Mahito extends Caster {
   dispose() {
     this.cancelDomain();
     this.shell.dispose();
+    this.maw.dispose();
     for (const s of ['left', 'right']) {
       this.forms[s].dispose();
       this.arms[s].dispose();

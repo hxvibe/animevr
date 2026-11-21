@@ -11,6 +11,7 @@
 //  · 밀려난 쪽: 영역이 깨지고 술식이 타 버린다. 플레이어가 밀려나면 필중을 그대로 맞는다
 import * as THREE from 'three';
 import { CLASH_U, CLASH_GLSL, clashSideJS } from './clashBoundary.js';
+import { HandMaw } from './mahitoDomain.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -100,21 +101,13 @@ uniform float uTime;
 vec3 wallLook(vec3 d) {
   float az = atan(d.z, d.x);
   if (uType == 0) {
-    // 自閉円頓裹: 거대한 손바닥들이 감싼 안쪽 — 손가락이 정수리로 모이고, 꿰맨 자국
-    float fing = 0.5 + 0.5 * cos(az * 10.0 + sin(d.y * 6.0) * 0.6);
-    float ridge = smoothstep(0.55, 1.0, fing);
-    float n = fbm(d * 5.0 + vec3(0.0, uTime * 0.03, 0.0));
-    vec3 skin = mix(vec3(0.62, 0.52, 0.55), vec3(0.85, 0.74, 0.74), n);
-    skin *= 0.55 + 0.45 * ridge;
-    float gap = smoothstep(0.08, 0.0, fing) * smoothstep(0.95, 0.4, d.y);
-    skin = mix(skin, vec3(0.05, 0.0, 0.02), gap);
-    // 꿰맨 자국
-    float st = abs(fract(az * 3.0 / 6.2832 + d.y * 0.7) - 0.5);
-    float stitch = smoothstep(0.012, 0.0, st) * step(0.5, fract(d.y * 40.0));
-    skin = mix(skin, vec3(0.12, 0.05, 0.06), stitch * 0.9);
-    // 위쪽은 손바닥이 겹쳐 어둡다
-    skin *= mix(1.0, 0.45, smoothstep(0.3, 1.0, d.y));
-    return skin;
+    // 自閉円頓裹: 남색 밤하늘 같은 허공 (손 구조물은 3D 로 따로)
+    vec3 c = mix(vec3(0.05, 0.06, 0.32), vec3(0.02, 0.03, 0.16), smoothstep(-0.1, 0.8, d.y));
+    c += vec3(0.08, 0.06, 0.22) * fbm(d * 3.0 + vec3(0.0, uTime * 0.02, 0.0)) * 0.6;
+    vec3 g = floor(d * 170.0);
+    float star = step(0.9972, dh(g));
+    c += vec3(0.85, 0.88, 1.0) * star * (0.55 + 0.45 * sin(uTime * 2.5 + dh(g) * 40.0));
+    return c;
   }
   if (uType == 1) {
     // 蓋棺鉄囲山: 화산 속 — 검은 바위 틈으로 용암
@@ -156,11 +149,13 @@ vec3 wallLook(vec3 d) {
 }
 vec3 floorLook(vec2 q, float r) {
   if (uType == 0) {
-    float n = fbm(vec3(q * 0.6, 1.0));
-    vec3 skin = mix(vec3(0.5, 0.4, 0.43), vec3(0.75, 0.64, 0.64), n);
-    float lines = smoothstep(0.03, 0.0, abs(fract(length(q) * 0.35 + fbm(vec3(q * 0.3, 2.0)) * 0.6) - 0.5));
-    skin = mix(skin, vec3(0.2, 0.08, 0.1), lines * 0.6);
-    return skin * (0.75 + 0.25 * smoothstep(1.0, 0.2, r));
+    // 연보랏빛 손바닥이 깔린 바닥 (손가락 마디 결)
+    float n = fbm(vec3(q * 0.4, 1.0));
+    vec3 skin = mix(vec3(0.36, 0.32, 0.66), vec3(0.56, 0.52, 0.86), n);
+    vec2 cell = fract(q * 0.45) - 0.5;
+    float fing = smoothstep(0.06, 0.0, abs(fract((cell.x + fbm(vec3(floor(q * 0.45), 3.0)) * 0.3) * 4.0) - 0.5) - 0.38);
+    skin = mix(skin, vec3(0.22, 0.18, 0.45), fing * 0.35);
+    return skin * (0.5 + 0.2 * smoothstep(1.0, 0.2, r));
   }
   if (uType == 1) {
     vec3 p = vec3(q.x, 0.0, q.y) * 0.6;
@@ -287,6 +282,12 @@ class EnemyDomainView {
     this.floor.renderOrder = 1;
     this.floor.frustumCulled = false;
     this.group.add(this.dome, this.floor);
+    // 자폐원돈과: 손이 엮인 거대한 아가리
+    if (def.type === 0) {
+      this.maw = new HandMaw(def.radius * 0.9);
+      this.mawK = 0;
+      this.group.add(this.maw.group);
+    }
     ctx.scene.add(this.group);
     this.setSize(0.02);
   }
@@ -301,6 +302,7 @@ class EnemyDomainView {
 
   dispose() {
     this.ctx.scene.remove(this.group);
+    this.maw?.dispose();
     this.dome.geometry.dispose();
     this.dome.material.dispose();
     this.floor.geometry.dispose();
@@ -347,6 +349,15 @@ export class DomainClash {
     if (!def || this.enemy) return false;
     const { ui, sfx, world } = this.ctx;
     const view = new EnemyDomainView(this.ctx, def, e.root.position);
+    if (view.maw) {
+      // 손의 아가리는 시전자 뒤에 우뚝 서서 플레이어 쪽으로 입을 벌린다
+      const h = this.ctx.input.head;
+      const dx = e.root.position.x - h.x;
+      const dz = e.root.position.z - h.z;
+      const d = Math.hypot(dx, dz) || 1;
+      view.maw.group.position.set((dx / d) * def.radius * 0.45, 0, (dz / d) * def.radius * 0.45);
+      view.maw.group.rotation.y = Math.atan2(-dx, -dz);
+    }
     this.enemy = { def, caster: e, view, state: 'opening', t: 0, center: view.center, startedAt: world.time };
     this.cds.set(e, world.time + 45);
     ui.manga({ top: '領域展開', main: def.name, ruby: def.ruby, color: def.color, big: true });
@@ -434,6 +445,13 @@ export class DomainClash {
       if (k >= 1) return this._end();
     }
 
+    if (V.maw) {
+      // 손이 꽃처럼 피어 흩어지며 아가리를 엮는다 · 닫힐 땐 오므라든다
+      if (E.state === 'opening' || E.state === 'active') V.mawK = Math.min(1.2, V.mawK + dt / 1.6);
+      else V.mawK = Math.max(0, Math.min(1, V.mawK) - dt / (E.state === 'broken' ? 0.5 : 0.7));
+      V.maw.update(dt, V.mawK);
+      V.maw.group.visible = V.mawK > 0.01 && !(this.clash && !this.clash.done);
+    }
     // 바깥에서 결계를 치면 깨진다 (결계는 안쪽엔 강하고 바깥엔 약하다)
     if (E.state === 'active' || E.state === 'opening') this._outsideHits(dt);
     // 영역 싸움

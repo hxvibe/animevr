@@ -100,6 +100,7 @@ export class ShellDomain {
     if (this.state === 'idle') return;
     this.t += dt;
     this.uniforms.uTime.value += dt;
+    this.o.anim?.(dt, this);
     const env = this.ctx.env;
     const L = this.o.lights ?? {};
     if (this.state === 'opening') {

@@ -15,6 +15,7 @@ import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
 import { RiggedBody } from '../../core/rigged.js';
+import { FingerRig } from '../../core/enemies.js';
 import { makeCrescent } from '../sukuna/vfx.js';
 import { loadModel, getModel } from '../../core/assets.js';
 import { makeGlowSprite } from '../../core/fx.js';
@@ -88,7 +89,8 @@ class Katana {
     tg.setIndex(idx);
     this.trailMesh = new THREE.Mesh(tg, new THREE.ShaderMaterial({
       vertexShader: 'attribute float alpha; varying float vA; void main(){ vA = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(vec3(0.85,0.92,1.0), vA * 0.55); }',
+      uniforms: { uColor: { value: new THREE.Color(0.85, 0.92, 1.0) } },
+      fragmentShader: 'uniform vec3 uColor; varying float vA; void main(){ gl_FragColor = vec4(uColor, vA * 0.55); }',
       transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
     }));
     this.trailMesh.frustumCulled = false;
@@ -113,8 +115,9 @@ class Katana {
       if (this.side === 'left') thumb.negate();
       this.dir.copy(thumb).normalize();
     } else this.dir.copy(h.dir).normalize();
-    // 날은 손등(손가락 마디) 쪽을 향한다
-    const edge = _v2.copy(h.source === 'hand' ? F : UP).addScaledVector(this.dir, -(h.source === 'hand' ? F : UP).dot(this.dir)).normalize();
+    // 날 방향: 쥔 손 기준으로 180° 돌려 — 손바닥(손가락 끝이 감아쥔) 쪽이 날, 손등 쪽이 칼등
+    const ref = h.source === 'hand' ? F : UP;
+    const edge = _v2.copy(ref).addScaledVector(this.dir, -ref.dot(this.dir)).normalize().negate();
     const side = _v3.crossVectors(this.dir, edge).normalize();
     _m.makeBasis(edge, side, this.dir);
     this.group.quaternion.setFromRotationMatrix(_m);
@@ -130,6 +133,8 @@ class Katana {
     }
     this.prevTip.copy(this.tip);
     this.hasPrev = true;
+    // 휘두른 호의 길이: 빠르게 움직이는 동안 쌓이고, 멈추면 빠르게 사라진다 (크게 휘둘러야 벤다)
+    this.arc = speed > 1.8 ? (this.arc ?? 0) + speed * dt : (this.arc ?? 0) * Math.max(0, 1 - dt * 10);
     // 궤적
     this.trail.unshift({ a: this.base.clone(), b: this.tip.clone(), s: speed });
     if (this.trail.length > 16) this.trail.pop();
@@ -203,6 +208,7 @@ function sheathMesh() {
 const HILT = [-0.2, 0.02, -0.16];
 const HOLD_AT = 0.3; // 칼집을 쥐는 곳: 손잡이 원점에서 칼집 쪽으로
 const DRAW_LEN = TIP - BASE + 0.04; // 칼날이 칼집을 다 빠져나오는 거리
+const DRAW_START = 0.1; // 이만큼만 당겨 뽑아도 바로 뽑힌다
 /** 주먹을 꿰뚫는 축(엄지 쪽). 컨트롤러는 가리키는 방향 */
 function fistAxis(h, out) {
   if (h.source === 'hand') {
@@ -230,7 +236,8 @@ class Sheath {
     const B = bodyOf(this.ctx).update(dt);
     if (hand?.active) {
       // 쥔 손: 주먹을 꿰뚫는 축이 칼집 방향, 손은 칼집 입구 바로 아래(코이구치)를 쥔다
-      fistAxis(hand, this.dir);
+      //  좌우를 180° 뒤집어: 칼집 몸통은 새끼손가락 쪽으로 뻗고, 칼집 입구(손잡이)는 엄지 쪽 위로 나온다
+      fistAxis(hand, this.dir).negate();
       gripPoint(hand, this.ctx.rig, this.hilt).addScaledVector(this.dir, -HOLD_AT);
       this.held = hand.side;
     } else {
@@ -238,8 +245,14 @@ class Sheath {
       B.dir(...SHEATH_DIR, this.dir);
       this.held = null;
     }
-    // 칼날 면은 위(칼등이 위)
-    const side = _v.crossVectors(this.dir, UP).normalize();
+    // 칼날 면: 허리춤에선 칼등이 위 · 손에 쥐면 손을 따라 돈다 (손목을 비틀면 칼집도 돈다)
+    let refUp = UP;
+    if (hand?.active) {
+      refUp = _v4.set(0, 0, -1).applyQuaternion(hand.quat); // 손가락(손 추적) · 컨트롤러 앞 방향
+      if (Math.abs(refUp.dot(this.dir)) > 0.9) refUp.set(0, 1, 0).applyQuaternion(hand.quat);
+      refUp.negate();
+    }
+    const side = _v.crossVectors(this.dir, refUp).normalize();
     const edge = _v2.crossVectors(side, this.dir).normalize().negate();
     _m.makeBasis(edge, _v3.crossVectors(this.dir, edge), this.dir);
     this.g.quaternion.setFromRotationMatrix(_m);
@@ -370,11 +383,13 @@ class Rika {
     this.home = new THREE.Vector3();
     const inp = this.ctx.input;
     const f = yuta.flatFwd(_v);
-    this.root.position.copy(inp.head).setY(0).addScaledVector(f, -1.4).add(_v2.set(f.z, 0, -f.x).multiplyScalar(-1.3));
+    // 플레이어가 볼 수 있게 앞쪽 오른편 비스듬히에 나타난다 (뒤에 있으면 보이지 않는다)
+    this.root.position.copy(inp.head).setY(0).addScaledVector(f, 3.0).add(_v2.set(-f.z, 0, f.x).multiplyScalar(1.7));
     this.root.rotation.y = Math.atan2(f.x, f.z);
     if (this.B.ok) {
+      this.fingers = new FingerRig(this.B); // 바인드 자세에서 손가락 축을 잰다
       this.root.add(this.B.model);
-      this.B.model.position.y = 2.0;
+      this.B.model.position.y = 1.4;
     }
     this.glow = makeGlowSprite(new THREE.Color(0x6040a0), 5);
     this.glow.material.opacity = 0;
@@ -394,8 +409,13 @@ class Rika {
 
   /** 입 위치(월드) */
   mouth(out = new THREE.Vector3()) {
-    const b = this.B.bones?.jaw_A ?? this.B.bones?.head;
-    if (b) return b.getWorldPosition(out).add(_v3.set(0, 0, 0).applyQuaternion(this.root.quaternion));
+    // 머리 관절에서 얼굴 앞·조금 아래 (입)
+    const hd = this.B.J?.head;
+    if (hd) {
+      this.root.updateMatrixWorld(true);
+      const s = this.root.scale.x || 1;
+      return hd.getWorldPosition(out).add(_v3.set(0, -0.12 * s, 0.3 * s).applyQuaternion(this.root.quaternion));
+    }
     return out.copy(this.root.position).setY(4);
   }
 
@@ -445,7 +465,7 @@ class Rika {
     const inp = this.ctx.input;
     const f = this.y.flatFwd(_v2);
     const right = _v3.set(-f.z, 0, f.x);
-    this.home.copy(inp.head).setY(0).addScaledVector(f, -1.2).addScaledVector(right, 1.4);
+    this.home.copy(inp.head).setY(0).addScaledVector(f, 3.0).addScaledVector(right, 1.7); // 앞쪽 오른편: 늘 시야 안
     const J = this.B.J;
     const M = this.B.model;
     let armR = 0; // 오른팔: 0 늘어뜨림 → 1 머리 위 → -1 앞으로 내지름
@@ -454,7 +474,7 @@ class Rika {
     let open = 0;
     const W = this.ctx.world;
     // 떠 있는 흔들림
-    M.position.y = 2.0 + Math.sin(this.t * 1.6) * 0.12;
+    M.position.y = 1.4 + Math.sin(this.t * 1.6) * 0.12; // 얼굴이 눈높이보다 조금 위 — 고개를 많이 들지 않아도 보인다
     if (this.mode === 'appear') {
       const k = Math.min(1, this.modeT / 0.8);
       this.root.scale.setScalar(Math.max(0.01, ease(k)));
@@ -560,8 +580,13 @@ class Rika {
       const up = Math.max(0, a);
       const fwd = Math.max(0, -a);
       // 늘어뜨림 → 위로 → 앞으로
-      sh.rotation.set(-up * 2.2 - fwd * 1.3, s * -0.2 * up, s * (0.75 - up * 0.6 - fwd * 0.55));
+      sh.rotation.set(-up * 2.2 - fwd * 1.3, s * -0.2 * up, s * -(0.88 - up * 0.75 - fwd * 0.7)); // 늘어뜨린 팔: 몸에서 조금 떨어져 자연스럽게
       el.rotation.set(-0.5 - up * 0.9 + fwd * 0.4 + open * 0.2, 0, 0);
+    }
+    // 손가락: 평소엔 자연스럽게 살짝 굽힘 · 붙잡을 땐 펴고 · 내지를 땐 주먹
+    if (this.fingers) {
+      const cR = open > 0.5 ? 0.1 : armR < -0.3 || this.mode === 'punch' ? 1 : this.held ? 0.95 : 0.4;
+      this.fingers.apply(dt, { L: 0.4, R: cR });
     }
     if (J.chest) J.chest.rotation.x = lean;
     if (J.spine) J.spine.rotation.x = lean * 0.5;
@@ -679,13 +704,16 @@ class LoveBeam {
 
 // 검기: 칼날에 담은 주력을 터뜨려 날린다
 class SwordQi {
-  constructor(ctx, from, travel, along) {
+  constructor(ctx, from, travel, along, tech = null, onHit = null) {
     this.ctx = ctx;
+    this.tech = tech;
+    this.onHit = onHit;
+    this.color = tech?.color ?? 0xd8e4ff;
     this.travel = travel.clone().normalize();
     this.along = along.clone().addScaledVector(this.travel, -along.dot(this.travel)).normalize();
     this.n = new THREE.Vector3().crossVectors(this.travel, this.along).normalize();
     this.g = makeCrescent(0.8);
-    this.g.traverse((o) => o.material && o.material.color?.set(0xd8e4ff));
+    this.g.traverse((o) => o.material && o.material.color?.set(this.color));
     this.g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(this.along, this.n, this.travel));
     this.g.position.copy(from);
     this.start = from.clone();
@@ -708,9 +736,10 @@ class SwordQi {
         if (Math.abs(rel.dot(this.n)) < r * 0.8 && Math.abs(rel.dot(this.along)) < 1 + r && Math.abs(rel.dot(this.travel)) < 0.4 + r * 0.5) {
           this.hit.add(t);
           sfx.cut(c);
-          fx.burst(c, 16, new THREE.Color(0xd8e4ff), 3, 0.03, 0.35, { dir: this.travel, dirAmt: 1 });
-          t.damage(70, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(this.n, c), push: this.travel.clone().multiplyScalar(2) });
+          fx.burst(c, 16, new THREE.Color(this.color), 3, 0.03, 0.35, { dir: this.travel, dirAmt: 1 });
+          t.damage(this.tech?.id === 'kai' ? 100 : 70, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(this.n, c), push: this.travel.clone().multiplyScalar(2) });
           if (t.alive) t.impulse?.(this.travel.clone().multiplyScalar(2));
+          this.onHit?.(t, c.clone());
         }
       }
     }
@@ -725,6 +754,32 @@ class SwordQi {
     return true;
   }
 }
+
+/** 야곱의 사다리: 하늘에서 내리꽂는 빛의 기둥 (주령에게 특히 강하다). k: 세기 */
+function jacobPillar(ctx, c, k = 1) {
+  const { fx, world } = ctx;
+  const g = c.clone().setY(0);
+  const R = 0.9 * Math.sqrt(k);
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 30, 20, 1, true).translate(0, 15, 0), new THREE.MeshBasicMaterial({ color: 0xfff6d0, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+  col.position.copy(g);
+  fx.addTransient(col, 0.7, (q) => {
+    col.material.opacity = 0.8 * (1 - q);
+    col.scale.set(1 - q * 0.6, 1, 1 - q * 0.6);
+  }, () => {
+    col.geometry.dispose();
+    col.material.dispose();
+  });
+  fx.flash(c, 0xfff0c0, 12 * k, 0.5, 20);
+  world.forEachEnemy(g, 1.4 * Math.sqrt(k), (e) => e.damage((e.def?.curse ? 160 : 90) * k, { type: 'erase' }));
+}
+
+// 유타가 칼에 담는 술식 (손 끝으로 칼날을 쓸어 고른다)
+const SWORD_TECHS = [
+  { id: 'qi', label: '剣気', name: '검기 (주력만)', color: 0xd8e4ff },
+  { id: 'kai', label: '解', name: '해 — 더 깊게 베고 붉은 참격', color: 0xff3040 },
+  { id: 'speech', label: '動くな', name: '주언 — 벤 적이 멈춘다', color: 0xffe080 },
+  { id: 'jacob', label: 'ヤコブの梯子', name: '야곱의 사다리 — 벤 자리에 빛의 기둥', color: 0xfff6d0 },
+];
 
 // 영역: 모방한 술식이 깃든 칼이 날아든다
 const COPIED = [
@@ -776,15 +831,7 @@ class FlyingSword {
         t.damage(60, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, c), push: to.clone() });
       } else if (this.tech.id === 'jacob') {
         // 야곱의 사다리: 하늘에서 내리꽂는 빛의 기둥 (주령에게 특히 강하다)
-        const g = c.clone().setY(0);
-        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 30, 20, 1, true).translate(0, 15, 0), new THREE.MeshBasicMaterial({ color: 0xfff6d0, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
-        col.position.copy(g);
-        fx.addTransient(col, 0.7, (k) => {
-          col.material.opacity = 0.8 * (1 - k);
-          col.scale.set(1 - k * 0.6, 1, 1 - k * 0.6);
-        }, () => col.geometry.dispose());
-        fx.flash(c, 0xfff0c0, 12, 0.5, 20);
-        world.forEachEnemy(g, 1.4, (e) => e.damage(e.def?.curse ? 160 : 90, { type: 'erase' }));
+        jacobPillar(this.ctx, c, 1);
       } else {
         t.damage(85, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, c), push: to.clone().multiplyScalar(2) });
       }
@@ -880,7 +927,7 @@ export class Yuta extends Caster {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '왼쪽 허리 칼집의 손잡이를 주먹으로 쥐고 칼집을 따라 끝까지 당겨 뽑는다 (덜 뽑고 놓으면 도로 들어감) · 다른 손으로 칼집을 쥘 수 있다\n휘둘러 벤다 (칼끝이 빠를수록 깊게) · 아주 세게 휘두르면 검기 · 칼끝을 칼집 입구에 대고 밀어 넣거나 손을 펴면 납도' },
+        { head: '카타나 · 검기', demo: 'yuta.sword', color: '#e0e8ff', text: '왼쪽 허리 칼집의 손잡이를 주먹으로 쥐고 칼집을 따라 조금만 당기면 바로 뽑힌다 · 다른 손으로 칼집을 쥘 수 있다(손을 따라 돈다)\n크게 휘둘러야 벤다 (칼끝이 빠를수록 깊게) · 아주 세게 휘두르면 검기 · 칼끝을 칼집 입구에 대고 밀어 넣거나 손을 펴면 납도\n다른 손 손끝으로 칼날을 쓸어내리면 칼에 깃들 술식을 고른다: 검기 → 解 → 動くな → 야곱의 사다리' },
         { head: '리카 현현', demo: 'yuta.rika', color: '#c8a0ff', text: '왼손 주먹(반지)을 입술에 0.5초 → 리카 완전현현, 곁에서 싸운다 (1분)\n왼손 검지로 적을 가리키면 그 적에게 · 다시 하면 돌려보낸다' },
         { head: '순애빔', demo: 'yuta.beam', color: '#ff7ac0', text: '리카 완전현현 중에: 두 손바닥을 마주 보게 모았다가 앞으로 밀기\n리카의 입에서 주력의 고출력 지향 방출 (오래 모을수록 굵다)' },
         { head: '주언 「動くな」', demo: 'yuta.speech', color: '#ffe080', text: '편 손바닥으로 입을 가렸다가 떼며 앞으로 내밀기 → 그 손에 확성기가 쥐어지고 외친다\n바라본 적들이 3초 동안 멈춘다 (특급은 절반)' },
@@ -891,11 +938,11 @@ export class Yuta extends Caster {
     if (mode === 'desktop') {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
-        { head: '기술', color: '#e0e8ff', text: 'E 누르고 있기: 칼 뽑기(마우스를 휙 돌려 베기) · F 리카 · 1 순애빔(누르고 떼기) · 2 주언 「動くな」 · Q 1.2초 영역전개' },
+        { head: '기술', color: '#e0e8ff', text: 'E 누르고 있기: 칼 뽑기(마우스를 휙 돌려 베기) · 3 칼의 술식 바꾸기 · F 리카 · 1 순애빔(누르고 떼기) · 2 주언 「動くな」 · Q 1.2초 영역전개' },
       ];
     }
     return [
-      { head: '칼', color: '#e0e8ff', text: '오른쪽 그립: 칼을 쥐고 휘두르기' },
+      { head: '칼', color: '#e0e8ff', text: '오른쪽 그립: 칼을 쥐고 크게 휘두르기 · 칼을 쥔 손 B(Y): 칼에 깃들 술식 바꾸기 (검기 → 解 → 動くな → 야곱의 사다리)' },
       { head: '리카 · 주언', color: '#c8a0ff', text: 'X: 리카 현현/돌려보내기 · 왼쪽 트리거: 리카에게 바라본 적을 공격시키기 · A: 주언 「動くな」' },
       { head: '순애빔 · 영역', color: '#ff7ac0', text: '두 트리거를 쥐고 손을 모았다가 밀기: 순애빔 · 양쪽 스틱 1.2초: 영역전개' },
     ];
@@ -998,8 +1045,8 @@ export class Yuta extends Caster {
         this.ctx.sfx.play('click', { at: sh.hilt, vol: 0.6, rate: 0.7 });
         return;
       }
-      if (D.s >= DRAW_LEN - 0.01 && D.minS < DRAW_LEN - 0.2) {
-        // 칼끝이 칼집을 빠져나왔다 — 「シャキン」
+      if (D.s >= DRAW_START && D.minS < DRAW_START) {
+        // 조금만 뽑아도 바로 칼집을 빠져나온다 — 「シャキン」
         D.free = true;
         S.k = 1;
         this._sheatheT = 0;
@@ -1052,15 +1099,20 @@ export class Yuta extends Caster {
     let speed = 0;
     if (inSheath) S.setPose(_v.copy(this.sheath.hilt).addScaledVector(this.sheath.dir, -D.s), this.sheath.g.quaternion);
     else speed = S.update(dt, desk ? { ...h, source: 'controller', dir: _v.copy(inp.headDir).add(_v2.set(0, 0.2, 0)).normalize() } : h, want);
-    if (want && speed > 2.6) this._slash(S, speed);
-    // 아주 세게 휘두르면 검기
-    if (want && speed > 7 && S.k > 0.9 && (this.cds[h.side + 'qi'] ?? 0) <= 0 && this.energy > 12) {
+    S.trailMesh.material.uniforms.uColor.value.setHex(this.tech.color); // 궤적은 깃든 술식의 빛
+    // 크게 휘둘러야 벤다: 칼끝이 빠르고(4m/s) 휘두른 호가 충분히 길 때(데스크톱은 마우스라 덜 엄격)
+    const bigSwing = desk ? speed > 2.6 : speed > 4 && (S.arc ?? 0) > 0.45;
+    if (want && bigSwing) this._slash(S, speed);
+    // 아주 세게 휘두르면 검기 (고른 술식이 실린다)
+    if (want && speed > 7 && (desk || (S.arc ?? 0) > 0.6) && S.k > 0.9 && (this.cds[h.side + 'qi'] ?? 0) <= 0 && this.energy > 12) {
       this.cds[h.side + 'qi'] = 0.45;
       this.energy -= 12;
       const travel = _v.copy(inp.headDir).addScaledVector(S.dir, 0.3).normalize();
-      this.list.push(new SwordQi(this.ctx, _v2.copy(S.tip).addScaledVector(travel, 0.2), travel, S.tipVel));
+      this.list.push(new SwordQi(this.ctx, _v2.copy(S.tip).addScaledVector(travel, 0.2), travel, S.tipVel, this.tech, (t, c) => this._techHit(t, c, true)));
       this.ctx.sfx.whoosh(S.tip, 0.8, 1.3);
     }
+    // 칼에 깃들 술식 고르기: 다른 손 손끝으로 칼날을 쓸어내린다 (컨트롤러: 칼을 쥔 손 B · 데스크톱: 3)
+    if (want && S.k > 0.9) this._techSwipe(h, S, dt);
     // 리카: 왼손 주먹을 입에
     const mouth = _v3.copy(inp.head).add(_v.set(0, -0.09, 0)).addScaledVector(inp.headDir, 0.06);
     if (h.side === 'left') {
@@ -1125,8 +1177,9 @@ export class Yuta extends Caster {
       const push = S.tipVel.clone().normalize().multiplyScalar(1.5);
       fx.burst(near, 14, new THREE.Color(0xe0e8ff), 2.5, 0.03, 0.3, { dir: push, dirAmt: 1 });
       sfx.cut(near);
-      t.damage(dmg, { type: 'slash', plane, push });
+      t.damage(dmg * (this.tech.id === 'kai' ? 1.4 : 1), { type: 'slash', plane, push });
       if (t.alive) t.impulse?.(push.multiplyScalar(1.5), 2);
+      this._techHit(t, c, false);
       this.ctx.input[S.side]?.pulse?.(0.8, 60);
       this.ctx.game.hitstop = Math.max(this.ctx.game.hitstop, 0.03);
     }
@@ -1213,8 +1266,12 @@ export class Yuta extends Caster {
       const lr = _v.subVectors(R.palm, L.palm);
       const d = lr.length();
       lr.normalize();
-      cupped = d > 0.08 && d < 0.4 && L.palmNormal.dot(lr) > 0.45 && R.palmNormal.dot(lr) < -0.45 && L.gesture !== 'fist' && R.gesture !== 'fist' && !dsign;
-    } else if (both && L.source === 'controller') cupped = L.btn.trigger && R.btn.trigger && L.palm.distanceTo(R.palm) < 0.4;
+      // 엄격하게: 옆으로 나란히 · 손바닥이 확실히 마주 봄 · 몸 앞 · 거의 멈춘 손 · 주먹/검지/집게 아님
+      const front = _v4.addVectors(L.palm, R.palm).multiplyScalar(0.5).sub(inp.head).dot(inp.headDir);
+      const bad = (h) => ['fist', 'point', 'pinch', 'two'].includes(h.gesture);
+      cupped = d > 0.1 && d < 0.38 && Math.abs(lr.y) < 0.35 && L.palmNormal.dot(lr) > 0.7 && R.palmNormal.dot(lr) < -0.7 && front > 0.18 && L.speed < 0.7 && R.speed < 0.7 && !bad(L) && !bad(R) && !dsign &&
+        !this.draw.by && !this.sheathBy;
+    } else if (both && L.source === 'controller') cupped = L.btn.trigger && R.btn.trigger && !L.btn.grip && !R.btn.grip && L.palm.distanceTo(R.palm) < 0.35;
     if (inp.mode === 'desktop' && inp.keyDown('Digit1')) cupped = true;
     const mid = inp.mode === 'desktop' ? _v2.copy(inp.head).addScaledVector(inp.headDir, 0.5).add(_v.set(0, -0.15, 0)) : _v2.addVectors(L.palm, R.palm).multiplyScalar(0.5);
     const rikaOn = !!this.rika && this.rika.mode !== 'leave';
@@ -1225,7 +1282,9 @@ export class Yuta extends Caster {
       }
       cupped = false;
     }
-    if (cupped && !C.on && this.energy > 20) {
+    // 자세를 0.5초 유지해야 모이기 시작한다
+    C.pre = cupped && !C.on ? (C.pre ?? 0) + dt : 0;
+    if (cupped && !C.on && this.energy > 20 && (C.pre >= 0.5 || inp.mode === 'desktop')) {
       C.on = true;
       C.t = 0;
       C.s = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffc0e0, toneMapped: false }));
@@ -1254,7 +1313,10 @@ export class Yuta extends Caster {
         if (cool(this.ctx, big ? 'beamBig' : 'beam', big ? 15 : 3, big ? '純愛砲' : '순애빔') && this.spend(cost)) {
           const from = at.clone();
           const aimT = this.gazeTarget(undefined, undefined, 0.3, 40, false);
-          const dir = aimT ? aimT.center(new THREE.Vector3()).sub(from).normalize() : inp.headDir.clone();
+          // 겨눈 대상이 없으면 바라보는 먼 곳으로 — 리카의 입은 높아서, 시선 방향을 그대로 쓰면 땅에 꽂힌다
+          const aim = aimT ? aimT.center(new THREE.Vector3()) : inp.head.clone().addScaledVector(inp.headDir, 30);
+          if (!aimT) aim.y = Math.max(aim.y, 1.2);
+          const dir = aim.sub(from).normalize();
           this.list.push(new LoveBeam(this.ctx, from, dir, power, big));
           if (big) this.ctx.ui.manga({ main: '純愛砲', ruby: 'じゅんあいほう', color: '#ff7ac0', big: true });
         }
@@ -1300,6 +1362,68 @@ export class Yuta extends Caster {
     };
     if (press('KeyF')) this.toggleRika();
     if (press('Digit2')) this.speech();
+    if (press('Digit3')) this.cycleTech();
+  }
+
+  // ───── 칼에 깃드는 술식 (모방) ─────
+  get tech() {
+    return SWORD_TECHS.find((x) => x.id === this.ctx.settings.yutaSwordTech) ?? SWORD_TECHS[0];
+  }
+
+  cycleTech(side = 'right') {
+    const i = SWORD_TECHS.indexOf(this.tech);
+    const T = SWORD_TECHS[(i + 1) % SWORD_TECHS.length];
+    this.ctx.settings.yutaSwordTech = T.id;
+    this.ctx.game?.saveSettings?.();
+    const hex = '#' + new THREE.Color(T.color).getHexString();
+    this.ctx.ui.manga({ top: '刀に術式を込める', main: T.label, color: hex, dur: 0.9, side });
+    this.ctx.ui.callout(`칼의 술식 — ${T.name}`, { color: hex, dur: 1.4 });
+    this.ctx.sfx.play('charge_rise', { at: this.ctx.input.head, vol: 0.4, rate: 1.6 });
+    this.aura.set('left', 0.8);
+    this.aura.set('right', 0.8);
+  }
+
+  /** 다른 손 손끝(또는 손바닥)으로 칼날을 따라 쓸어내리면 다음 술식 */
+  _techSwipe(h, S, dt) {
+    const o = h.side === 'left' ? this.ctx.input.right : this.ctx.input.left;
+    if (h.source === 'controller') {
+      if (h.pressed('b')) this.cycleTech(h.side);
+      return;
+    }
+    if (!o.active || o.source !== 'hand') return;
+    const p = o.indexTip ?? o.palm;
+    const ab = _v.subVectors(S.tip, S.base);
+    const L2 = ab.lengthSq();
+    const u = THREE.MathUtils.clamp(_v2.subVectors(p, S.base).dot(ab) / L2, 0, 1);
+    const d = _v2.copy(S.base).addScaledVector(ab, u).distanceTo(p);
+    const sw = (this._swipe ??= { u0: -1, t: 0 });
+    if (d < 0.06) {
+      if (sw.u0 < 0) sw.u0 = u;
+      sw.t += dt;
+      if (Math.abs(u - sw.u0) > 0.28 && (this.cds.tech ?? 0) <= 0) {
+        this.cds.tech = 0.8;
+        sw.u0 = u;
+        this.cycleTech(o.side);
+        o.pulse?.(0.4, 30);
+        h.pulse?.(0.4, 30);
+      }
+    } else {
+      sw.u0 = -1;
+      sw.t = 0;
+    }
+  }
+
+  /** 술식이 실린 칼(참격 · 검기)이 대상에 닿았다 */
+  _techHit(t, c, qi) {
+    const T = this.tech;
+    const { world, fx } = this.ctx;
+    if (T.id === 'speech') {
+      t.stunUntil = Math.max(t.stunUntil ?? 0, world.time + (t.def?.grade === 'special' ? 1 : 2));
+      fx.starFlare(c, new THREE.Color(T.color), 0.35);
+    } else if (T.id === 'jacob' && (this.cds.jacob ?? 0) <= 0) {
+      this.cds.jacob = qi ? 0.3 : 0.9;
+      jacobPillar(this.ctx, c, qi ? 0.7 : 0.55);
+    } else if (T.id === 'kai') fx.burst(c, 10, new THREE.Color(T.color), 2.5, 0.03, 0.3);
   }
 
   dispose() {

@@ -369,6 +369,7 @@ class StrawDoll {
       h.pulse?.(0.4, 30);
     } else if (this.heldBy && !hold) {
       this.heldBy = null;
+      this.locUp = null;
       this.ctx.sfx.play('click', { at: this.g.position, vol: 0.3, rate: 0.6 });
     }
     const inHand = this.heldBy && h?.active;
@@ -380,12 +381,23 @@ class StrawDoll {
     }
     if (inHand) {
       // 주먹을 꿰뚫는 축 = 인형의 몸 (머리는 엄지 쪽), 앞면은 내 머리 쪽으로
+      //  쥐는 순간(뽑아 드는 0.2초 동안)의 자세를 손 기준으로 기억해 두고, 그 뒤로는 손과 함께 돈다 (손목을 비틀면 인형도 돈다)
       const up = _v2;
-      if (h.source === 'hand') up.crossVectors(h.fingersDir, h.palmNormal).negate(); // 왼손 엄지 쪽
-      else up.copy(h.dir);
-      up.normalize();
-      const toMe = _v.subVectors(this.ctx.input.head, h.palm);
-      const face = toMe.addScaledVector(up, -toMe.dot(up)).normalize();
+      let face;
+      if (this.k < 0.9 || !this.locUp) {
+        if (h.source === 'hand') up.crossVectors(h.fingersDir, h.palmNormal).negate(); // 왼손 엄지 쪽
+        else up.copy(h.dir);
+        up.normalize();
+        const toMe = _v.subVectors(this.ctx.input.head, h.palm);
+        face = toMe.addScaledVector(up, -toMe.dot(up)).normalize();
+        const qi = _q.copy(h.quat).invert();
+        (this.locUp ??= new THREE.Vector3()).copy(up).applyQuaternion(qi);
+        (this.locFace ??= new THREE.Vector3()).copy(face).applyQuaternion(qi);
+      } else {
+        up.copy(this.locUp).applyQuaternion(h.quat).normalize();
+        face = _v.copy(this.locFace).applyQuaternion(h.quat);
+        face.addScaledVector(up, -face.dot(up)).normalize();
+      }
       const side = _v3.crossVectors(up, face).normalize();
       _m.makeBasis(side, up, face);
       this.g.quaternion.setFromRotationMatrix(_m);

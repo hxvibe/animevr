@@ -76,12 +76,16 @@ export class FingerRig {
     for (const s of ['L', 'R']) {
       this.curl[s] += (want[s] - this.curl[s]) * Math.min(1, dt * 14);
       const c = this.curl[s];
-      for (const f of this.hands[s]) {
+      this._t = (this._t ?? Math.random() * 10) + dt;
+      // 손가락마다 다르게: 편안할 땐 새끼 쪽으로 갈수록 더 굽고(자연스러운 손), 주먹이면 모두 꽉
+      const relax = 1 - Math.min(1, Math.max(0, (c - 0.55) / 0.35));
+      this.hands[s].forEach((f, fi) => {
+        const casc = 1 + relax * [0, -0.25, 0, 0.15, 0.3][fi] + Math.sin(this._t * 0.7 + fi * 1.3) * 0.04 * relax;
         f.bones.forEach((bn, i) => {
-          const ang = f.thumb ? [0.25, 0.45, 0.5][i] * c : [0.95, 1.25, 0.8][i] * c;
+          const ang = (f.thumb ? [0.25, 0.45, 0.5][i] * c : [0.95, 1.25, 0.8][i] * c) * casc;
           bn.quaternion.copy(f.rest[i]).multiply(_q.setFromAxisAngle(f.axes[i], ang));
         });
-      }
+      });
     }
   }
 }
@@ -866,6 +870,18 @@ const DOMAIN = {
 };
 
 // 기술 묶음 · 버릇
+// 버릇마다 걸음새
+const GAIT = {
+  default: { stride: 1, leg: 1, knee: 1, bend: 0, arms: 1, sway: 1, twist: 1, lean: 0 },
+  boxer: { stride: 0.8, leg: 0.8, knee: 0.8, bend: 0.12, arms: 0, sway: 0.6, twist: 0.6, lean: 0.05 }, // 가드를 올린 채 낮게 스텝
+  loose: { stride: 1.05, leg: 1.1, knee: 1.15, bend: 0, arms: 1.6, sway: 1.8, twist: 1.6, lean: -0.02 }, // 마히토: 흐느적거리며 팔을 크게 휘휘
+  volcano: { stride: 0.55, leg: 0.7, knee: 0.7, bend: 0.05, arms: 0, sway: 2.6, twist: 0.4, lean: 0.04 }, // 죠고: 짧은 다리로 뒤뚱뒤뚱
+  beast: { stride: 1.2, leg: 1.2, knee: 1.3, bend: 0.25, arms: 1.3, sway: 1.2, twist: 1.3, lean: 0.12 }, // 웅크린 채 성큼성큼
+  creep: { stride: 1.25, leg: 0.9, knee: 1.2, bend: 0.08, arms: 0.4, sway: 0.7, twist: 0.5, lean: 0.1 }, // 쿠치사케: 느릿하게 미끄러지듯
+  heavy: { stride: 1.4, leg: 0.9, knee: 0.8, bend: 0.12, arms: 0.8, sway: 2, twist: 1.2, lean: 0.08 }, // 거인: 좌우로 쿵쿵
+  pockets: { stride: 1.15, leg: 0.9, knee: 0.85, bend: 0, arms: 0, sway: 1.1, twist: 1.3, lean: -0.04 }, // 고죠: 주머니에 손 넣고 느긋하게
+};
+
 const KITS = {
   bagmask: { moves: [JAB, CROSS, HOOK, KICK, COMBO], stance: 'boxer', keep: [0, 1.0] },
   mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH, M_LAUNCH], stance: 'loose', keep: [0, 1.4] },
@@ -1022,10 +1038,11 @@ export class RiggedEnemy extends Dummy {
     const aiOn = W.settings.dummyAI;
     // 1) 기본 자세 (팔은 내리고 팔꿈치는 살짝)
     for (const k of ORDER) T[k][0] = T[k][1] = T[k][2] = 0;
-    T.shL = [0, 0, this.restZ];
-    T.shR = [0, 0, -this.restZ];
-    T.elL = [-0.15, 0, 0];
-    T.elR = [-0.15, 0, 0];
+    // 팔은 몸에서 살짝 떨어뜨려(손이 허리·허벅지에 박히지 않게) 팔꿈치를 편안히 굽힌다
+    T.shL = [0.04, 0, this.restZ + 0.06];
+    T.shR = [0.04, 0, -this.restZ - 0.06];
+    T.elL = [-0.28, 0, 0];
+    T.elR = [-0.28, 0, 0];
     // 2) 숨쉬기 · 무게중심 · 두리번
     const t = this.t;
     const breathe = Math.sin(t * 1.7);
@@ -1201,33 +1218,49 @@ export class RiggedEnemy extends Dummy {
     if (this.state === 'stand') this.root.quaternion.setFromAxisAngle(_v2.set(0, 1, 0), this.yaw);
   }
 
-  /** 걸음: 허벅지 앞뒤 · 무릎은 들 때 접고 · 팔은 반대로 · 상체는 비튼다 */
+  /**
+   * 걸음: 허벅지 앞뒤 · 무릎은 들 때 접고 · 팔은 반대로 · 골반은 디딘 다리 쪽으로 기울고 상체는 반대로 비튼다
+   *  버릇마다 걸음새가 다르다 (GAIT): 보폭 · 팔 흔들기 · 골반 흔들림 · 무릎 들기 · 숙임 · 고개
+   */
   _walk(T, v, dt) {
     const sp = Math.abs(v);
     const a = Math.min(1, sp / 2.2);
     this._walkA = lerp(this._walkA ?? 0, sp > 0.05 ? a : 0, Math.min(1, dt * 8));
     const A = this._walkA;
     if (A < 0.01) return;
-    const stride = 1.1 * this.scale;
+    const G = GAIT[this.kit.stance] ?? GAIT.default;
+    const stride = 1.1 * this.scale * G.stride;
     this.walkPh += (dt * sp) / stride * (v < 0 ? -1 : 1);
     const ph = this.walkPh * Math.PI * 2;
     const s = Math.sin(ph);
     const c = Math.cos(ph);
-    T.hpL[0] += -s * 0.55 * A;
-    T.hpR[0] += s * 0.55 * A;
-    T.knL[0] += Math.max(0, c) * 0.95 * A + 0.08 * A;
-    T.knR[0] += Math.max(0, -c) * 0.95 * A + 0.08 * A;
+    const run = sp > 2.5 ? 1 : 0;
+    T.hpL[0] += -s * 0.55 * A * G.leg;
+    T.hpR[0] += s * 0.55 * A * G.leg;
+    T.knL[0] += (Math.max(0, c) * 0.95 * G.knee + 0.08 + G.bend) * A;
+    T.knR[0] += (Math.max(0, -c) * 0.95 * G.knee + 0.08 + G.bend) * A;
+    T.hpL[0] -= G.bend * 0.5 * A;
+    T.hpR[0] -= G.bend * 0.5 * A;
     T.ftL[0] += -Math.max(0, c) * 0.35 * A;
     T.ftR[0] += -Math.max(0, -c) * 0.35 * A;
-    if (this.kit.stance !== 'boxer' && this.kit.stance !== 'volcano') {
-      T.shL[0] += s * 0.45 * A;
-      T.shR[0] += -s * 0.45 * A;
-      T.elL[0] -= 0.3 * A;
-      T.elR[0] -= 0.3 * A;
+    // 팔: 다리와 엇갈려 흔든다 · 걸을 땐 손이 허벅지에 닿지 않게 살짝 벌린다
+    if (G.arms > 0) {
+      T.shL[0] += s * 0.45 * A * G.arms;
+      T.shR[0] += -s * 0.45 * A * G.arms;
+      T.elL[0] -= (0.3 + Math.max(0, -s) * 0.25) * A * G.arms;
+      T.elR[0] -= (0.3 + Math.max(0, s) * 0.25) * A * G.arms;
+      T.shL[2] += 0.08 * A;
+      T.shR[2] -= 0.08 * A;
     }
-    T.chest[1] += s * 0.1 * A;
-    T.hips[1] -= s * 0.08 * A;
-    T.chest[0] += 0.06 * A + (sp > 2.5 ? 0.12 : 0);
+    // 골반: 디딘 다리 쪽으로 기울고(옆으로 흔들림) 비틀린다, 가슴은 반대로 비틀어 어깨가 엇갈린다
+    T.hips[2] += Math.sin(ph) * 0.05 * G.sway * A;
+    T.spine[2] -= Math.sin(ph) * 0.035 * G.sway * A;
+    T.chest[1] += s * 0.1 * A * G.twist;
+    T.hips[1] -= s * 0.08 * A * G.twist;
+    // 머리는 흔들림을 덜 받도록 가슴과 반대로
+    T.head[1] -= s * 0.05 * A * G.twist;
+    T.head[2] += Math.sin(ph) * 0.03 * G.sway * A;
+    T.chest[0] += (0.06 + G.lean) * A + run * 0.12;
   }
 
   /** 목표 자세로 관절을 부드럽게 옮긴다 */

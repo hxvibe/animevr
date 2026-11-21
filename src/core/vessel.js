@@ -86,9 +86,9 @@ export class Vessel {
     const B = bodyOf(this.ctx).update(dt);
     const desk = inp.mode === 'desktop';
     this.g.visible = !desk;
-    // 데스크톱: 6 키로 먹는다
+    // 데스크톱: T 키로 먹는다
     if (desk) {
-      if (inp.keyDown?.('Digit6')) this._eat();
+      if (inp.keyDown?.('KeyT')) this._eat();
       return;
     }
     const mouth = _v2.copy(inp.head).add(_v.set(0, -0.09, 0)).addScaledVector(inp.headDir, 0.06);

@@ -415,7 +415,7 @@ export class UI {
     }
     if (ch && (ch.id === 'megumi' || ch.id === 'itadori')) {
       const after = '먹은 뒤: 解 · 捌 · 竈開 · 세계를 가르는 해를 함께 쓰고, 영역전개에 복마어주자(사당 · 참격 난사)가 겹친다';
-      const how = mode === 'desktop' ? '6 키: 먹기' : mode === 'controller' ? '오른쪽 허리의 손가락에 컨트롤러를 대고 그립 → 입으로 가져가면 먹는다' + (ch.ctrlNative ? ' · 먹은 뒤 B: 정면 解' : '') : '오른쪽 허리의 손가락을 주먹(또는 집게)으로 쥐어 입으로 가져가면 먹는다';
+      const how = mode === 'desktop' ? 'T 키: 먹기' : mode === 'controller' ? '오른쪽 허리의 손가락에 컨트롤러를 대고 그립 → 입으로 가져가면 먹는다' + (ch.ctrlNative ? ' · 먹은 뒤 B: 정면 解' : '') : '오른쪽 허리의 손가락을 주먹(또는 집게)으로 쥐어 입으로 가져가면 먹는다';
       lines.push({ head: '宿儺の指 스쿠나의 손가락', color: '#ff6060', text: how + '\n' + after });
     }
     if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', demo: 'common.loco', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기\n오른손 엄지 척 → 옆으로 밀면 30° 회전' });

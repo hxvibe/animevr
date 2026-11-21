@@ -880,6 +880,195 @@ const DOMAIN = {
   fist: { L: 0.6, R: 0.6 },
 };
 
+// 손가락 보유자 (스쿠나의 손가락을 삼킨 특급 주령): 말도 못 하지만 주력을 그대로 내쏜다
+//  ① 주력포: 두 손을 모아 주력을 레이저처럼 · ② 장벽처럼 사방으로 방출 · ③ 주력 덩어리를 고무처럼 늘였다 튕겨 쏘기
+const FB_COL = new THREE.Color(0xb0203a);
+const FB_BEAM = {
+  tech: true,
+  name: '주력포', range: [3, 16], cd: 6, w: 1.6, dur: 1.7,
+  start: (e, m) => {
+    m.aim = e.world.ctx.input.head.clone().add(_v.set(0, -0.3, 0));
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff3050, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const core = new THREE.MeshBasicMaterial({ color: 0x1a0008, transparent: true, opacity: 0, depthWrite: false });
+    m.beam = new THREE.Group();
+    m.beam.add(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1, 12, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), mat));
+    m.beam.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 10, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), core));
+    m.mats = [mat, core];
+    e.world.ctx.scene.add(m.beam);
+    m.hitT = 0;
+  },
+  pose: (T, e, k) => {
+    const up = sm(0, 0.35, k) * (1 - sm(0.88, 1, k));
+    T.shL = [-1.45 * up, 0, 0.12 * up + e.restZ * (1 - up)];
+    T.shR = [-1.45 * up, 0, -0.12 * up - e.restZ * (1 - up)];
+    T.elL = [-0.2, 0, 0];
+    T.elR = [-0.2, 0, 0];
+    T.chest[0] += 0.15 * up;
+    T.knL[0] += 0.25 * up;
+    T.knR[0] += 0.25 * up;
+    T.hpL[0] += 0.2 * up;
+    T.hpR[0] -= 0.15 * up;
+  },
+  tick: (e, k, m, dt) => {
+    const W = e.world;
+    const { fx, sfx, input: inp } = W.ctx;
+    const from = handPos(e, 'L', _v2).add(handPos(e, 'R', _v3)).multiplyScalar(0.5);
+    // 겨눈 곳을 천천히 따라간다 (피할 틈)
+    m.aim.lerp(_v.copy(inp.head).add(_v3.set(0, -0.3, 0)), Math.min(1, dt * 1.2));
+    if (k < 0.45) {
+      if (Math.random() < 0.8) fx.spawn(from.clone().add(_v.randomDirection().multiplyScalar(0.3)), _v.copy(from).sub(_v3.copy(from).add(_v.randomDirection())).multiplyScalar(0), FB_COL, 0.06 + k * 0.1, 0.25, 0, 0);
+      if (!m.snd && k > 0.1) {
+        m.snd = true;
+        sfx.play('charge_rise', { at: from, vol: 0.6, rate: 0.6 });
+      }
+      return;
+    }
+    const on = k < 0.85;
+    const len = Math.min(25, from.distanceTo(m.aim) + 6);
+    const dir = _v.subVectors(m.aim, from).normalize();
+    m.beam.position.copy(from);
+    m.beam.lookAt(_v3.copy(from).add(dir));
+    m.beam.scale.set(1 + Math.sin(k * 80) * 0.15, 1 + Math.sin(k * 80) * 0.15, on ? len * sm(0.45, 0.52, k) : len);
+    m.mats[0].opacity = on ? 0.85 : Math.max(0, 0.85 * (1 - (k - 0.85) / 0.15));
+    m.mats[1].opacity = m.mats[0].opacity;
+    if (!m.boom) {
+      m.boom = true;
+      sfx.play('ki_blast', { at: from, vol: 0.9, rate: 0.7 });
+      sfx.rumble?.(0.3, 0.4);
+    }
+    if (!on) return;
+    m.hitT -= dt;
+    // 빔 선분과 몸의 거리
+    const bc = inp.bodyCenter(_v2);
+    const rel = _v3.subVectors(bc, from);
+    const t = THREE.MathUtils.clamp(rel.dot(dir), 0, len);
+    if (rel.addScaledVector(dir, -t).length() < 0.5 && m.hitT <= 0) {
+      m.hitT = 0.18;
+      if (!(W.meleeShield && W.meleeShield(e, bc))) W.hitPlayer(e.dmg(6), { type: 'energy', src: e });
+    }
+    if (Math.random() < 0.6) fx.spawn(_v2.copy(from).addScaledVector(dir, Math.random() * len), _v3.set(0, 0.5, 0), FB_COL, 0.08, 0.3, 1, 0);
+  },
+  end: (e, m) => {
+    e.world.ctx.scene.remove(m.beam);
+    m.beam?.traverse((o) => o.geometry?.dispose());
+    for (const x of m.mats ?? []) x.dispose();
+  },
+  fist: { L: 0.1, R: 0.1 },
+};
+const FB_BARRIER = {
+  tech: true,
+  name: '주력 방출(장벽)', range: [0, 2.4], cd: 7, w: 1.3, dur: 1.0,
+  pose: (T, e, k) => {
+    const c = sm(0, 0.4, k) * (1 - sm(0.42, 0.5, k));
+    const o = sm(0.42, 0.5, k) * (1 - sm(0.8, 1, k));
+    T.shL = [-0.6 * c - 0.3 * o, 0, 0.3 * c + 1.2 * o];
+    T.shR = [-0.6 * c - 0.3 * o, 0, -0.3 * c - 1.2 * o];
+    T.elL = [-1.6 * c, 0, 0];
+    T.elR = [-1.6 * c, 0, 0];
+    T.chest[0] += 0.4 * c - 0.2 * o;
+    T.knL[0] += 0.5 * c;
+    T.knR[0] += 0.5 * c;
+    T.head[0] -= 0.3 * o;
+  },
+  tick: (e, k, m) => {
+    if (m.hit || k < 0.45) return;
+    m.hit = true;
+    const W = e.world;
+    const { fx, sfx, input: inp } = W.ctx;
+    const c = e.center(new THREE.Vector3());
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color: 0xff2040, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    sh.position.copy(c);
+    fx.addTransient(sh, 0.5, (kk) => {
+      sh.scale.setScalar(0.3 + kk * 3.6 * e.scale);
+      sh.material.opacity = 0.6 * (1 - kk);
+    }, () => {
+      sh.geometry.dispose();
+      sh.material.dispose();
+    });
+    sfx.explosion(c, 0.6);
+    if (inp.bodyCenter(_v2).distanceTo(c) < 3.4 * e.scale && !(W.meleeShield && W.meleeShield(e, _v2))) W.hitPlayer(e.dmg(11), { type: 'energy', src: e });
+  },
+  fist: { L: 0.2, R: 0.2 },
+};
+const FB_SLING = {
+  tech: true,
+  name: '주력 튕기기', range: [2.5, 14], cd: 4, w: 1.6, dur: 1.2,
+  start: (e, m) => {
+    m.blob = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 10), new THREE.MeshToonMaterial({ color: 0x5a0a18, emissive: 0x800a20 }));
+    e.world.ctx.scene.add(m.blob);
+  },
+  pose: (T, e, k) => {
+    const pull = sm(0, 0.5, k) * (1 - sm(0.52, 0.6, k));
+    const fling = sm(0.52, 0.6, k) * (1 - sm(0.8, 1, k));
+    T.shR = [0.6 * pull - 1.5 * fling, 0, -0.3 * pull - e.restZ * (1 - pull - fling)];
+    T.elR = [-1.2 * pull - 0.1 * fling, 0, 0];
+    T.shL = [-1.3 * (pull + fling), 0, 0.1];
+    T.elL = [-0.2, 0, 0];
+    T.chest[1] += -0.5 * pull + 0.5 * fling;
+    T.hips[1] += 0.2 * fling;
+  },
+  tick: (e, k, m) => {
+    const W = e.world;
+    const { fx, sfx, input: inp } = W.ctx;
+    if (k < 0.55 && m.blob) {
+      // 왼손 앞에 붙인 덩어리를 오른손으로 잡아 늘인다
+      const a = handPos(e, 'L', _v2);
+      const b = handPos(e, 'R', _v3);
+      m.blob.position.addVectors(a, b).multiplyScalar(0.5);
+      m.blob.lookAt(b);
+      m.blob.scale.set(1, 1, Math.max(1, a.distanceTo(b) / 0.36));
+      return;
+    }
+    if (m.shot) return;
+    m.shot = true;
+    const blob = m.blob;
+    m.blob = null;
+    const p = handPos(e, 'L', new THREE.Vector3());
+    const v = inp.head.clone().add(_v.set(0, -0.3, 0)).sub(p).normalize().multiplyScalar(17);
+    blob.scale.set(1.2, 1.2, 2.2);
+    sfx.whoosh(p, 0.9, 1.3);
+    let life = 1.6;
+    e.fxs.push({
+      update(dt) {
+        life -= dt;
+        p.addScaledVector(v, dt);
+        blob.position.copy(p);
+        blob.lookAt(_v2.copy(p).add(v));
+        // 날아가며 고무처럼 출렁인다
+        const w = 1 + Math.sin(life * 40) * 0.25;
+        blob.scale.set(w, 1 / w, 2.2);
+        if (Math.random() < 0.5) fx.spawn(p.clone(), _v3.set(0, 0, 0), FB_COL, 0.06, 0.25, 0, 0);
+        const bc = inp.bodyCenter(_v3);
+        if (p.distanceTo(bc) < 0.42 || p.distanceTo(inp.head) < 0.3) {
+          life = 0;
+          fx.burst(p, 18, FB_COL, 2.5, 0.05, 0.4);
+          if (!(W.meleeShield && W.meleeShield(e, p))) W.hitPlayer(e.dmg(12), { type: 'impact', src: e });
+        }
+        if (p.y < 0.05) {
+          v.y = Math.abs(v.y) * 0.5; // 바닥에 튕긴다
+          p.y = 0.05;
+        }
+        if (life <= 0) {
+          W.ctx.scene.remove(blob);
+          blob.geometry.dispose();
+          blob.material.dispose();
+          return false;
+        }
+        return true;
+      },
+    });
+  },
+  end: (e, m) => {
+    if (m.blob) {
+      e.world.ctx.scene.remove(m.blob);
+      m.blob.geometry.dispose();
+      m.blob.material.dispose();
+      m.blob = null;
+    }
+  },
+  fist: { L: 0.3, R: 0.9 },
+};
+
 // 기술 묶음 · 버릇
 // 버릇마다 걸음새
 const GAIT = {
@@ -893,14 +1082,15 @@ const GAIT = {
   pockets: { stride: 1.15, leg: 0.9, knee: 0.85, bend: 0, arms: 0, sway: 1.1, twist: 1.3, lean: -0.04 }, // 고죠: 주머니에 손 넣고 느긋하게
 };
 
+// plans: [거리 최소, 최대, 고를 확률] — 몇 초마다 거리 계획을 바꿔 가까이 붙거나(근거리) 적당히 떨어지거나(중거리) 멀리서(원거리) 술식을 쓴다
 const KITS = {
   bagmask: { moves: [JAB, CROSS, HOOK, KICK, COMBO], stance: 'boxer', keep: [0, 1.0] },
-  mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH, M_LAUNCH], stance: 'loose', keep: [0, 1.4] },
-  jogo: { moves: [J_FIREBALL, J_ERUPT, J_INSECTS, J_FLAME], stance: 'volcano', keep: [3.5, 8] },
-  fingerBearer: { moves: [COMBO, SLAM, LUNGE, KICK], stance: 'beast', keep: [0, 1.1] },
-  kuchisake: { moves: [K_SNIP, K_SLASH, LUNGE], stance: 'creep', keep: [0, 1.3] },
+  mahito: { moves: [M_BLADE, M_DRILL, M_STRETCH, M_BIGFIST, M_TOUCH, M_LAUNCH], stance: 'loose', keep: [0, 1.4], plans: [[0, 1.4, 1.4], [1.8, 3.2, 1], [4, 9, 1]] },
+  jogo: { moves: [J_FIREBALL, J_ERUPT, J_INSECTS, J_FLAME], stance: 'volcano', keep: [3.5, 8], plans: [[3.5, 8, 2], [8, 13, 1], [0.5, 2.6, 0.6]] },
+  fingerBearer: { moves: [COMBO, SLAM, LUNGE, KICK, FB_BEAM, FB_BARRIER, FB_SLING], stance: 'beast', keep: [0, 1.1], plans: [[0, 1.1, 1.3], [4, 9, 1.2], [9, 14, 0.7]] },
+  kuchisake: { moves: [K_SNIP, K_SLASH, LUNGE], stance: 'creep', keep: [0, 1.3], plans: [[0, 1.3, 1.2], [2.5, 6, 1]] },
   cyclops: { moves: [STOMP, SLAM, SWIPE], stance: 'heavy', keep: [0, 1.6] },
-  gojo: { moves: [JAB, CROSS, KICK, COMBO, G_BLUE, G_RED, G_PURPLE, G_BLINK], stance: 'pockets', keep: [0, 1.3] },
+  gojo: { moves: [JAB, CROSS, KICK, COMBO, G_BLUE, G_RED, G_PURPLE, G_BLINK], stance: 'pockets', keep: [0, 1.3], plans: [[0, 1.3, 1.2], [4, 9, 1.3], [9, 16, 0.8]] },
 };
 
 // ───────────────── 적 ─────────────────
@@ -1008,9 +1198,51 @@ export class RiggedEnemy extends Dummy {
     return r;
   }
 
+  /** 연출 중: 공격하지 않고 숨만 쉰다 */
+  _idleCine(dt) {
+    const T = this.pose;
+    for (const k of ORDER) T[k][0] = T[k][1] = T[k][2] = 0;
+    T.shL = [0.04, 0, this.restZ + 0.06];
+    T.shR = [0.04, 0, -this.restZ - 0.06];
+    T.elL = [-0.28, 0, 0];
+    T.elR = [-0.28, 0, 0];
+    T.chest[0] += Math.sin(this.t * 1.7) * 0.025;
+    this._applyPose(dt, 6);
+  }
+
+  /**
+   * 반전술식 · 재생: 한동안 안 맞으면 몸을 고친다
+   *  고죠: 반전술식(빠르게, 술식이 타 버린 뇌도 더 빨리 고친다) · 마히토: 무위전변으로 제 몸을 고친다 · 주령: 천천히 재생
+   */
+  _heal(dt) {
+    const kind = this.def.rct;
+    if (!kind || this.hp >= this.maxHp || this.infinite) return;
+    const W = this.world;
+    const since = W.time - (this._hurtT ?? -99);
+    if (since < (kind === 'regen' ? 3 : 1.2)) {
+      this._healing = false;
+      return;
+    }
+    const rate = { rct: 0.07, reshape: 0.06, regen: 0.02 }[kind] * this.maxHp;
+    this.hp = Math.min(this.maxHp, this.hp + rate * dt);
+    if (kind === 'rct' && (this.burnout ?? 0) > W.time) this.burnout -= dt; // 타 버린 술식도 빨리 회복
+    const { fx, ui } = W.ctx;
+    const c = this.center(_v);
+    if (Math.random() < dt * 10) fx.spawn(c.add(_v2.randomDirection().multiplyScalar(0.35 * this.scale)), _v3.set(0, 0.6, 0), new THREE.Color(kind === 'rct' ? 0xe8fff0 : kind === 'reshape' ? 0x9ad8ff : 0xa02030), 0.05, 0.5, 0, 0);
+    if (!this._healing && this.hp < this.maxHp * 0.9) {
+      this._healing = true;
+      if ((this._healMsgT ?? 0) < W.time) {
+        this._healMsgT = W.time + 12;
+        ui.callout(`${this.def.label} — ${kind === 'rct' ? '반전술식으로 회복한다' : kind === 'reshape' ? '무위전변으로 몸을 고친다' : '몸을 재생한다'}`, { color: kind === 'rct' ? '#e8fff0' : kind === 'reshape' ? '#9ad8ff' : '#ff9aa0', size: 36, dur: 1.4 });
+        if (kind === 'rct') ui.manga({ main: '反転術式', ruby: 'はんてんじゅつしき', color: '#e8fff0', dur: 1.2 });
+      }
+    }
+  }
+
   update(dt) {
     super.update(dt);
     if (!this.alive) return;
+    if (!this.world.cinematic) this._heal(dt);
     // 손가락: 대기 · 이동 · 공격에 맞게 (래그돌로 날아갈 땐 힘이 빠진다)
     if (this.fingers) {
       let want = { L: 0.32, R: 0.32 };
@@ -1193,7 +1425,15 @@ export class RiggedEnemy extends Dummy {
     for (const k in this.cds) this.cds[k] -= dt;
     this.decide -= dt;
     this.faceToward(head, dt);
-    const [kMin, kMax] = this.kit.keep;
+    // 거리 계획: 몇 초마다 다시 고른다 (술식이 타 버렸으면 붙어서 싸운다)
+    this._planT = (this._planT ?? 0) - dt;
+    if (this._planT <= 0 || !this._plan) {
+      this._planT = rnd(3, 6);
+      const P = burnt || !this.kit.plans ? [[...this.kit.keep, 1]] : this.kit.plans;
+      let r = Math.random() * P.reduce((a, p) => a + p[2], 0);
+      this._plan = P.find((p) => (r -= p[2]) <= 0) ?? P[0];
+    }
+    const [kMin, kMax] = this._plan;
     if (this.decide <= 0 && dist < 16 * S) {
       const pool = burnt ? (this.kit.moves.some((mv) => !mv.tech) ? this.kit.moves.filter((mv) => !mv.tech) : [JAB, CROSS, KICK]) : this.kit.moves;
       const ok = pool.filter((mv) => (this.cds[mv.name] ?? 0) <= 0 && dist >= mv.range[0] * S && dist <= mv.range[1] * S + 0.35);

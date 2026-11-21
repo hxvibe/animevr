@@ -22,6 +22,7 @@ export class Melee {
   }
 
   update(dt) {
+    if (this.ctx.world.cinematic) return; // 연출 중엔 칠 수 없다
     const { input: inp, world } = this.ctx;
     for (const h of inp.hands) {
       this.cd[h.side] -= dt;

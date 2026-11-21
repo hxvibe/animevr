@@ -20,13 +20,13 @@ export const DUMMY_TYPES = {
   sandbag: { label: '샌드백(∞)', color: 0xe8e8e8, scale: 1, ai: 'idle', infinite: true },
   // ── 주령 · 주저사 (주술회전 게임 모델). hp 는 체력 메뉴 100 기준, h 는 키(m)
   // curse: 주령조술로 거둘 수 있다 · orb: 주령구 색 · grade: 등급
-  mahito: { label: '마히토', model: 'mahito', h: 1.78, hp: 600, ai: 'rusher', speed: 2.2, punch: 14, curse: true, grade: '특급', orb: 0x8fc4d8, shard: 0x9aa8b0, blade: true, domain: true },
-  jogo: { label: '죠고', model: 'jogo', h: 1.5, hp: 500, ai: 'shooter', bullet: 'fire', shootCd: 1.6, curse: true, grade: '특급', orb: 0xff7a2a, shard: 0xd8c8a8, domain: true },
-  fingerBearer: { label: '손가락 보유자', model: 'fingerBearer', h: 1.95, hp: 700, ai: 'rusher', speed: 2.6, punch: 16, curse: true, grade: '특급', orb: 0xd8203a, shard: 0xe0e0e0 },
+  mahito: { rct: 'reshape', label: '마히토', model: 'mahito', h: 1.78, hp: 600, ai: 'rusher', speed: 2.2, punch: 14, curse: true, grade: '특급', orb: 0x8fc4d8, shard: 0x9aa8b0, blade: true, domain: true },
+  jogo: { rct: 'regen', label: '죠고', model: 'jogo', h: 1.5, hp: 500, ai: 'shooter', bullet: 'fire', shootCd: 1.6, curse: true, grade: '특급', orb: 0xff7a2a, shard: 0xd8c8a8, domain: true },
+  fingerBearer: { rct: 'regen', domain: true, label: '손가락 보유자', model: 'fingerBearer', h: 1.95, hp: 700, ai: 'rusher', speed: 2.6, punch: 16, curse: true, grade: '특급', orb: 0xd8203a, shard: 0xe0e0e0 },
   kuchisake: { label: '쿠치사케온나', model: 'kuchisake', h: 1.82, hp: 260, ai: 'rusher', speed: 1.6, punch: 10, curse: true, grade: '1급', orb: 0xf0c890, shard: 0xd8c0a0 },
   cyclops: { label: '단안 주령', model: 'cyclops', h: 4.0, hp: 500, ai: 'rusher', speed: 1.3, punch: 20, curse: true, grade: '1급', orb: 0x50c0ff, shard: 0xe8e0e0 },
   // 고죠 사토루: 무하한(영역의 필중이 아니면 거의 닿지 않는다) · 아오/아카/무라사키 · 무량공처
-  gojo: { label: '고죠 사토루', model: 'gojo', h: 1.9, hp: 1400, ai: 'rusher', speed: 2.4, punch: 16, grade: '특급 술사', shard: 0xe8e8f0, domain: true, infinity: true },
+  gojo: { rct: 'rct', label: '고죠 사토루', model: 'gojo', h: 1.9, hp: 1400, ai: 'rusher', speed: 2.4, punch: 16, grade: '특급 술사', shard: 0xe8e8f0, domain: true, infinity: true },
   bagmask: { label: '주저사(봉투)', model: 'bagmask', h: 1.85, hp: 160, ai: 'rusher', speed: 2.0, punch: 9, grade: '주저사', shard: 0xc8a070 },
 };
 
@@ -409,6 +409,7 @@ export class Dummy {
     this.totalDamage += amount;
     this.dpsWindow.push([this.world.time, amount]);
     this.world.onDamage?.(this, amount, info);
+    this._hurtT = this.world.time;
     if (this.infinite) return amount;
     this.hp -= amount;
     if (this.hp <= 0) this.kill(info);
@@ -782,7 +783,9 @@ export class Dummy {
       return;
     }
     if (this.state === 'stand') {
-      this._ai(dt);
+      // 연출(마허라 조복 의식) 동안엔 아무도 공격하지 않는다: 제자리에서 숨만 쉰다
+      if (this.world.cinematic) this._idleCine?.(dt);
+      else this._ai(dt);
       this.root.position.addScaledVector(this.vel, dt);
       this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.root.position.y = Math.max(0, this.root.position.y);

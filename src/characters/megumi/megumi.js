@@ -202,7 +202,7 @@ export class Megumi {
   // ───────────────── 메인 ─────────────────
   update(dt) {
     const { input: inp } = this.ctx;
-    const blocked = this.ctx.ui.menuOpen;
+    const blocked = this.ctx.ui.menuOpen || !!this.ritual?.alive; // 조복 의식 중엔 술식도 못 쓴다
     this.energy = Math.min(this.maxEnergy, this.energy + 12 * dt);
     for (const k in this.cds) this.cds[k] -= dt;
     if (this.possessed) {

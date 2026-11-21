@@ -29,6 +29,11 @@ export const ENEMY_DOMAINS = {
     name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 70, radius: 19, type: 1, dur: 24,
     lights: { hemi: 0xff8040, ground: 0x401008, hemiI: 1.0, sun: 0xff6020, sunI: 1.6, fog: 0x401006, fogNear: 12, fogFar: 60, exposure: 0.9 },
   },
+  // 손가락 보유자: 불완전한 영역 — 소년원 같은 리미널 스페이스 (결계가 엉성해 틈이 보이고, 필중도 약하다)
+  fingerBearer: {
+    name: '領域展開', ruby: 'りょういきてんかい', label: '불완전한 영역', color: '#d8c890', ref: 42, radius: 13, type: 3, dur: 15,
+    lights: { hemi: 0xfff4d0, ground: 0x403828, hemiI: 1.15, sun: 0xfff0c0, sunI: 0.7, fog: 0x8a8060, fogNear: 6, fogFar: 32, exposure: 0.95 },
+  },
   gojo: {
     name: '無量空処', ruby: 'むりょうくうしょ', label: '무량공처', color: '#6fb8ff', ref: 100, radius: 24, type: 2, dur: 20,
     lights: { hemi: 0xb8d8ff, ground: 0x101830, hemiI: 1.3, sun: 0xffffff, sunI: 1.0, fog: 0x02040c, fogNear: 25, fogFar: 120, exposure: 1.0 },
@@ -123,6 +128,21 @@ vec3 wallLook(vec3 d) {
     c = mix(c, vec3(1.2, 0.35, 0.05) * (0.6 + 0.4 * dn(d * 9.0 + uTime)), top * 0.7);
     return c;
   }
+  if (uType == 3) {
+    // 불완전한 영역: 누렇게 바랜 타일 벽과 끝없이 이어지는 형광등 — 결계가 엉성해 군데군데 바깥이 비친다
+    vec2 t = vec2(az * 9.0, d.y * 14.0);
+    vec2 g = abs(fract(t) - 0.5);
+    float grout = smoothstep(0.47, 0.5, max(g.x, g.y));
+    vec3 tile = mix(vec3(0.78, 0.74, 0.58), vec3(0.88, 0.84, 0.68), dn(floor(vec3(t, 1.0))));
+    tile *= 0.85 + 0.15 * fbm(d * 7.0);
+    vec3 c = mix(tile, vec3(0.45, 0.42, 0.32), grout);
+    // 천장 쪽 형광등 줄 (깜빡)
+    float lamp = smoothstep(0.92, 1.0, sin(az * 6.0)) * smoothstep(0.55, 0.75, d.y) * (0.75 + 0.25 * step(0.2, fract(sin(floor(uTime * 7.0) * 12.9) * 43.7)));
+    c += vec3(1.0, 0.98, 0.85) * lamp * 1.2;
+    // 얼룩 · 녹물
+    c *= 1.0 - 0.35 * smoothstep(0.6, 0.85, fbm(d * 3.0 + vec3(3.0)));
+    return c;
+  }
   // 無量空処: 끝없는 우주 — 별과 정보의 흐름
   vec3 c = vec3(0.005, 0.01, 0.03);
   float neb = fbm(d * 2.5 + vec3(uTime * 0.02, 0.0, 0.0));
@@ -150,6 +170,13 @@ vec3 floorLook(vec2 q, float r) {
     vec3 rock = mix(vec3(0.05, 0.035, 0.03), vec3(0.16, 0.1, 0.08), dn(p * 6.0));
     vec3 glow = mix(vec3(1.0, 0.25, 0.02), vec3(1.0, 0.85, 0.4), hot);
     return mix(rock, glow * 2.2, max(crack * 1.4, hot * 0.25));
+  }
+  if (uType == 3) {
+    vec2 g = abs(fract(q * 1.6) - 0.5);
+    float grout = smoothstep(0.46, 0.5, max(g.x, g.y));
+    vec3 tile = mix(vec3(0.62, 0.6, 0.5), vec3(0.72, 0.7, 0.58), dn(vec3(floor(q * 1.6), 2.0)));
+    float wet = smoothstep(0.55, 0.75, fbm(vec3(q * 0.35, 4.0)));
+    return mix(tile, vec3(0.3, 0.28, 0.22), grout) * (0.8 + 0.2 * wet) * (0.75 + 0.25 * smoothstep(1.0, 0.2, r));
   }
   // 무량공처: 검은 거울 같은 바닥에 빛의 결
   vec2 g = abs(fract(q * 0.5) - 0.5);
@@ -620,6 +647,18 @@ export class DomainClash {
         world.hitPlayer(3.5, { type: 'fire', src: E.caster });
       }
       if (Math.random() < 0.5) fx.fire?.flame?.(_v.copy(inp.head).add(_v2.set(rnd(-0.5, 0.5), -1.2, rnd(-0.5, 0.5))), _v3.set(0, 2, 0), { size0: 0.2, size1: 0.6, life: 0.5 });
+    } else if (E.def.type === 3) {
+      // 불완전한 영역: 사방의 벽에서 주력이 불규칙하게 터져 나온다 (필중이 엉성해 약하다)
+      if (S.t <= 0) {
+        S.t = rnd(0.9, 1.6);
+        if (!S.told) {
+          S.told = true;
+          ui.callout('필중(불완전) — 사방에서 주력이 터진다 (맞영역으로 막아라)', { color: '#ffe0a0', dur: 2.5 });
+        }
+        const p = inp.head.clone().add(_v.set(rnd(-0.6, 0.6), rnd(-0.6, 0.2), rnd(-0.6, 0.6)));
+        fx.burst(p, 16, new THREE.Color(0xc02040), 3, 0.05, 0.35);
+        world.hitPlayer(5, { type: 'energy', src: E.caster });
+      }
     } else {
       // 무량공처: 끝없는 정보가 쏟아져 몸이 굳는다 (굳었다 → 잠깐 풀림 → 다시)
       if (S.para > 0) {

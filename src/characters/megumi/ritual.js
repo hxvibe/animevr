@@ -213,6 +213,8 @@ export class MahoragaRitual {
     this.strips = [];
     // 소리: 사용자 음성 (처음 0.4초 페이드 인 · 끝 1.5초 페이드 아웃이 파일에 들어 있다)
     this.voice = sfx.playClip('mahoragaSummon', { vol: 1.1, fadeIn: 0.4 });
+    // 의식이 끝날 때까지 술사도 적도 공격하지 못한다
+    this.ctx.world.cinematic = true;
     sfx.rumble(1.5, 0.6);
     this.flags = {};
   }
@@ -520,6 +522,7 @@ export class MahoragaRitual {
 
   _cleanup() {
     const env = this.ctx.env;
+    this.ctx.world.cinematic = false;
     for (const s of this.strips) {
       s.mesh.geometry.dispose();
       s.mesh.material.dispose();

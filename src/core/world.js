@@ -394,6 +394,7 @@ export class World {
 
   /** info: { type, src } — 마허라 법진 같은 적응이 피해를 줄일 수 있다 */
   hitPlayer(amount, info = {}) {
+    if (this.cinematic) return; // 연출 중엔 아무도 다치지 않는다
     const P = this.player;
     if (this.playerDamageMul) amount *= this.playerDamageMul(info.type ?? 'punch', info);
     if (amount <= 0.01) return;

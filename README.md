@@ -318,8 +318,10 @@ WebXR은 **HTTPS**에서만 동작합니다.
 | 파일 | 원작 | 작성자 | 라이선스 |
 |---|---|---|---|
 | dummy.glb | Low-poly test dummy | HipDaMaster | CC BY 4.0 |
-| shrine.glb | Malevolent Shrine (No Glow) | NexusB | **CC BY-NC 4.0 (비상업적 이용만)** |
-| white_room.glb | Empty White Room | che02 | CC BY 4.0 |
+| shrine.glb | Malevolent Shrine (No Glow) — 스쿠나의 사당(복마어주자) | **NexusB** | **CC BY-NC 4.0 (비상업적 이용만)** |
+| white_room.glb | Empty White Room | che02 | CC BY 4.0 (지금은 연습장을 코드로 지어 쓰지 않음) |
+
+게임 첫 화면(HTML)과 VR 타이틀 화면 아래에도 저작권 표시가 나옵니다: *3D models: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab, CC BY-NC 4.0) · "Low-poly test dummy" by HipDaMaster (Sketchfab, CC BY 4.0)*.
 
 ### 식신 모델
 

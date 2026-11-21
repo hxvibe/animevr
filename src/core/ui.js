@@ -10,6 +10,7 @@ import { DUMMY_TYPES } from './dummy.js';
 import { HandDemo } from './handDemo.js';
 import { LANGS, getLang, setLang, tr } from './i18n.js';
 
+export const CREDIT_LINE = '3D models: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab, CC BY-NC 4.0) · "Low-poly test dummy" by HipDaMaster (Sketchfab, CC BY 4.0)';
 export const FONT = "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
 export const JFONT = "'Noto Serif JP', 'Yu Mincho', 'Hiragino Mincho ProN', serif";
 
@@ -328,6 +329,10 @@ export class UI {
     g.fillStyle = 'rgba(255,255,255,0.55)';
     g.fillText('손가락으로 직접 누르기 · 멀리서는 손으로 가리키고 엄지와 검지를 맞대기', 90, 900);
     g.fillText('게임 중 메뉴: 퀘스트 기본 메뉴(왼손바닥을 얼굴 쪽으로 → ≡ 집기) · Y 버튼 · H 키', 90, 940);
+    // 저작권 표시 (사용한 3D 모델)
+    g.font = `400 19px ${FONT}`;
+    g.fillStyle = 'rgba(255,255,255,0.42)';
+    g.fillText(CREDIT_LINE, 90, 978);
   }
 
   // ───────────────── 옵션 ─────────────────

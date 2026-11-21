@@ -132,6 +132,7 @@ export class MalevolentShrine {
     this.group.visible = false;
     this.scene.add(this.group);
     // 첨부 GLB 사당 (없으면 코드로 만든 사당)
+    //  3D 모델: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab) — CC BY-NC 4.0 (비상업적 이용만)
     const glb = getModel('shrine');
     if (glb) {
       this.shrine = fitModel(glb, { width: 12 });

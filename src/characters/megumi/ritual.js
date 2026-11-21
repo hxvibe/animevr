@@ -7,8 +7,8 @@
 //  25.6초   찢어지는 소리 — 번데기에서 벌린 입만 드러난다
 //  27초     번데기에서 연기
 //  28.6초   팅! — 이어져 있던 실이 풀린다
-//  30~34초  머리의 두 쌍 날개가 아래에서 삐걱거리며 솟아 커졌다가 다시 작아진다. 번데기가 점점 느슨해진다
-//  34초~    번데기가 위에서부터 풀려 6.5초 만에 다 벗겨진다 → 마허라
+//  30~34초  머리의 두 쌍 날개가 번데기를 뚫고 삐걱거리며(한 번에 확 커지고 · 멈칫) 크게 솟았다가 다시 작아진다
+//  34초~    팔짱 낀 팔을 삐걱거리며 풀고 → 두 팔로 번데기를 앞에서부터 찢어 벌린다. 팔을 다 벌리면 번데기가 다 찢어진다 → 마허라
 import * as THREE from 'three';
 import { makeShiki, AX } from './models.js';
 
@@ -32,14 +32,16 @@ export const RITUAL = {
   wings: 30.0,
   wingsTop: 33.0,
   wingsBack: 34.0,
-  unwrap: 34.0,
-  end: 40.5,
+  unwrap: 34.0, // 팔짱을 풀기 시작
+  uncross: 36.4, // 팔짱이 다 풀렸다 → 찢어 벌리기
+  spread: 39.6, // 다 벌렸다 = 번데기가 다 찢어진다
+  end: 40.6,
 };
 
 // 울부짖는 늑대: 뒷다리를 접어 앉고 앞다리로 가슴을 받친 채 목을 하늘로 길게 뺀다
 export const HOWL = { pitch: -0.5, y: 0, thigh: -1.15, calf: 1.9, link: -0.9, arm: 0.5, fore: 0.05, neck: -0.6, head: -0.5, jaw: 0.55, tail: 0.5, spine: -0.1 };
 // 머리 날개(눈 자리의 두 쌍) · 턱 — 축과 각도는 모델 공간 기준
-export const WING = { axis: 'Z', down: 2.3, up: -0.3, grow: 4.2, jaw: 0.5 };
+export const WING = { axis: 'Z', down: 2.3, up: -0.3, grow: 7.5, jaw: 0.5 };
 
 // 번데기: 붕대처럼 감긴 결 · 먹선 · 속에서 비치는 빛 · 입 자리 찢김 · 위에서부터 풀림
 const COCOON_VERT = /* glsl */ `
@@ -58,6 +60,7 @@ void main() {
 }`;
 const COCOON_FRAG = /* glsl */ `
 uniform float uOpacity; uniform float uTear; uniform vec3 uTearPos; uniform float uUnwrap; uniform float uTop; uniform float uH; uniform float uTime;
+uniform vec3 uHoleL; uniform vec3 uHoleR; uniform float uHole; uniform float uSplit; uniform float uFrontAz;
 varying vec3 vW; varying vec3 vN; varying vec3 vL;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -67,6 +70,18 @@ void main() {
   // 위에서부터 풀린다 (들쭉날쭉한 붕대 끝)
   float cut = uTop - uUnwrap * (uH + 0.6) + (n(vec2(az * 3.0, 0.0)) - 0.5) * 0.8;
   if (vL.y > cut) discard;
+  // 날개가 뚫고 나온 구멍 (들쭉날쭉)
+  if (uHole > 0.0) {
+    float j = 0.75 + 0.5 * n(vec2(az * 10.0, vL.y * 10.0));
+    if (length(vW - uHoleL) < uHole * j || length(vW - uHoleR) < uHole * j) discard;
+  }
+  // 두 팔이 앞에서부터 찢어 벌린다: 앞 가운데의 세로 틈이 옆으로 넓어진다 (가슴 높이가 가장 넓다)
+  if (uSplit > 0.0) {
+    float da = abs(mod(az - uFrontAz + 3.14159265, 6.2831853) - 3.14159265);
+    float chest = 1.0 - 0.35 * abs(vL.y / uH - 0.55) * 2.0;
+    float wid = pow(uSplit, 1.6) * 3.3 * chest + (n(vec2(vL.y * 6.0, az * 4.0)) - 0.5) * 0.35 * uSplit;
+    if (da < wid || uSplit >= 0.999) discard;
+  }
   // 입 자리 찢김
   if (uTear > 0.0) {
     vec3 d = vW - uTearPos;
@@ -171,13 +186,15 @@ export class MahoragaRitual {
       this.M.root.visible = false;
       this.group.add(this.M.root);
       this.head = this.M.rig.get('head');
-      this.pose = { jaw: 0, wing: 0, wingS: 1 };
+      this.pose = { jaw: 0, wing: 0, wingS: 1, arms: 0 }; // arms: 0 팔짱 → 1 풀림(번데기 앞을 붙잡음) → 2 활짝 벌림
     }
     const H = 5.9;
     const prof = [[0.05, 0], [0.55, 0.15], [0.75, 0.9], [0.95, 1.9], [1.35, 3.1], [1.55, 3.9], [1.45, 4.6], [1.05, 5.3], [0.55, 5.75], [0.05, H]].map(([r, y]) => new THREE.Vector2(r, y));
     this.cU = {
       uOpacity: { value: 0 }, uTear: { value: 0 }, uTearPos: { value: new THREE.Vector3() }, uUnwrap: { value: 0 }, uTop: { value: H }, uH: { value: H },
       uLoose: { value: 0 }, uTime: { value: 0 },
+      uHoleL: { value: new THREE.Vector3(0, -99, 0) }, uHoleR: { value: new THREE.Vector3(0, -99, 0) }, uHole: { value: 0 }, uSplit: { value: 0 },
+      uFrontAz: { value: Math.atan2(-this.fwd.z, -this.fwd.x) }, // 번데기에서 플레이어 쪽
     };
     const cMat = new THREE.ShaderMaterial({ uniforms: this.cU, vertexShader: COCOON_VERT, fragmentShader: COCOON_FRAG, transparent: true, side: THREE.DoubleSide, fog: false });
     this.cocoon = new THREE.Mesh(new THREE.LatheGeometry(prof, 48), cMat);
@@ -400,14 +417,19 @@ export class MahoragaRitual {
     if (this.pose) {
       let up = 0;
       if (t >= R.wings && t < R.wingsTop) {
-        // 삐걱: 0.25초마다 한 칸씩 끊어서 (칸마다 살짝 넘쳤다 돌아온다)
+        // 삐걱: 몇 번에 나눠 한 번에 확 솟고(살짝 넘쳤다) 멈칫 — 멈춘 동안엔 부들부들 떤다
         const u = (t - R.wings) / (R.wingsTop - R.wings);
-        const st = Math.floor(u * 12);
-        const within = (u * 12) % 1;
-        up = (st + (within < 0.35 ? ease(within / 0.35) * 1.15 : 1 + 0.15 * (1 - ease((within - 0.35) / 0.65)))) / 12;
+        const N = 7;
+        const st = Math.floor(u * N);
+        const within = (u * N) % 1;
+        const jump = within < 0.07 ? ease(within / 0.07) * 1.22 : 1 + 0.22 * Math.exp(-(within - 0.07) * 18);
+        up = (st + jump) / N + Math.sin(t * 61) * 0.006;
         if (st !== this._lastStep) {
           this._lastStep = st;
-          sfx.play('click', { at: this.cocoonPos, vol: 0.35, rate: rnd(0.35, 0.5) });
+          sfx.play('click', { at: this.cocoonPos, vol: 0.5, rate: rnd(0.3, 0.42) });
+          sfx.rumble?.(0.15, 0.25);
+          // 뚫고 나오는 자리에서 번데기 부스러기
+          for (const H of [this.cU.uHoleL.value, this.cU.uHoleR.value]) if (H.y > -50) fx.burst(H, 10, new THREE.Color(0xf0f0e2), 2.5, 0.05, 0.4);
         }
       }
       up = clamp01(up);
@@ -424,20 +446,52 @@ export class MahoragaRitual {
         this.pose.wing = WING.up * (1 - k);
         this.pose.wingS = 1 + WING.grow * (1 - k);
       }
-      this.pose.ring = ease(clamp01((t - R.unwrap - 2.5) / 2.5));
+      this.pose.ring = ease(clamp01((t - R.uncross) / 3));
+      // 팔: 팔짱(0) → 삐걱거리며 풀어 번데기 앞을 붙잡고(1) → 삐걱거리며 활짝 벌린다(2)
+      const creak = (u, N) => {
+        if (u <= 0) return 0;
+        if (u >= 1) return 1;
+        const st = Math.floor(u * N);
+        const w = (u * N) % 1;
+        const j = w < 0.12 ? ease(w / 0.12) * 1.15 : 1 + 0.15 * Math.exp(-(w - 0.12) * 14);
+        return Math.min(1.04, (st + j) / N);
+      };
+      const ua = clamp01((t - R.unwrap) / (R.uncross - R.unwrap));
+      const ub = clamp01((t - R.uncross) / (R.spread - R.uncross));
+      const armsWas = this.pose.arms;
+      this.pose.arms = t < R.uncross ? creak(ua, 5) : 1 + creak(ub, 6);
+      if (Math.floor(this.pose.arms * 5.5) !== Math.floor(armsWas * 5.5) && t >= R.unwrap) {
+        sfx.play('click', { at: this.cocoonPos, vol: 0.45, rate: rnd(0.25, 0.4) });
+        if (t >= R.uncross) sfx.play('shatter_2', { at: this.cocoonPos, vol: 0.3, rate: rnd(0.4, 0.55) });
+      }
       this._applyPose();
+      // 날개가 뚫은 구멍: 머리 날개 뿌리 쪽 번데기 겉면
+      if (t >= R.wings) {
+        this.M.root.updateMatrixWorld(true);
+        for (const [nm, H] of [['L_headwing_A1', this.cU.uHoleL.value], ['R_headwing_A1', this.cU.uHoleR.value]]) {
+          if (this.M.rig.pos(nm, H)) {
+            const out = _v2.copy(H).sub(this.cocoonPos).setY(0).normalize();
+            H.addScaledVector(out, 0.35);
+          }
+        }
+        this.cU.uHole.value = Math.max(this.cU.uHole.value, 0.25 + 0.9 * up);
+      }
+      // 번데기 앞의 틈 = 벌린 팔만큼
+      const sp = clamp01(this.pose.arms - 1);
+      this.cU.uSplit.value = t >= R.spread ? 1 : sp * 0.92;
+      if (sp > 0 && t < R.spread && Math.random() < dt * 18) this._strip(rnd(1.2, 4.8), true);
+      if (!this.flags.torn && t >= R.spread) {
+        // 다 찢어졌다: 남은 조각이 한꺼번에 흩날린다
+        this.flags.torn = true;
+        for (let i = 0; i < 46; i++) this._strip(rnd(0.4, 5.4));
+        fx.burst(this.cocoonPos.clone().setY(3), 60, new THREE.Color(0xf4f4e8), 5, 0.06, 0.7);
+        sfx.play('shatter', { at: this.cocoonPos, vol: 0.9, rate: 0.5 });
+        sfx.rumble?.(0.6, 0.5);
+      }
     }
     // 번데기가 느슨해지고 → 위에서부터 풀린다
     this.cU.uLoose.value = clamp01((t - R.wings) / (R.unwrap - R.wings)) * 0.5 + clamp01((t - R.unwrap) / 2) * 0.5;
-    if (t >= R.unwrap) {
-      const k = clamp01((t - R.unwrap) / (R.end - R.unwrap - 0.3));
-      this.cU.uUnwrap.value = k;
-      // 벗겨진 붕대 조각이 떨어진다
-      if (Math.random() < dt * 14 && k < 0.98) {
-        const y = this.cU.uTop.value - k * (this.cU.uH.value + 0.6);
-        this._strip(y);
-      }
-    }
+    if (t >= R.spread) this.cU.uOpacity.value = 0;
     this._updateStrips(dt);
     if (t >= R.end) {
       this._finish();
@@ -451,10 +505,23 @@ export class MahoragaRitual {
     const R = this.M.rig;
     const P = this.pose;
     R.begin();
-    R.rot('L_arm', AX.Z, -0.85);
-    R.rot('R_arm', AX.Z, 0.85);
-    R.rot('L_elbow', AX.X, -0.25);
-    R.rot('R_elbow', AX.X, -0.25);
+    // 팔: 0 팔짱 (두 아래팔을 가슴 앞에 엇갈려 포갠다) → 1 풀어 번데기 앞을 붙잡음 → 2 활짝 벌림
+    const A = P.arms ?? 0;
+    const k1 = Math.min(1, A);
+    const k2 = Math.max(0, A - 1);
+    const L3 = (a, b, c) => (A <= 1 ? a + (b - a) * k1 : b + (c - b) * k2);
+    const armZ = L3(-1.05, -0.75, 0.45); // 내림(−) ↔ 옆으로 듦(+)
+    const armX = L3(-0.25, -0.6, -0.55); // 앞으로 듦
+    const elbY = L3(-1.8, -1.1, 0); // 아래팔을 몸 앞으로 가로지르기 (팔짱)
+    const elbX = L3(-0.15, -0.2, -0.12); // 아래팔을 앞 · 위로
+    R.rot('L_arm', AX.Z, armZ);
+    R.rot('L_arm', AX.X, armX);
+    R.rot('R_arm', AX.Z, -armZ);
+    R.rot('R_arm', AX.X, armX);
+    R.rot('L_elbow', AX.Y, elbY);
+    R.rot('R_elbow', AX.Y, -elbY);
+    R.rot('L_elbow', AX.X, elbX);
+    R.rot('R_elbow', AX.X, elbX);
     R.rot('head', AX.X, 0.22);
     R.rot('backhead_A', AX.X, -1.25);
     R.rot('jaw_A', AX.X, P.jaw);
@@ -471,8 +538,10 @@ export class MahoragaRitual {
     }
   }
 
-  _strip(y) {
-    const a = Math.random() * Math.PI * 2;
+  _strip(y, edge = false) {
+    // edge: 앞의 찢어진 틈 가장자리에서 (팔이 벌리는 쪽으로 튄다)
+    const fa = this.cU.uFrontAz.value;
+    const a = edge ? fa + (Math.random() < 0.5 ? -1 : 1) * (Math.pow(this.cU.uSplit.value, 1.6) * 3.3 * 0.9) : Math.random() * Math.PI * 2;
     const g = new THREE.PlaneGeometry(0.18, rnd(0.6, 1.4));
     const m = new THREE.MeshBasicMaterial({ color: 0xf0f0e2, side: THREE.DoubleSide, transparent: true, fog: false });
     const mesh = new THREE.Mesh(g, m);

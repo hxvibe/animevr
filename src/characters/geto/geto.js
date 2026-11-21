@@ -13,6 +13,7 @@ import { CURSES, makeSummon } from './summons.js';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _fw = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const AURA = { glow: 0x5a2a8a, hot: 0xc8a0ff, inner: 0x08020e, line: 0x000000 };
 
@@ -548,12 +549,16 @@ export class Geto {
       if (this.tray.open > 0.05 || this._trayHand() || this.held.right || this.held.left) return null;
       const lr = _v3.subVectors(R.palm, L.palm).normalize();
       // 두 손이 옆으로 나란히 (위아래로 겹친 건 제외)
-      if (Math.abs(lr.y) > 0.6) return null;
-      // 두 손바닥이 마주 본다 (공을 감싸 쥐듯)
-      if (d > 0.1 && d < 0.55 && L.palmNormal.dot(lr) > 0.45 && R.palmNormal.dot(lr) < -0.45 && front > 0.12 && mid.y > inp.head.y - 0.75) return { mid: mid.clone(), d };
+      if (Math.abs(lr.y) > 0.35) return null;
+      // 두 손바닥이 확실히 마주 본다 (공을 감싸 쥐듯) — 그냥 손을 앞에 둔 정도로는 잡히지 않게 엄격하게
+      //  손끝은 서로를 찌르지 않고 앞·위를 향하고, 손은 거의 멈춰 있으며, 가슴 앞 충분히 앞쪽
+      const fw = _fw.copy(inp.headDir).setY(0).normalize();
+      const tipsOk = (H) => H.fingersDir.dot(fw) + Math.max(0, H.fingersDir.y) > 0.45;
+      if (d > 0.12 && d < 0.42 && L.palmNormal.dot(lr) > 0.7 && R.palmNormal.dot(lr) < -0.7 && front > 0.2 && mid.y > inp.head.y - 0.65 && mid.y < inp.head.y + 0.05 &&
+        tipsOk(L) && tipsOk(R) && L.speed < 0.6 && R.speed < 0.6 && L.gesture !== 'point' && R.gesture !== 'point' && L.gesture !== 'pinch' && R.gesture !== 'pinch') return { mid: mid.clone(), d };
       return null;
     }
-    if (L.source === 'controller' && R.source === 'controller' && L.btn.grip && R.btn.grip && d < 0.6) return { mid: mid.clone(), d };
+    if (L.source === 'controller' && R.source === 'controller' && L.btn.grip && R.btn.grip && !L.btn.trigger && !R.btn.trigger && d > 0.1 && d < 0.45 && front > 0.2) return { mid: mid.clone(), d };
     return null;
   }
 
@@ -566,7 +571,7 @@ export class Geto {
     if (U.state === 'idle') {
       if (hands && this.low > 0) {
         U.hold = (U.hold ?? 0) + dt;
-        if (U.hold > 0.3 && cool(this.ctx, 'uzumaki', 12, '극번「渦」')) {
+        if (U.hold > (desk ? 0.3 : 0.7) && cool(this.ctx, 'uzumaki', 12, '극번「渦」')) {
           U.state = 'charge';
           U.byKey = desk;
           U.t = 0;

@@ -560,6 +560,7 @@ export class Input {
     this._setGesture(h, g.raw, dt);
     h.pinch = g.pinch;
     h.pinchDist = g.pinchDist;
+    h.bends = g.bends; // 손가락별 굽힘(도) — 검지·중지·약지·새끼
 
     const m = this.rig.matrixWorld;
     h.pos.copy(g.tip).applyMatrix4(m);

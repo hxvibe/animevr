@@ -144,6 +144,14 @@ export class Itadori {
       this.aura.set('left', k);
       this.aura.set('right', k);
     }
+    // 주먹을 쥐면 그 손을 주력이 감싼다 (흑섬을 노리는 손)
+    if (!blocked) {
+      for (const side of ['left', 'right']) {
+        const h = inp[side];
+        const fist = h.active && !h.uiBlock && (h.source === 'hand' ? h.gesture === 'fist' : h.source === 'controller' && h.btn.grip);
+        if (fist) this.aura.set(side, 0.55 + Math.sin(world.time * 8 + (side === 'left' ? 0 : 1.7)) * 0.06);
+      }
+    }
     this.aura.update(dt);
     this.cuts.update(dt, inp.head);
     this.town.update(dt);
@@ -317,7 +325,10 @@ export class Itadori {
     } else if (L.active && R.active && !L.uiBlock && !R.uiBlock) {
       if (L.source === 'hand' && R.source === 'hand') {
         const fwd = inp.headDir;
-        pose = L.palm.distanceTo(R.palm) < 0.085 && L.palmNormal.dot(R.palmNormal) < -0.4 && L.fingersDir.dot(fwd) > 0.4 && R.fingersDir.dot(fwd) > 0.4 &&
+        // 컨트롤러로 흉내 낸 손은 몸체가 부딪혀 손바닥끼리 완전히 맞닿지 못한다 → 넉넉히 본다 (이미 모으는 중이면 더 넉넉히)
+        const em = L.emulated || R.emulated;
+        const near = (em ? 0.19 : 0.085) + (b.charge > 0 ? (em ? 0.05 : 0.015) : 0);
+        pose = L.palm.distanceTo(R.palm) < near && L.palmNormal.dot(R.palmNormal) < (em ? -0.15 : -0.4) && L.fingersDir.dot(fwd) > (em ? 0.25 : 0.4) && R.fingersDir.dot(fwd) > (em ? 0.25 : 0.4) &&
           L.gesture !== 'fist' && R.gesture !== 'fist' && L.palm.distanceTo(inp.head) > 0.2;
         if (pose) {
           _v.addVectors(L.fingersDir, R.fingersDir).normalize();
@@ -325,9 +336,9 @@ export class Itadori {
           b.pos.addVectors(L.palm, R.palm).multiplyScalar(0.5).addScaledVector(b.dir, 0.07);
         }
         // 맞댄 손을 떼면 발사
-        released = !pose && b.charge > 0 && L.palm.distanceTo(R.palm) > 0.1;
+        released = !pose && b.charge > 0 && L.palm.distanceTo(R.palm) > (em ? 0.26 : 0.1);
       } else if (L.source === 'controller' && R.source === 'controller') {
-        pose = L.btn.grip && R.btn.grip && L.pos.distanceTo(R.pos) < 0.16;
+        pose = L.btn.grip && R.btn.grip && L.pos.distanceTo(R.pos) < (b.charge > 0 ? 0.32 : 0.24); // 컨트롤러는 끝까지 맞닿지 못한다
         if (pose) {
           b.dir.addVectors(L.dir, R.dir).normalize();
           b.pos.addVectors(L.pos, R.pos).multiplyScalar(0.5).addScaledVector(b.dir, 0.05);

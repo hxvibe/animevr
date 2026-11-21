@@ -80,7 +80,7 @@ export class Sukuna {
         { head: '捌(팔) — 난도질', demo: 'sukuna.cleave', color: '#ff9a7a', text: '편 손으로 더미를 직접 건드리기. 약한 상대일수록 잘게 썰림' },
         { head: '竈 開(フーガ) — 화염', demo: 'sukuna.fuga', color: '#ffb050', text: '한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기' },
         { head: '세계를 가르는 해', demo: 'sukuna.world', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 다른 손 주먹으로 그 손목을 붙잡은 채 1.3초 (영창) → 편 손을 크게 휘두르기' },
-        { head: '영역전개 「伏魔御廚子」', demo: 'sukuna.domain', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 손가락을 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
+        { head: '영역전개 「伏魔御廚子」', demo: 'sukuna.domain', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 검지·약지는 접고 중지·새끼를 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
         { head: '잡기 · 흑섬', demo: 'common.grab', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
       ];
     }
@@ -478,7 +478,12 @@ export class Sukuna {
         for (const [B, D] of [[L, R], [R, L]]) {
           if (!B.active || !D.active || B.uiBlock) continue;
           if (B.source === 'hand' && D.source === 'hand') {
-            if (B.gesture === 'open' && (D.gesture === 'pinch' || D.pinch) && D.pos.distanceTo(B.palm) < 0.16 && D.palm.distanceTo(B.palm) > 0.07) start = { bowSide: B.side, drawSide: D.side };
+            // 세계참 영창(주먹으로 손목을 붙잡음)과 헷갈리지 않게: 주먹이 아닌 집게만, 손목 쪽이 아니라 손바닥·손가락 앞에서, 영창 중이 아닐 때
+            const bd = D.bends;
+            const fistish = D.gesture === 'fist' || (bd && bd[1] > 115 && bd[2] > 115 && bd[3] > 115 && D.pinchDist > 0.03);
+            const atFingers = _v.subVectors(D.pos, B.palm).dot(B.fingersDir) > -0.02;
+            const chanting = this.hand[B.side].chant > 0.05 || this.hand[B.side].armed > 0;
+            if (B.gesture === 'open' && !fistish && !chanting && atFingers && (D.gesture === 'pinch' || D.pinch) && D.pos.distanceTo(B.palm) < 0.16 && D.palm.distanceTo(B.palm) > 0.07) start = { bowSide: B.side, drawSide: D.side };
           } else if (B.source === 'controller' && D.source === 'controller') {
             if (B.side === 'left' && B.btn.grip && D.pressed('trigger') && D.pos.distanceTo(B.pos) < 0.25) start = { bowSide: 'left', drawSide: 'right' };
           }
@@ -849,7 +854,9 @@ export class Sukuna {
         // 염마천인: 얼굴 앞에서 손바닥을 마주 대고, 손가락은 위로
         const mid = _v.addVectors(L.palm, R.palm).multiplyScalar(0.5);
         sign = this.ctx.settings.domainGesture && L.palm.distanceTo(R.palm) < 0.1 && mid.distanceTo(inp.head) < 0.42 && L.fingersDir.y > 0.55 && R.fingersDir.y > 0.55 &&
-          L.gesture !== 'fist' && R.gesture !== 'fist' && L.speed < 0.6 && R.speed < 0.6 && L.palmNormal.dot(R.palmNormal) < -0.4;
+          L.gesture !== 'fist' && R.gesture !== 'fist' && L.speed < 0.6 && R.speed < 0.6 && L.palmNormal.dot(R.palmNormal) < -0.4 &&
+          // 염마천인: 검지·약지는 접고 중지·새끼는 세운다
+          [L, R].every((H) => !H.bends || (H.bends[0] > 70 && H.bends[2] > 70 && H.bends[1] < 75 && H.bends[3] < 85));
       } else if (L.source === 'controller' && R.source === 'controller') {
         sign = L.btn.stick && R.btn.stick;
       }

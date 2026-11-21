@@ -17,6 +17,7 @@ import { makeGlowSprite } from '../../core/fx.js';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const AURA = { glow: 0xff5a10, hot: 0xffe0a0, inner: 0x2a0800, line: 0x000000 };
 const FIRE = new THREE.Color(0xff6a10);
@@ -489,11 +490,16 @@ export class Jogo extends Caster {
       const lr = _v.subVectors(R.palm, L.palm);
       const d = lr.length();
       lr.normalize();
-      cupped = d > 0.1 && d < 0.5 && L.palmNormal.dot(lr) > 0.45 && R.palmNormal.dot(lr) < -0.45 && L.gesture !== 'fist' && R.gesture !== 'fist' && !dsign;
-    } else if (both && L.source === 'controller') cupped = L.btn.grip && R.btn.grip && L.palm.distanceTo(R.palm) < 0.5 && !sky;
+      // 엄격하게: 옆으로 나란히 · 손바닥이 확실히 마주 봄 · 몸 앞 · 거의 멈춘 손 · 검지/집게 손 아님
+      const front = _v3.subVectors(L.palm, head).add(_v4.subVectors(R.palm, head)).multiplyScalar(0.5).dot(inp.headDir);
+      cupped = d > 0.1 && d < 0.4 && Math.abs(lr.y) < 0.35 && L.palmNormal.dot(lr) > 0.7 && R.palmNormal.dot(lr) < -0.7 && front > 0.18 && L.speed < 0.7 && R.speed < 0.7 &&
+        !['fist', 'point', 'pinch'].includes(L.gesture) && !['fist', 'point', 'pinch'].includes(R.gesture) && !dsign;
+    } else if (both && L.source === 'controller') cupped = L.btn.grip && R.btn.grip && !L.btn.trigger && !R.btn.trigger && L.palm.distanceTo(R.palm) < 0.4 && !sky;
     if (inp.mode === 'desktop' && inp.keyDown('Digit5')) cupped = true;
     const mid = inp.mode === 'desktop' ? _v2.copy(head).addScaledVector(inp.headDir, 0.5).add(_v.set(0, -0.15, 0)) : _v2.addVectors(L.palm, R.palm).multiplyScalar(0.5);
-    if (cupped && !C.on && this.energy > 15) {
+    // 자세를 0.5초 유지해야 불이 모이기 시작한다 (스치듯 마주 본 손에 발동하지 않게)
+    C.pre = cupped && !C.on ? (C.pre ?? 0) + dt : 0;
+    if (cupped && !C.on && this.energy > 15 && (C.pre >= 0.5 || inp.mode === 'desktop')) {
       C.on = true;
       C.t = 0;
       C.s = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffb040, toneMapped: false }));

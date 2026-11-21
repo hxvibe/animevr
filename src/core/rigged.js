@@ -284,7 +284,7 @@ export class RiggedBody {
   }
 
   setEmissive(c) {
-    for (const m of this.mats) m.emissive.copy(c);
+    for (const m of this.mats ?? []) m.emissive?.copy(c);
   }
 
   /** 지금 자세를 굳힌 일반 메시로 바꾼다 (절단 조각이 원래 뼈에 묶여 제자리에 남지 않게) */
@@ -317,7 +317,7 @@ export class RiggedBody {
   }
 
   dispose() {
-    for (const m of this.mats) m.dispose();
+    for (const m of this.mats ?? []) m.dispose();
     this.outlineMat?.dispose();
   }
 }

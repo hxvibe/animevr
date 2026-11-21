@@ -7,7 +7,9 @@ import { Sfx } from './core/audio.js';
 import { UI, JFONT } from './core/ui.js';
 import { Melee } from './core/melee.js';
 import { Grab } from './core/grab.js';
-import { preload } from './core/assets.js';
+import { preload, loadModel } from './core/assets.js';
+import { loadHandModels } from './core/handDemo.js';
+import { makeShiki, SHIKI_MODELS } from './characters/megumi/models.js';
 import { preloadChars, RiggedBody } from './core/rigged.js';
 import { DUMMY_TYPES } from './core/dummy.js';
 import { CHARACTERS } from './characters/index.js';
@@ -125,6 +127,17 @@ const btnDesk0 = document.getElementById('btn-desktop');
 btnDesk0.disabled = true;
 btnVR0.disabled = true;
 document.getElementById('status').textContent = '모델 불러오는 중…';
+// 쓰는 3D 모델 전부 (시작하기 전에 다 받는다 — 받기 전에 시작하면 적·무기가 임시 모양으로 나왔다)
+const ALL_MODELS = [
+  'dummy', 'white_room', 'shrine', 'item_sukuna_finger', 'item_megaphone',
+  'chr_geto', 'chr_gojo', 'chr_nobara', 'chr_toji', 'chr_yuta', 'npc_cathy', 'npc_tsukamoto', 'npc_yaga', 'enemy_bagmask',
+  'curse_bignose', 'curse_centipede', 'curse_cyclops', 'curse_finger_bearer', 'curse_inventory', 'curse_jogo', 'curse_kuchisake', 'curse_mahito',
+  'curse_rainbow_dragon', 'curse_rika', 'curse_tamamo', 'curse_transfigured', 'curse_worm',
+  'shiki_dog_black', 'shiki_dog_totality', 'shiki_dog_white', 'shiki_elephant', 'shiki_mahoraga', 'shiki_nue', 'shiki_ox', 'shiki_rabbit', 'shiki_serpent', 'shiki_toad',
+  'wpn_chain', 'wpn_hammer', 'wpn_mallet', 'wpn_nail', 'wpn_spear', 'wpn_splitsoul', 'wpn_strawdoll', 'wpn_yuta_sheath', 'wpn_yuta_sword',
+];
+
+/** 셰이더를 미리 컴파일한다 (처음 부를 때 퀘스트가 잠깐 멈추지 않게): 적 · 식신 몸을 화면 밖에 한 번씩 만들어 본다 */
 async function warmEnemies() {
   const g = new THREE.Group();
   g.position.set(0, -200, 0);
@@ -133,6 +146,12 @@ async function warmEnemies() {
     try {
       const b = new RiggedBody(def.model, { height: 1.8, outline: 0.01 });
       if (b.ok) g.add(b.model);
+    } catch (_) { /* 무시 */ }
+  }
+  for (const key of Object.keys(SHIKI_MODELS)) {
+    try {
+      const S = makeShiki(key, 1.5);
+      if (S) g.add(S.root);
     } catch (_) { /* 무시 */ }
   }
   scene.add(g);
@@ -145,14 +164,36 @@ async function warmEnemies() {
   scene.remove(g);
 }
 
-const loading = preload(['dummy', 'white_room', 'shrine']).then(() => {
-  game.setBackground(settings.background);
-  btnDesk0.disabled = false;
-  // 적 주령 모델은 뒤에서 받는다 (받기 전에 부르면 더미 모양으로 나온다)
-  // 받은 뒤 셰이더를 미리 컴파일해 둔다 (처음 적을 부를 때 퀘스트가 잠깐 멈추는 것을 막는다)
-  preloadChars(ENEMY_MODELS).then(() => warmEnemies()).catch((e) => console.warn('적 모델', e));
-  preload(['wpn_yuta_sword', 'wpn_yuta_sheath', 'curse_rika', 'item_megaphone', 'curse_transfigured']); // 유타 칼·리카·확성기 · 개조인간
-});
+// 모든 모델 → 손 모델 → 배경 → 셰이더 예열이 끝나야 시작 버튼이 열린다
+let _got = 0;
+const _st = document.getElementById('status');
+const loading = Promise.all([
+  ...ALL_MODELS.map((n) =>
+    loadModel(n).then((m) => {
+      _got++;
+      _st.textContent = `3D 모델 불러오는 중… ${_got} / ${ALL_MODELS.length}`;
+      return m;
+    }),
+  ),
+  loadHandModels().catch(() => null),
+])
+  .then(async () => {
+    _st.textContent = '배경 · 셰이더 준비 중…';
+    game.setBackground(settings.background);
+    await new Promise((r) => setTimeout(r, 30));
+    await warmEnemies();
+    if (renderer.compileAsync) await renderer.compileAsync(scene, camera).catch(() => {});
+    _st.textContent = '준비 완료';
+    btnDesk0.disabled = false;
+  })
+  .catch((e) => {
+    console.warn('불러오기', e);
+    _st.textContent = '일부 모델을 불러오지 못했습니다 — 그래도 시작할 수 있습니다';
+    btnDesk0.disabled = false;
+  });
+void preload;
+void preloadChars;
+void ENEMY_MODELS;
 
 // 폰트(한글·일본어)를 미리 받아둔다
 const JP_CHARS = '術式順転反蒼赫虚茈領域展開無量空処下限六眼黒閃解捌竈開伏魔御廚子世界を断つ龍鱗反発番いの流星あおかむらさきりょうくうしょげんりくがんこくせんカイハチカミノフーガふくまみづしゅんはつつがいせ「」■螺旋丸手裏剣風遁影分身の術多重九喇嘛モードらせんがんしゅりけんふうとんかげぶんしんじゅつたじゅうクラマかめはめ波元気玉瞬間移動超サイヤ人げんきだまどうスーパー呪霊操術虹龍化身玉藻前極ノ番うずまき私キレイ無為転変火山呪力撥体自閉円頓裹じへいえんどんか遍殺即霊体蓋棺鉄囲山がいかんてっちせん隕いん煉獄れんごく火山頭かざんとう火礫蟲完全顕現里香りか純愛砲じゅんあいほう動くなうごく真贋相愛しんがんそうあい嵌合暗翳庭芻霊呪法すうれいじゅほう簪かんざし共鳴ともなり法陣ほうじん領域展開の押合中和必中消滅りょういきてんかい';

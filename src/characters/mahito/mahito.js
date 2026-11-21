@@ -348,7 +348,7 @@ export class Mahito extends Caster {
       // 바닥: 손 그림 없이 비쳐 보이는 어둠 — 바닥 밑으로 이어진 새장(깍지 낀 팔들)이 보인다
       floor: `float r = length(vP.xz); col = vec3(0.05, 0.035, 0.09) + vec3(0.12, 0.08, 0.22) * smoothstep(0.9, 1.0, r) * 0.6;
               alpha = mix(0.5, 0.12, smoothstep(0.0, 1.0, r)) * uOpen;`,
-      lights: { hemi: 0xe8e0ff, ground: 0x2a2080, hemiI: 0.95, sunI: 1.0, sun: 0xf4f0ff, fog: 0x0a0610, fogNear: 24, fogFar: 70, exposure: 1.0 },
+      lights: { hemi: 0xe8e0ff, ground: 0x2a2080, hemiI: 0.9, sunI: 0.7, sun: 0xf4f0ff, fog: 0x0a0610, fogNear: 24, fogFar: 70, exposure: 1.0 },
       anim: (dt, sh) => {
         const M = this.maw;
         if (sh.state === 'opening' && !this._mawK) {

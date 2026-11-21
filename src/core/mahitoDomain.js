@@ -1,7 +1,6 @@
 // 「自閉円頓裹」 — 원작 애니(1기 13화)처럼: 거의 검은 보랏빛 허공에 마히토 자신의 손(모델에서 떼어 낸 손 · 아래팔째)이
-//  · 한가운데: 손바닥을 맞대고 위아래로 깍지 낀 거대한 두 손 (앞에서 보면 엄지가 왼쪽) — 움직이지 않는다
+//  · 한가운데: 편 두 손을 손바닥끼리 맞대 수평으로 포갠 거대한 두 손 — 움직이지 않는다
 //  · 그 둘레: 사방으로 뻗어 손가락을 꿈틀대는 손들
-//  · 영역 겉 사방: 벽에서 안쪽으로 뻗은 손들 (손가락이 계속 움직인다, 아래팔은 벽 너머로 사라진다)
 //  · 새장: 양 끝이 손뿐인 팔들이 이웃과 손가락을 엇갈려 자연스럽게 깍지 끼며, 대각선으로 기운 고리 여러 겹으로 영역을 공처럼 감싼다 (바닥 밑까지)
 //  손목 · 팔꿈치의 잘린 끝은 다른 손 · 벽 · 팔 속에 묻혀 보이지 않게 둔다.
 import * as THREE from 'three';
@@ -327,25 +326,26 @@ export class HandMaw {
     this.mats = handMaterials(this.T);
     const FA = -set.elbowY; // 아래팔 길이 (손 길이 단위)
 
-    // ── 1) 한가운데: 손바닥을 위아래로 맞댄 거대한 두 손 (움직이지 않는다) — 원작처럼 주먹 쥔 듯 앞(영역 가운데)을 향한다
-    //  위 손: 손바닥이 아래 · 손가락이 앞쪽으로 뻗어 아래로 감긴다 / 아래 손: 손바닥이 위 · 손가락이 위로 감긴다
-    //  아래팔은 뒤(무더기 속)로 들어가 보이지 않는다. 앞에서 볼 때 두 엄지가 모두 왼쪽에 오게 손마다 오른손/왼손을 고른다
+    // ── 1) 한가운데: 편 두 손을 수평으로 포갠 모양 (움직이지 않는다)
+    //  손바닥끼리 마주 보게 위아래로 겹치고, 손가락은 가지런히 모아 같은 방향(앞 = 영역 가운데 쪽)으로 길게 뻗는다.
+    //  엄지는 다른 손가락 위에 자연스럽게 얹히고, 손목은 꺾지 않고 일직선 — 아래팔은 뒤의 손 무더기 속으로 들어가 보이지 않는다.
+    //  앞에서 볼 때 엄지가 왼쪽에 오게 손마다 오른손/왼손을 고른다
     const C0 = new THREE.Vector3(0, R * 0.4, 0);
     this.C0 = C0;
     const big = R * 0.3;
     const thumbLeft = (fingers, palm) => {
-      // 손 좌표 +X 가 화면(앞에서 본) 오른쪽(+X)으로 가는지
       const xv = new THREE.Vector3().crossVectors(fingers.clone().normalize(), palm.clone().normalize());
-      const right = xv.x > 0;
-      return (set.thumbX > 0) === right ? mir : set;
+      return (set.thumbX > 0) === xv.x > 0 ? mir : set;
     };
-    const upF = new THREE.Vector3(0, -0.15, 1);
-    const upP = new THREE.Vector3(0, -1, 0.1);
-    const loF = new THREE.Vector3(0, 0.15, 1);
-    const loP = new THREE.Vector3(0, 1, 0.1);
+    const L = big * 1.25;
+    // 손가락 방향: 앞(영역 가운데)으로, 아래에서 올려다보는 사람에게 손 모양이 넓게 보이도록 앞쪽을 숙이고 살짝 비스듬히
+    const fwd = new THREE.Vector3(0.28, -0.5, 1).normalize();
+    const upP = new THREE.Vector3(0, -1, 0).addScaledVector(fwd, -new THREE.Vector3(0, -1, 0).dot(fwd)).normalize(); // 위 손: 손바닥이 아래
+    const loP = upP.clone().negate(); // 아래 손: 손바닥이 위
+    const gap = 0.055 * L; // 손 두께의 절반쯤 → 손바닥이 맞닿는다
     this.pairs = [
-      new HandGroup(thumbLeft(upF, upP), [{ pos: C0.clone().add(new THREE.Vector3(0, big * 0.1, -big * 0.05)), quat: look(upF, upP), s: big, curl: 0.8, amp: 0, delay: 0 }], this.mats),
-      new HandGroup(thumbLeft(loF, loP), [{ pos: C0.clone().add(new THREE.Vector3(0, -big * 0.1, -big * 0.05)), quat: look(loF, loP), s: big, curl: 0.8, amp: 0, delay: 0.04 }], this.mats),
+      new HandGroup(thumbLeft(fwd, upP), [{ pos: C0.clone().add(new THREE.Vector3(0, gap, -0.5 * L)), quat: look(fwd, upP), s: L, curl: 0.04, amp: 0, delay: 0 }], this.mats),
+      new HandGroup(thumbLeft(fwd, loP), [{ pos: C0.clone().add(new THREE.Vector3(0, -gap, -0.5 * L)), quat: look(fwd, loP), s: L, curl: 0.04, amp: 0, delay: 0.04 }], this.mats),
     ];
     for (const G of this.pairs) G.add(this.cluster);
 
@@ -362,41 +362,24 @@ export class HandMaw {
         ring.push({ pos, quat: look(d, palm), s, curl: rnd(0.1, 0.35), amp: rnd(0.22, 0.38), delay: 0.1 + Math.random() * 0.25 });
       }
     };
-    addRing(16, 0.95, 1.3, 0.4, 0.55, 0.75);
-    addRing(14, 1.25, 1.65, 0.7, 0.7, 0.95);
+    addRing(16, 1.0, 1.35, 0.75, 0.55, 0.75);
+    addRing(14, 1.3, 1.7, 1.05, 0.7, 0.95);
     this.ring = new HandGroup(set, ring, this.mats);
     this.ring.add(this.cluster);
-
-    // ── 3) 영역 겉 사방: 벽에서 안쪽으로 뻗은 손 (손가락이 계속 움직인다 · 아래팔은 벽 너머로) ──
-    const shell = [];
-    const NS = 54;
-    for (let i = 0; i < NS; i++) {
-      const y = 1 - ((i + 0.5) / NS) * 1.75; // 위 → 바닥 밑 조금
-      const r = Math.sqrt(Math.max(0, 1 - y * y));
-      const th = i * 2.39996;
-      const u = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r);
-      const sHand = R * rnd(0.1, 0.13);
-      const pos = u.clone().multiplyScalar(R * 0.98 - sHand * 0.85);
-      const inward = u.clone().negate().add(new THREE.Vector3(rnd(-0.35, 0.35), rnd(-0.35, 0.35), rnd(-0.35, 0.35))).normalize();
-      const palm = new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1));
-      shell.push({ pos, quat: look(inward, palm), s: sHand, curl: rnd(0.05, 0.3), amp: rnd(0.25, 0.42), delay: 0.25 + (1 - y) * 0.15 });
-    }
-    this.shell = new HandGroup(set, shell, this.mats, { outline: false });
-    this.shell.add(this.group);
 
     // ── 4) 새장: 대각선으로 기운 큰 고리들 — 이음매마다 양쪽 팔의 손이 손가락을 엇갈려 깍지 낀다 (움직이지 않는다) ──
     const HL = R * 0.065; // 손 길이(m)
     const reach = (0.42 + FA) * HL; // 이음매 → 팔꿈치
     const clasp = [];
     this.bridges = [];
-    const NC = 6;
+    const NC = 12; // 고리를 촘촘히 → 사이 구멍이 작다
     for (let k = 0; k < NC; k++) {
-      const az = (k / NC) * Math.PI * 2;
-      const tilt = 0.78; // 약 45°
+      const az = (k / NC) * Math.PI * 2 + (k % 2) * 0.21;
+      const tilt = k % 2 ? 0.62 : 0.86; // 약 35° · 50° — 두 겹의 대각선이 엇갈린다
       const nrm = new THREE.Vector3(Math.sin(tilt) * Math.cos(az), Math.cos(tilt), Math.sin(tilt) * Math.sin(az)).normalize();
       const e1 = new THREE.Vector3().crossVectors(nrm, Y).normalize();
       const e2 = new THREE.Vector3().crossVectors(nrm, e1).normalize();
-      const Rc = R * 0.78 + (k % 2 ? 0.35 : -0.35) * (1 + k * 0.15); // 고리끼리 엇갈리는 곳에서 부딪치지 않게
+      const Rc = R * 0.78 + ((k % 4) - 1.5) * 0.28; // 고리끼리 엇갈리는 곳에서 부딪치지 않게 // 고리끼리 엇갈리는 곳에서 부딪치지 않게
       const L = 2 * Math.PI * Rc;
       const nJ = Math.max(6, Math.round(L / (2 * reach + HL * 1.6)));
       const P = (t) => new THREE.Vector3().addScaledVector(e1, Math.cos(t * Math.PI * 2) * Rc).addScaledVector(e2, Math.sin(t * Math.PI * 2) * Rc);
@@ -458,7 +441,6 @@ export class HandMaw {
     this.T.value = this.t;
     for (const G of this.pairs) this._put(G, open, 0.45, this.C0);
     this._put(this.ring, open, 0.5, this.C0);
-    this._put(this.shell, open, 0.45, null);
     this._put(this.cage, open, 0.3, null);
     this.bridges.forEach((A, i) => {
       const k = THREE.MathUtils.clamp((open - A.delay) / 0.3, 0, 1);
@@ -474,7 +456,7 @@ export class HandMaw {
 
   dispose() {
     this.group.parent?.remove(this.group);
-    for (const G of [...this.pairs, this.ring, this.shell, this.cage]) G.dispose();
+    for (const G of [...this.pairs, this.ring, this.cage]) G.dispose();
     this.armMesh.geometry.dispose();
     this.armMesh.dispose();
     this.armMat.dispose();

@@ -24,7 +24,7 @@ const clamp = THREE.MathUtils.clamp;
 export const ENEMY_DOMAINS = {
   mahito: {
     name: '自閉円頓裹', ruby: 'じへいえんどんか', label: '자폐원돈과', color: '#b88ad8', ref: 82, radius: 19, type: 0, dur: 24,
-    lights: { hemi: 0xe8e0ff, ground: 0x2a2080, hemiI: 0.95, sun: 0xf4f0ff, sunI: 1.0, fog: 0x0a0610, fogNear: 24, fogFar: 75, exposure: 1.0 },
+    lights: { hemi: 0xe8e0ff, ground: 0x2a2080, hemiI: 0.9, sun: 0xf4f0ff, sunI: 0.7, fog: 0x0a0610, fogNear: 24, fogFar: 75, exposure: 1.0 },
   },
   jogo: {
     name: '蓋棺鉄囲山', ruby: 'がいかんてっちせん', label: '개관철위산', color: '#ff7a2a', ref: 80, radius: 19, type: 1, dur: 24,

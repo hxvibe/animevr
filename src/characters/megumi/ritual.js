@@ -8,7 +8,8 @@
 //  27초     번데기에서 연기
 //  28.6초   팅! — 이어져 있던 실이 풀린다
 //  30~34초  머리의 두 쌍 날개가 번데기를 뚫고 삐걱거리며(한 번에 확 커지고 · 멈칫) 크게 솟았다가 다시 작아진다
-//  34초~    팔짱 낀 팔을 삐걱거리며 풀고 → 두 팔로 번데기를 앞에서부터 찢어 벌린다. 팔을 다 벌리면 번데기가 다 찢어진다 → 마허라
+//  34초~    번데기가 위에서부터 풀려 6.5초 만에 다 벗겨진다 → 마허라 (벗겨질 때까지 두 팔은 봉인된 듯 가슴 앞에 엇갈려 조여 있다)
+//  번데기는 마허라 체형을 재서 팽팽하게 감싼다 — 다만 오목한 곳(목 · 허리)은 따라 들어가지 않고 곧게 건너간다
 import * as THREE from 'three';
 import { makeShiki, AX } from './models.js';
 
@@ -32,16 +33,14 @@ export const RITUAL = {
   wings: 30.0,
   wingsTop: 33.0,
   wingsBack: 34.0,
-  unwrap: 34.0, // 팔짱을 풀기 시작
-  uncross: 36.4, // 팔짱이 다 풀렸다 → 찢어 벌리기
-  spread: 39.6, // 다 벌렸다 = 번데기가 다 찢어진다
-  end: 40.6,
+  unwrap: 34.0,
+  end: 40.5,
 };
 
 // 울부짖는 늑대: 뒷다리를 접어 앉고 앞다리로 가슴을 받친 채 목을 하늘로 길게 뺀다
 export const HOWL = { pitch: -0.5, y: 0, thigh: -1.15, calf: 1.9, link: -0.9, arm: 0.5, fore: 0.05, neck: -0.6, head: -0.5, jaw: 0.55, tail: 0.5, spine: -0.1 };
 // 머리 날개(눈 자리의 두 쌍) · 턱 — 축과 각도는 모델 공간 기준
-export const WING = { axis: 'Z', down: 2.3, up: -0.3, grow: 7.5, jaw: 0.5 };
+export const WING = { axis: 'Z', down: 2.3, up: -0.3, grow: 7.5, jaw: 0.5, fold: 0.3 }; // fold: 번데기 속에서 접혀 작아진 크기
 
 // 번데기: 붕대처럼 감긴 결 · 먹선 · 속에서 비치는 빛 · 입 자리 찢김 · 위에서부터 풀림
 const COCOON_VERT = /* glsl */ `
@@ -51,7 +50,7 @@ void main() {
   vec3 p = position;
   // 느슨해질수록 붕대가 울퉁불퉁 들뜬다
   float w = sin(p.y * 7.0 + atan(p.z, p.x) * 3.0 + uTime * 0.7) * 0.5 + 0.5;
-  p += normal * (uLoose * 0.18 * w);
+  p += normal * (uLoose * 0.05 * w); // 팽팽하게 감싸 있어 조금만 들뜬다
   vL = position;
   vec4 wp = modelMatrix * vec4(p, 1.0);
   vW = wp.xyz;
@@ -60,7 +59,7 @@ void main() {
 }`;
 const COCOON_FRAG = /* glsl */ `
 uniform float uOpacity; uniform float uTear; uniform vec3 uTearPos; uniform float uUnwrap; uniform float uTop; uniform float uH; uniform float uTime;
-uniform vec3 uHoleL; uniform vec3 uHoleR; uniform float uHole; uniform float uSplit; uniform float uFrontAz;
+uniform vec3 uHoleL; uniform vec3 uHoleR; uniform float uHole;
 varying vec3 vW; varying vec3 vN; varying vec3 vL;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -74,13 +73,6 @@ void main() {
   if (uHole > 0.0) {
     float j = 0.75 + 0.5 * n(vec2(az * 10.0, vL.y * 10.0));
     if (length(vW - uHoleL) < uHole * j || length(vW - uHoleR) < uHole * j) discard;
-  }
-  // 두 팔이 앞에서부터 찢어 벌린다: 앞 가운데의 세로 틈이 옆으로 넓어진다 (가슴 높이가 가장 넓다)
-  if (uSplit > 0.0) {
-    float da = abs(mod(az - uFrontAz + 3.14159265, 6.2831853) - 3.14159265);
-    float chest = 1.0 - 0.35 * abs(vL.y / uH - 0.55) * 2.0;
-    float wid = pow(uSplit, 1.6) * 3.3 * chest + (n(vec2(vL.y * 6.0, az * 4.0)) - 0.5) * 0.35 * uSplit;
-    if (da < wid || uSplit >= 0.999) discard;
   }
   // 입 자리 찢김
   if (uTear > 0.0) {
@@ -186,21 +178,28 @@ export class MahoragaRitual {
       this.M.root.visible = false;
       this.group.add(this.M.root);
       this.head = this.M.rig.get('head');
-      this.pose = { jaw: 0, wing: 0, wingS: 1, arms: 0 }; // arms: 0 팔짱 → 1 풀림(번데기 앞을 붙잡음) → 2 활짝 벌림
+      this.pose = { jaw: 0, wing: 0, wingS: 1 };
     }
     const H = 5.9;
     const prof = [[0.05, 0], [0.55, 0.15], [0.75, 0.9], [0.95, 1.9], [1.35, 3.1], [1.55, 3.9], [1.45, 4.6], [1.05, 5.3], [0.55, 5.75], [0.05, H]].map(([r, y]) => new THREE.Vector2(r, y));
     this.cU = {
       uOpacity: { value: 0 }, uTear: { value: 0 }, uTearPos: { value: new THREE.Vector3() }, uUnwrap: { value: 0 }, uTop: { value: H }, uH: { value: H },
       uLoose: { value: 0 }, uTime: { value: 0 },
-      uHoleL: { value: new THREE.Vector3(0, -99, 0) }, uHoleR: { value: new THREE.Vector3(0, -99, 0) }, uHole: { value: 0 }, uSplit: { value: 0 },
-      uFrontAz: { value: Math.atan2(-this.fwd.z, -this.fwd.x) }, // 번데기에서 플레이어 쪽
+      uHoleL: { value: new THREE.Vector3(0, -99, 0) }, uHoleR: { value: new THREE.Vector3(0, -99, 0) }, uHole: { value: 0 },
     };
     const cMat = new THREE.ShaderMaterial({ uniforms: this.cU, vertexShader: COCOON_VERT, fragmentShader: COCOON_FRAG, transparent: true, side: THREE.DoubleSide, fog: false });
     this.cocoon = new THREE.Mesh(new THREE.LatheGeometry(prof, 48), cMat);
     this.cocoon.position.copy(this.cocoonPos);
     this.cocoon.visible = false;
     this.mats.push(cMat);
+    // 마허라 체형을 재서 팽팽하게 감싸는 번데기로 바꾼다 (모델이 없으면 둥근 번데기 그대로)
+    const fit = this.M ? this._cocoonGeo() : null;
+    if (fit) {
+      this.cocoon.geometry.dispose();
+      this.cocoon.geometry = fit.geo;
+      this.cU.uTop.value = this.cU.uH.value = fit.top;
+      this.cocoon.quaternion.copy(this.M.root.quaternion);
+    }
     this.geos.push(this.cocoon.geometry);
     this.group.add(this.cocoon);
     // 번데기 뒤의 은은한 빛
@@ -234,6 +233,117 @@ export class MahoragaRitual {
     this.ctx.world.cinematic = true;
     sfx.rumble(1.5, 0.6);
     this.flags = {};
+  }
+
+  /**
+   * 번데기 기하: 팔짱 낀 자세의 마허라를 높이마다 재어(앞뒤 · 좌우) 타원 고리로 감싼다.
+   *  높이에 따른 반지름은 '위로 볼록한 껍질'로 다듬는다 → 목 · 허리처럼 오목한 곳은 따라 들어가지 않고 머리에서 어깨로 곧게 내려온다
+   */
+  _cocoonGeo() {
+    const M = this.M;
+    this.pose.wing = WING.down;
+    this.pose.wingS = WING.fold;
+    this.pose.ring = 0;
+    this.pose.back = 0.35;
+    this._applyPose();
+    M.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().compose(this.cocoonPos, M.root.quaternion, new THREE.Vector3(1, 1, 1)).invert();
+    const pts = [];
+    const v = new THREE.Vector3();
+    M.root.traverse((o) => {
+      if (!o.isMesh || !o.visible) return;
+      const n = o.geometry.attributes.position.count;
+      const step = Math.max(1, Math.floor(n / 5000));
+      for (let i = 0; i < n; i += step) {
+        if (o.isSkinnedMesh) o.getVertexPosition(i, v);
+        else v.fromBufferAttribute(o.geometry.attributes.position, i);
+        v.applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+        pts.push(v.x, v.y, v.z);
+      }
+    });
+    if (pts.length < 30) return null;
+    let top = 0;
+    for (let i = 1; i < pts.length; i += 3) top = Math.max(top, pts[i]);
+    const NB = 40;
+    const xm = new Array(NB).fill(0);
+    const zp = new Array(NB).fill(-9);
+    const zn = new Array(NB).fill(9);
+    for (let i = 0; i < pts.length; i += 3) {
+      const b = Math.min(NB - 1, Math.max(0, Math.floor((pts[i + 1] / top) * NB)));
+      xm[b] = Math.max(xm[b], Math.abs(pts[i]));
+      zp[b] = Math.max(zp[b], pts[i + 2]);
+      zn[b] = Math.min(zn[b], pts[i + 2]);
+    }
+    // 위로 볼록한 껍질 (y 에 따른 값의 위쪽 볼록 포락선)
+    const hull = (vals) => {
+      const P = [[0, vals[0]]];
+      vals.forEach((r, b) => P.push([((b + 0.5) / NB) * top, r]));
+      P.push([top, vals[NB - 1]]);
+      const H = [];
+      for (const p of P) {
+        while (H.length >= 2) {
+          const [a, c] = [H[H.length - 2], H[H.length - 1]];
+          // c 가 a→p 선분 아래에 있으면 버린다
+          const cross = (c[0] - a[0]) * (p[1] - a[1]) - (c[1] - a[1]) * (p[0] - a[0]);
+          if (cross >= 0) H.pop();
+          else break;
+        }
+        H.push(p);
+      }
+      return (y) => {
+        for (let i = 1; i < H.length; i++) {
+          if (y <= H[i][0]) {
+            const k = (y - H[i - 1][0]) / Math.max(1e-6, H[i][0] - H[i - 1][0]);
+            return H[i - 1][1] + (H[i][1] - H[i - 1][1]) * k;
+          }
+        }
+        return H[H.length - 1][1];
+      };
+    };
+    const fx = hull(xm);
+    const fzp = hull(zp);
+    const fzn = hull(zn.map((z) => -z));
+    // 고리: 아래(발) → 위(정수리 위 둥근 끝)
+    const pad = 0.13;
+    const T = top + 0.3;
+    const rings = [];
+    const NR = 46;
+    for (let j = 0; j <= NR; j++) {
+      const u = j / NR;
+      const y = -0.02 + u * (T + 0.02);
+      const yy = Math.min(top, Math.max(0, y));
+      let rx = fx(yy) + pad;
+      let zf = fzp(yy) + pad;
+      let zb = fzn(yy) + pad;
+      // 발끝 · 정수리에서 둥글게 오므린다
+      const close = Math.min(1, Math.sqrt(Math.max(0, Math.min(1, (y + 0.02) / 0.35))) , Math.sqrt(Math.max(0, Math.min(1, (T - y) / 0.55))));
+      rx *= 0.15 + 0.85 * close;
+      zf *= 0.15 + 0.85 * close;
+      zb *= 0.15 + 0.85 * close;
+      rings.push({ y, rx: Math.max(0.03, rx), zf: Math.max(0.03, zf), zb: Math.max(0.03, zb) });
+    }
+    const SEG = 48;
+    const pos = [];
+    for (const r of rings) {
+      for (let k = 0; k <= SEG; k++) {
+        const a = (k / SEG) * Math.PI * 2;
+        const s = Math.sin(a);
+        pos.push(Math.cos(a) * r.rx, r.y, s >= 0 ? s * r.zf : s * r.zb);
+      }
+    }
+    const idx = [];
+    for (let j = 0; j < rings.length - 1; j++) {
+      for (let k = 0; k < SEG; k++) {
+        const a = j * (SEG + 1) + k;
+        const b = a + SEG + 1;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return { geo: g, top: T };
   }
 
   _glowTex() {
@@ -436,34 +546,18 @@ export class MahoragaRitual {
       if (t < R.wings) {
         // 번데기 속: 날개는 아래로 접혀 있다
         this.pose.wing = WING.down;
-        this.pose.wingS = 1;
+        this.pose.wingS = WING.fold;
       } else if (t < R.wingsTop) {
         this.pose.wing = THREE.MathUtils.lerp(WING.down, WING.up, up);
-        this.pose.wingS = 1 + WING.grow * up;
+        this.pose.wingS = WING.fold + (1 + WING.grow - WING.fold) * up;
       } else {
         // 다 솟은 뒤: 작아지며 제자리(평소 모양)로
         const k = ease(clamp01((t - R.wingsTop) / (R.wingsBack - R.wingsTop)));
         this.pose.wing = WING.up * (1 - k);
         this.pose.wingS = 1 + WING.grow * (1 - k);
       }
-      this.pose.ring = ease(clamp01((t - R.uncross) / 3));
-      // 팔: 팔짱(0) → 삐걱거리며 풀어 번데기 앞을 붙잡고(1) → 삐걱거리며 활짝 벌린다(2)
-      const creak = (u, N) => {
-        if (u <= 0) return 0;
-        if (u >= 1) return 1;
-        const st = Math.floor(u * N);
-        const w = (u * N) % 1;
-        const j = w < 0.12 ? ease(w / 0.12) * 1.15 : 1 + 0.15 * Math.exp(-(w - 0.12) * 14);
-        return Math.min(1.04, (st + j) / N);
-      };
-      const ua = clamp01((t - R.unwrap) / (R.uncross - R.unwrap));
-      const ub = clamp01((t - R.uncross) / (R.spread - R.uncross));
-      const armsWas = this.pose.arms;
-      this.pose.arms = t < R.uncross ? creak(ua, 5) : 1 + creak(ub, 6);
-      if (Math.floor(this.pose.arms * 5.5) !== Math.floor(armsWas * 5.5) && t >= R.unwrap) {
-        sfx.play('click', { at: this.cocoonPos, vol: 0.45, rate: rnd(0.25, 0.4) });
-        if (t >= R.uncross) sfx.play('shatter_2', { at: this.cocoonPos, vol: 0.3, rate: rnd(0.4, 0.55) });
-      }
+      this.pose.ring = ease(clamp01((t - R.unwrap - 2.5) / 2.5));
+      this.pose.back = 0.35 + 0.65 * ease(clamp01((t - R.unwrap - 0.3) / 1.6));
       this._applyPose();
       // 날개가 뚫은 구멍: 머리 날개 뿌리 쪽 번데기 겉면
       if (t >= R.wings) {
@@ -476,22 +570,15 @@ export class MahoragaRitual {
         }
         this.cU.uHole.value = Math.max(this.cU.uHole.value, 0.25 + 0.9 * up);
       }
-      // 번데기 앞의 틈 = 벌린 팔만큼
-      const sp = clamp01(this.pose.arms - 1);
-      this.cU.uSplit.value = t >= R.spread ? 1 : sp * 0.92;
-      if (sp > 0 && t < R.spread && Math.random() < dt * 18) this._strip(rnd(1.2, 4.8), true);
-      if (!this.flags.torn && t >= R.spread) {
-        // 다 찢어졌다: 남은 조각이 한꺼번에 흩날린다
-        this.flags.torn = true;
-        for (let i = 0; i < 46; i++) this._strip(rnd(0.4, 5.4));
-        fx.burst(this.cocoonPos.clone().setY(3), 60, new THREE.Color(0xf4f4e8), 5, 0.06, 0.7);
-        sfx.play('shatter', { at: this.cocoonPos, vol: 0.9, rate: 0.5 });
-        sfx.rumble?.(0.6, 0.5);
-      }
     }
     // 번데기가 느슨해지고 → 위에서부터 풀린다
     this.cU.uLoose.value = clamp01((t - R.wings) / (R.unwrap - R.wings)) * 0.5 + clamp01((t - R.unwrap) / 2) * 0.5;
-    if (t >= R.spread) this.cU.uOpacity.value = 0;
+    if (t >= R.unwrap) {
+      const k = clamp01((t - R.unwrap) / (R.end - R.unwrap - 0.3));
+      this.cU.uUnwrap.value = k;
+      // 벗겨진 붕대 조각이 떨어진다
+      if (Math.random() < dt * 14 && k < 0.98) this._strip(this.cU.uTop.value - k * (this.cU.uH.value + 0.6));
+    }
     this._updateStrips(dt);
     if (t >= R.end) {
       this._finish();
@@ -505,25 +592,21 @@ export class MahoragaRitual {
     const R = this.M.rig;
     const P = this.pose;
     R.begin();
-    // 팔: 0 팔짱 (두 아래팔을 가슴 앞에 엇갈려 포갠다) → 1 풀어 번데기 앞을 붙잡음 → 2 활짝 벌림
-    const A = P.arms ?? 0;
-    const k1 = Math.min(1, A);
-    const k2 = Math.max(0, A - 1);
-    const L3 = (a, b, c) => (A <= 1 ? a + (b - a) * k1 : b + (c - b) * k2);
-    const armZ = L3(-1.05, -0.75, 0.45); // 내림(−) ↔ 옆으로 듦(+)
-    const armX = L3(-0.25, -0.6, -0.55); // 앞으로 듦
-    const elbY = L3(-1.8, -1.1, 0); // 아래팔을 몸 앞으로 가로지르기 (팔짱)
-    const elbX = L3(-0.15, -0.2, -0.12); // 아래팔을 앞 · 위로
-    R.rot('L_arm', AX.Z, armZ);
-    R.rot('L_arm', AX.X, armX);
-    R.rot('R_arm', AX.Z, -armZ);
-    R.rot('R_arm', AX.X, armX);
-    R.rot('L_elbow', AX.Y, elbY);
-    R.rot('R_elbow', AX.Y, -elbY);
-    R.rot('L_elbow', AX.X, elbX);
-    R.rot('R_elbow', AX.X, elbX);
+    // 팔: 봉인된 듯 가슴 앞에 엇갈려 몸에 조여 붙인다 — 왼 아래팔이 위 · 앞, 오른 아래팔이 아래 · 안쪽 (서로 통과하지 않게 높이와 앞뒤를 엇갈린다)
+    R.rot('L_arm', AX.Z, -1.1);
+    R.rot('L_arm', AX.X, -0.28);
+    R.rot('L_elbow', AX.Y, -2.0);
+    R.rot('L_elbow', AX.X, -0.18);
+    R.rot('R_arm', AX.Z, 1.14);
+    R.rot('R_arm', AX.X, -0.1);
+    R.rot('R_elbow', AX.Y, 1.95);
+    R.rot('R_elbow', AX.X, 0.05);
+    // 퇴마의 검은 번데기 속에 접어 둔다 (밖으로 삐져나오지 않게)
+    R.scale('R_sword', 0.001);
     R.rot('head', AX.X, 0.22);
     R.rot('backhead_A', AX.X, -1.25);
+    // 뒤통수의 긴 뿔: 번데기 속에선 작게 접혀 있다가 벗겨지며 제 크기로
+    R.scale('backhead_A', P.back ?? 0.35);
     R.rot('jaw_A', AX.X, P.jaw);
     // 법진은 번데기가 풀린 뒤에 머리 위에 나타난다
     R.scale('ring', Math.max(0.001, P.ring ?? 0));
@@ -538,10 +621,8 @@ export class MahoragaRitual {
     }
   }
 
-  _strip(y, edge = false) {
-    // edge: 앞의 찢어진 틈 가장자리에서 (팔이 벌리는 쪽으로 튄다)
-    const fa = this.cU.uFrontAz.value;
-    const a = edge ? fa + (Math.random() < 0.5 ? -1 : 1) * (Math.pow(this.cU.uSplit.value, 1.6) * 3.3 * 0.9) : Math.random() * Math.PI * 2;
+  _strip(y) {
+    const a = Math.random() * Math.PI * 2;
     const g = new THREE.PlaneGeometry(0.18, rnd(0.6, 1.4));
     const m = new THREE.MeshBasicMaterial({ color: 0xf0f0e2, side: THREE.DoubleSide, transparent: true, fog: false });
     const mesh = new THREE.Mesh(g, m);

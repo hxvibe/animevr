@@ -139,6 +139,7 @@ export class Megumi {
   }
 
   helpLines(mode) {
+    if (this.possessed?.helpLines) return this.possessed.helpLines(mode);
     if (mode === 'hand') {
       return [
         { head: '玉犬 옥견 · 鵺 누에', demo: ['megumi.dogs', 'megumi.nue'], color: '#a8b8ff', text: '옥견: 두 손을 포개 손날을 세우고 네 손가락을 앞으로 곧게, 엄지를 세운다 (개 머리와 귀)\n누에: 두 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 펴기 (엄지를 걸어도 OK)' },

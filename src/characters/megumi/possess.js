@@ -5,7 +5,7 @@
 //  · 주먹은 거인의 주먹
 //  · 두 주먹을 가슴 앞에서 1초 맞대면 술사로 돌아온다 (또는 다시 쓰러지면)
 import * as THREE from 'three';
-import { MahoragaWheel, Adaptation } from './shikigami.js';
+import { MahoragaWheel, Adaptation, spaceCut } from './shikigami.js';
 import { HandAura } from '../../core/handAura.js';
 import { makeShiki } from './models.js';
 import { FingerRig } from '../../core/enemies.js';
@@ -84,6 +84,21 @@ class MahoragaArm {
       else o.geometry = g;
       o.frustumCulled = false;
       o.castShadow = true;
+      // 눈앞(카메라 35cm 안)으로 지나가는 팔 · 검은 그리지 않는다 — 휘두를 때 한쪽 눈 화면이 팔 속에 묻혀 까매지지 않게
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m.userData.nearCut) continue;
+        m.userData.nearCut = true;
+        const prev = m.onBeforeCompile;
+        m.onBeforeCompile = (sh, r) => {
+          prev?.call(m, sh, r);
+          if (!sh.fragmentShader.includes('vViewPosition')) return;
+          sh.fragmentShader = sh.fragmentShader.replace('void main() {', 'void main() {\n  if (length(vViewPosition) < 0.35) discard;');
+        };
+        const key = m.customProgramCacheKey?.bind(m);
+        m.customProgramCacheKey = () => (key ? key() : '') + '|nearCut';
+        m.needsUpdate = true;
+      }
     });
     // 바인드 자세에서 손의 틀 (뿌리 공간): 손목 위치 · 손가락 방향 · 손바닥 방향
     const root = this.M.root;
@@ -227,10 +242,15 @@ export class MahoragaSelf {
     this.arms.left.update(dt, L);
     this.arms.right.update(dt, R);
     if (R.active && this.arms.right.blade(this.base, this.tip)) {
-      const speed = this.hasPrev ? this.tip.distanceTo(this.prevTip) / Math.max(dt, 1e-3) : 0;
-      this.swing = (this.swing ?? new THREE.Vector3()).subVectors(this.tip, this.prevTip);
-      this.prevTip.copy(this.tip);
+      // 칼끝 속도는 몸(리그) 기준: 이동 · 회전만으로는 휘두른 것이 아니다
+      const tipL = _v2.copy(this.tip);
+      rig.worldToLocal(tipL);
+      const speed = this.hasPrev ? tipL.distanceTo(this.prevTip) / Math.max(dt, 1e-3) : 0;
+      this.swing = (this.swing ?? new THREE.Vector3()).subVectors(tipL, this.prevTip).transformDirection(rig.matrixWorld);
+      this.prevTip.copy(tipL);
       this.hasPrev = true;
+      // 무하한에 적응(②)하면: 크게 휘두르면 공간째 베는 참격이 날아간다 (무하한을 무시한다)
+      if (speed > 9 && this._infStage() >= 2 && (this.cutCd ?? 0) <= world.time) this._spaceSlash();
       if (this.exitT <= 0) this.aura.set('right', 0.2 + Math.min(0.5, speed * 0.05));
       if (speed > 3) this._cut(this.base, this.tip, speed);
       if (speed > 4 && Math.random() < 0.6) fx.spawn(this.tip, _v.randomDirection().multiplyScalar(0.4), new THREE.Color(0xfff0c0), 0.05, 0.3, 2, 0);
@@ -242,20 +262,60 @@ export class MahoragaSelf {
   }
 
   /** 칼날이 지난 자리의 대상을 벤다 (정의 주력: 저주에 1.6배) */
+  /** 법진이 무하한에 적응한 정도 (0 · 1 중화 · 2 공간째 벰) */
+  _infStage() {
+    return Math.min(2, this.wheel.ad.res.get('infinity') ?? 0);
+  }
+
+  /** 공간째 베기: 칼을 휘두른 방향으로 12m 앞까지의 평면 — 무하한을 무시한다 */
+  _spaceSlash() {
+    const { world, fx, sfx, ui, input: inp } = this.ctx;
+    this.cutCd = world.time + 0.9;
+    const dir = _v3.copy(inp.headDir).setY(0).normalize();
+    const n = (this.swing?.lengthSq() > 1e-6 ? this.swing.clone() : new THREE.Vector3(1, 0, 0)).cross(dir).normalize();
+    if (n.lengthSq() < 0.5) n.set(0, 1, 0);
+    spaceCut(this.ctx, inp.head.clone().addScaledVector(dir, 2), dir);
+    sfx.slash(inp.head, 1);
+    for (const t of world.targets()) {
+      if (!t.alive) continue;
+      const c = t.center(new THREE.Vector3());
+      const rel = c.clone().sub(inp.head);
+      const along = rel.dot(dir);
+      if (along < 0.5 || along > 12) continue;
+      if (Math.abs(rel.dot(n)) > 1.2 * (t.scale ?? 1)) continue;
+      t.damage(220, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, c), color: '#ffe0a0', vsInf: 2 });
+      fx.burst(c, 30, new THREE.Color(0xfff2c8), 4, 0.04, 0.4);
+    }
+    if (!this._toldSpace) {
+      this._toldSpace = true;
+      ui.callout('공간째 벤다 — 무하한이 의미를 잃는다', { color: '#ffe0a0', dur: 1.6 });
+    }
+  }
+
   _cut(a, b, speed) {
     const { world, sfx, fx } = this.ctx;
     const now = world.time;
     for (const t of world.targets()) {
-      if (!t.alive || t.heldBy) continue;
+      if (!t.alive) continue;
       if ((this.hitT.get(t) ?? -1) > now) continue;
       const c = t.center(_v);
-      const r = 0.35 * (t.scale ?? 1);
-      if (segDist(c, a, b) > r) continue;
+      // 몸 전체(발~머리 기둥)와 칼날 선분의 거리 — 가슴 한 점만 보던 것을 바꿈
+      const sc = t.scale ?? 1;
+      const foot = _a.copy(t.root?.position ?? t.pos ?? c);
+      const headP = _b.copy(foot).add(_v3.set(0, 1.75 * sc, 0));
+      if (t.kind !== 'dummy') {
+        foot.copy(c).y -= 0.3 * sc;
+        headP.copy(c).y += 0.3 * sc;
+      }
+      if (segSegDist(a, b, foot, headP) > 0.38 * sc) continue;
       this.hitT.set(t, now + 0.35);
       const curse = !!(t.def?.curse || t.curse);
       const dmg = (60 + speed * 14) * (curse ? 1.6 : 1);
       const n = new THREE.Vector3().subVectors(b, a).cross(this.swing?.lengthSq() > 1e-8 ? this.swing : _v3.set(0, 1, 0)).normalize();
-      t.damage(dmg, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n.lengthSq() > 0.5 ? n : new THREE.Vector3(0, 1, 0), c), color: '#ffe0a0' });
+      // 무하한: 법진이 분석해 적응한다 (① 절반 · ② 전부 들어간다)
+      if (t.infinityOn) this.wheel.ad.expose('infinity');
+      t.damage(dmg, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n.lengthSq() > 0.5 ? n : new THREE.Vector3(0, 1, 0), c), color: '#ffe0a0', vsInf: this._infStage() });
+      if (t.infinityOn && this._infStage() >= 2) spaceCut(this.ctx, c, this.swing?.clone().normalize() ?? new THREE.Vector3(0, 0, -1));
       t.impulse?.(_v3.subVectors(c, a).setY(0).normalize().multiplyScalar(5).add(_v.set(0, 2, 0)), 5);
       fx.burst(c, 18, new THREE.Color(0xfff2c8), 3.5, 0.03, 0.3);
       sfx.slash(c, 0.6);
@@ -290,6 +350,27 @@ export class MahoragaSelf {
     return false;
   }
 
+  /** 마허라가 된 동안의 조작법 */
+  helpLines(mode) {
+    const stage = this._infStage();
+    const space = stage >= 2 ? '무하한에 적응(②)했다 — 크게 휘두르면 공간째 베는 참격이 12m 앞까지 날아가 무하한을 무시한다' : '무하한을 두른 적을 베면 법진이 분석한다 → ① 절반이 들어가고 ② 공간째 벤다 (그 뒤로 크게 휘두르면 공간 베기)';
+    if (mode === 'desktop') {
+      return [
+        { head: '마허라 (나)', color: '#ffd28a', text: '데스크톱에선 마허라가 된 뒤에도 V 주먹 · T 잡기만 쓸 수 있다 · H 메뉴' },
+        { head: '퇴마의 검 · 공간 베기', color: '#ffe0a0', text: space },
+      ];
+    }
+    const ctrl = mode === 'controller';
+    return [
+      { head: '퇴마의 검 (오른팔)', color: '#ffe0a0', text: '오른팔에 늘 붙어 있다 · 휘두르면 칼날이 지난 자리의 적을 벤다 (빠를수록 깊게, 저주에는 1.6배)' },
+      { head: '공간 베기 · 무하한', color: '#ffd28a', text: space },
+      { head: '거인의 주먹 (왼팔)', color: '#ffd0a0', text: ctrl ? '왼쪽 그립+트리거로 주먹을 쥐고 휘둘러 친다' : '왼손 주먹으로 친다 — 사람 주먹의 2.5배' },
+      { head: '잡기 · 박기 · 뜯기', color: '#ffb0a0', text: (ctrl ? '그립으로 잡기' : '손을 대고 주먹으로 잡기') + ' → 잡은 채로 땅이나 벽에 세게 박으면 큰 피해\n두 손으로 같은 적의 다른 부위를 잡고 세게 벌리면 뜯어낸다' },
+      { head: '법진 · 적응', color: '#ffe0a0', text: '맞은 성질을 분석해 적응하면 법진이 한 칸 돌며 몸이 완전히 회복된다' },
+      { head: '돌아가기', color: '#ffffff', text: ctrl ? '두 그립+트리거(주먹)를 가슴 앞에서 1초 맞대기' : '두 주먹을 가슴 앞에서 1초 맞대기' },
+    ];
+  }
+
   hudRows() {
     const w = this.ctx.world;
     return [
@@ -304,3 +385,39 @@ function segDist(p, a, b) {
   const t = THREE.MathUtils.clamp(_v2.subVectors(p, a).dot(ab) / Math.max(1e-6, ab.lengthSq()), 0, 1);
   return p.distanceTo(_v2.copy(a).addScaledVector(ab, t));
 }
+
+/** 두 선분 사이의 가장 가까운 거리 */
+function segSegDist(p1, q1, p2, q2) {
+  const d1 = _sA.subVectors(q1, p1);
+  const d2 = _sB.subVectors(q2, p2);
+  const r = _sC.subVectors(p1, p2);
+  const a = d1.dot(d1);
+  const e = d2.dot(d2);
+  const f = d2.dot(r);
+  let s = 0;
+  let t = 0;
+  if (a <= 1e-9 && e <= 1e-9) return r.length();
+  if (a <= 1e-9) t = THREE.MathUtils.clamp(f / e, 0, 1);
+  else {
+    const c = d1.dot(r);
+    if (e <= 1e-9) s = THREE.MathUtils.clamp(-c / a, 0, 1);
+    else {
+      const b = d1.dot(d2);
+      const den = a * e - b * b;
+      s = den !== 0 ? THREE.MathUtils.clamp((b * f - c * e) / den, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = THREE.MathUtils.clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+  return _sD.copy(p1).addScaledVector(d1, s).sub(_sC.copy(p2).addScaledVector(d2, t)).length();
+}
+const _sA = new THREE.Vector3();
+const _sB = new THREE.Vector3();
+const _sC = new THREE.Vector3();
+const _sD = new THREE.Vector3();

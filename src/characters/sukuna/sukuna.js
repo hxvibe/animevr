@@ -742,7 +742,7 @@ export class Sukuna {
         const r = (t.kind === 'dummy' ? 0.6 * t.scale : t.radius + 0.2);
         if (Math.abs(plane.distanceToPoint(c)) > r) continue;
         const cp = new THREE.Plane().setFromNormalAndCoplanarPoint(n, plane.projectPoint(c, new THREE.Vector3()));
-        t.damage(99999, { type: 'slash', plane: cp, push: n.clone().multiplyScalar(0.5) });
+        t.damage(99999, { type: 'slash', plane: cp, push: n.clone().multiplyScalar(0.5), vsInf: 2 }); // 세계를 가르는 참격: 공간째 — 무하한도 벤다
       }
       for (const pc of [...world.slicer.pieces]) {
         if (Math.abs(plane.distanceToPoint(pc.pivot.position)) < pc.radius && pc.localPlanes.length < 3) world.slicer.sliceAgain(pc, plane.clone(), { sep: 1 });

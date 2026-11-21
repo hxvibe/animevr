@@ -2385,7 +2385,9 @@ export class Adaptation {
     if (this.expo.has(k)) return;
     const lv = k.startsWith('atk:') ? this.atk.get(k.slice(4)) ?? 0 : this.res.get(k) ?? 0;
     if (lv >= 5) return;
-    this.expo.set(k, { t: 0, need: this.spin ? 0.6 : 2.2 + lv * 1.4 });
+    // 무하한은 닿지 않는 '현상' 자체라 분석이 빠르다 (닿을 때마다가 아니라 붙어 있는 동안 계속 분석)
+    const need = this.spin ? 0.6 : k === 'infinity' ? 1.4 + lv * 0.9 : 2.2 + lv * 1.4;
+    this.expo.set(k, { t: 0, need });
   }
 
   /** 분석을 진행하고 끝난 것 하나를 돌려준다 */
@@ -2758,7 +2760,7 @@ const MOVES = {
 };
 
 /** 무하한 적응 ②: 공간째 벤다 — 대상이 있는 공간에 검은 금이 가며 갈라진다 */
-function spaceCut(ctx, at, dir) {
+export function spaceCut(ctx, at, dir) {
   const g = new THREE.Group();
   const black = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.05), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.22), new THREE.MeshBasicMaterial({ color: 0xbfe4ff, side: THREE.DoubleSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));

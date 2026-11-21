@@ -819,8 +819,10 @@ export class Geto {
     if (mode === 'desktop') {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
-        { head: '주령 부르기', color: '#c8a0ff', text: '1 지네 · 2 큰코 · 3 데스웜 · 4 효수 · 5 쿠치사케온나 · 6 홍룡 · 7 타마모노마에 · 8~9 거둔 주령\n(조준한 대상을 노린다)' },
-        { head: '흡수 · 소용돌이', color: '#ffd28a', text: 'E: 가장 가까운 주령구를 끌어와 삼키기 · Q 누르고 있다 떼기: 극번 「渦」' },
+        { head: '주령 부르기', color: '#c8a0ff', text: '숫자 키 (조준한 대상을 노린다)\n1 지네 · 2 큰코 · 3 데스웜 · 4 효수 · 5 쿠치사케온나 · 6 홍룡 · 7 타마모노마에 · 8~9 거둔 주령' },
+        { head: '주령 흡수', color: '#ffd28a', text: 'E: 가장 가까운 주령구를 끌어와 삼키기' },
+        { head: '극번 「渦」', color: '#b080ff', text: 'Q 누르고 있기(모으기) → 떼면 발사' },
+        { head: '주먹 · 잡기', color: '#ffd0d0', text: 'V 주먹 · T 잡기 → 다시 T 던지기' },
       ];
     }
     return [

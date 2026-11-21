@@ -153,8 +153,16 @@ export class Megumi {
     if (mode === 'desktop') {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
-        { head: '식신', color: '#a8b8ff', text: '1 옥견 · 2 누에 · 3 가마 · 4 오로치 · 5 만상 · 6 탈토 · 7 관우 · 8 마허라\n(다시 누르면 돌려보내기 · 조준한 대상을 노린다)' },
-        { head: '영역 / 주먹', color: '#6f86ff', text: 'Q 1.2초: 嵌合暗翳庭 · V 주먹' },
+        { head: '玉犬 옥견', color: '#e8e8ff', text: '1 (다시 누르면 돌려보내기 · 조준한 대상을 노린다)' },
+        { head: '鵺 누에', color: '#c8d0ff', text: '2' },
+        { head: '蝦蟇 가마', color: '#b0e0b0', text: '3' },
+        { head: '大蛇 오로치', color: '#d0c0a0', text: '4' },
+        { head: '満象 만상', color: '#c0d8ff', text: '5' },
+        { head: '脱兎 탈토', color: '#ffffff', text: '6' },
+        { head: '貫牛 관우', color: '#ffc0a0', text: '7' },
+        { head: '魔虚羅 마허라', color: '#ffd28a', text: '8 (조복 전이면 조복의 의식 · 다시 누르면 돌려보내기)' },
+        { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: 'Q 1.2초 누르고 있기' },
+        { head: '주먹 · 잡기', color: '#ffd0d0', text: 'V 주먹(흑섬) · T 잡기 → 다시 T 던지기' },
       ];
     }
     return [

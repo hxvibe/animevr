@@ -1,5 +1,5 @@
 // VR UI: 타이틀(메인 메뉴) · 옵션 패널 · 손목 HUD · 만화풍 기술명 · 데미지 숫자 · 피격 효과
-import { CTRL_HELP, CTRL_LEGEND } from './ctrlHands.js';
+import { CTRL_HELP, CTRL_LEGEND, DESK_HELP, DESK_LEGEND } from './ctrlHands.js';
 import { worldCutPC } from '../characters/sukuna/sukuna.js';
 // 기본값이 기기에 따라 정해지는 설정
 const optVal = (S, k) => (k === 'worldCutPC' ? worldCutPC(S) : !!S[k]);
@@ -413,9 +413,16 @@ export class UI {
         ...ch.helpLines('hand').map((l) => ({ ...l, text: l.demo && CTRL_HELP[l.demo] ? CTRL_HELP[l.demo] : l.text })),
       ];
     }
+    // 데스크톱: 기술마다 키 · 마우스 (게토 · 메구미는 캐릭터가 직접 기술마다 적는다)
+    if (mode === 'desktop' && ch && ch.helpLines('hand').some((l) => DESK_HELP[ch.id + ':' + l.demo])) {
+      lines = [
+        { head: '키보드 · 마우스', color: '#ffffff', text: DESK_LEGEND },
+        ...ch.helpLines('hand').map((l) => ({ ...l, text: DESK_HELP[ch.id + ':' + l.demo] ?? l.text })),
+      ];
+    }
     if (ch && (ch.id === 'megumi' || ch.id === 'itadori')) {
       const after = '먹은 뒤: 解 · 捌 · 竈開 · 세계를 가르는 해를 함께 쓰고, 영역전개에 복마어주자(사당 · 참격 난사)가 겹친다';
-      const how = mode === 'desktop' ? 'T 키: 먹기' : mode === 'controller' ? '오른쪽 허리의 손가락에 컨트롤러를 대고 그립 → 입으로 가져가면 먹는다' + (ch.ctrlNative ? ' · 먹은 뒤 B: 정면 解' : '') : '오른쪽 허리의 손가락을 주먹(또는 집게)으로 쥐어 입으로 가져가면 먹는다';
+      const how = mode === 'desktop' ? 'X 키: 먹기' : mode === 'controller' ? '오른쪽 허리의 손가락에 컨트롤러를 대고 그립 → 입으로 가져가면 먹는다' + (ch.ctrlNative ? ' · 먹은 뒤 B: 정면 解' : '') : '오른쪽 허리의 손가락을 주먹(또는 집게)으로 쥐어 입으로 가져가면 먹는다';
       lines.push({ head: '宿儺の指 스쿠나의 손가락', color: '#ff6060', text: how + '\n' + after });
     }
     if (mode === 'hand' && this.ctx.settings.locomotion) lines.push({ head: '이동 (핸드트래킹)', color: '#7fd0ff', demo: 'common.loco', text: '왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기\n오른손 엄지 척 → 옆으로 밀면 30° 회전' });

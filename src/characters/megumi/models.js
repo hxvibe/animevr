@@ -259,10 +259,11 @@ export class SpringChain {
           p[i].copy(p[i - 1]).addScaledVector(_sa, L / d);
           for (const c of this.colliders) {
             c.bone.getWorldPosition(_sb);
-            if (c.off) _sb.add(c.off);
+            if (c.off) _sb.add(typeof c.off === 'function' ? c.off() : c.off);
+            const rr = typeof c.r === 'function' ? c.r() : c.r;
             _sa.subVectors(p[i], _sb);
             const dd = _sa.length();
-            if (dd < c.r && dd > 1e-6) p[i].copy(_sb).addScaledVector(_sa, c.r / dd);
+            if (dd < rr && dd > 1e-6) p[i].copy(_sb).addScaledVector(_sa, rr / dd);
           }
         }
       }

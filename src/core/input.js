@@ -372,7 +372,7 @@ export class Input {
       for (const hd of ['left', 'right']) {
         const m = slot.models[hd];
         const on = tracked && src.handedness === hd;
-        m.group.visible = on;
+        m.group.visible = on && !this.hideHands; // hideHands: 손이 다른 몸으로 바뀐 동안 (마허라)
         if (on) m.mesh.updateMesh();
       }
       if (!src) continue;

@@ -71,6 +71,17 @@ export class FingerRig {
     void P;
   }
 
+  /** 손가락마다 따로 (엄지 · 검지 · 중지 · 약지 · 새끼 순서, 0 폄 ~ 1 굽힘) — 플레이어 손가락을 그대로 옮길 때 */
+  applyEach(s, curls) {
+    this.hands[s].forEach((f, fi) => {
+      const c = curls[fi] ?? 0;
+      f.bones.forEach((bn, i) => {
+        const ang = f.thumb ? [0.25, 0.45, 0.5][i] * c : [0.95, 1.25, 0.8][i] * c;
+        bn.quaternion.copy(f.rest[i]).multiply(_q.setFromAxisAngle(f.axes[i], ang));
+      });
+    });
+  }
+
   /** curl: 0 폄 ~ 1 주먹, spread: 손가락 벌리기(쓰지 않음) */
   apply(dt, want = { L: 0.35, R: 0.35 }) {
     for (const s of ['L', 'R']) {
@@ -975,7 +986,12 @@ export class RiggedEnemy extends Dummy {
   }
 
   damage(amount, info = {}) {
-    if (this.infinityOn && amount > 0 && info.type !== 'domain') {
+    // 마허라의 무하한 적응: ① 주력 성질을 바꿔 중화 (절반은 들어간다) ② 공간째 벤다 (전부)
+    if (this.infinityOn && amount > 0 && info.type !== 'domain' && (info.vsInf ?? 0) >= 2) {
+      // 그대로
+    } else if (this.infinityOn && amount > 0 && info.type !== 'domain' && info.vsInf === 1) {
+      amount *= 0.5;
+    } else if (this.infinityOn && amount > 0 && info.type !== 'domain') {
       // 무하한: 닿기 직전에 멈춘다 (아주 조금만 들어간다)
       const W = this.world;
       const c = this.center(_v);

@@ -598,7 +598,8 @@ export class Megumi {
         return;
       }
       const m = new Mahoraga(this, inherit);
-      m.emerge(at(3.6, 0), yaw + Math.PI);
+      // 술사의 등 뒤 그림자에서 낮은 싸움 자세로 솟아오른다 (술사와 같은 쪽을 본다)
+      m.emerge(at(-3.4, 0.5), yaw);
       made = [m];
       // 의식 없이 부를 땐 음성의 앞부분 「布瑠部由良由良」만 (앞 0.4초 페이드 인, 4.7초에 페이드 아웃)
       const v = sfx.playClip('mahoragaSummon', { vol: 1.1, fadeIn: 0.4 });

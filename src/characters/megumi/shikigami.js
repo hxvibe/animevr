@@ -8,6 +8,7 @@ import { dummyTemplate, DUMMY_TYPES } from '../../core/dummy.js';
 import { shadowSplash } from './vfx.js';
 import { makeShiki, AX, SHIKI_MODELS, quadGait, tailFollow, SpringChain } from './models.js';
 import { getModel } from '../../core/assets.js';
+import { FingerRig } from '../../core/enemies.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -2343,10 +2344,12 @@ export function makeWheel(ctx, size = 1) {
 }
 
 // 적응: 같은 성질끼리는 내성을 절반쯤 나눠 갖는다 (참격을 익히면 팔(捌)도 어느 정도 버틴다)
-export const ADAPT_LABEL = { punch: '타격', impact: '충격', slash: '참격', pierce: '관통', bullet: '총탄', bolt: '전격', fire: '화염', erase: '소멸', evade: '회피 패턴', blood: '피' };
-const ADAPT_FAMILY = { slash: 'cut', pierce: 'cut', punch: 'blunt', impact: 'blunt', bullet: 'shot' };
+//  적응은 '술식'이 아니라 '현상의 성질'에 맞춘다: 해(解)와 팔(捌)은 같은 참격이라 내성을 나누지만, 같은 어주자라도 조(竈·불)는 따로.
+//  고죠의 무하한(속도 제어) · 창(인력) · 혁(척력) · 자(가상 질량)는 한 술식에서 나왔어도 성질이 달라 하나하나 따로 적응한다
+export const ADAPT_LABEL = { punch: '타격', impact: '충격', slash: '참격(解)', cleave: '참격(捌)', pierce: '관통', bullet: '총탄', bolt: '전격', fire: '화염', erase: '허식 「茈」', crush: '인력(蒼)', blast: '척력(赫)', infinity: '무하한', evade: '회피 패턴', blood: '피', soul: '영혼' };
+const ADAPT_FAMILY = { slash: 'cut', cleave: 'cut', pierce: 'cut', punch: 'blunt', impact: 'blunt', bullet: 'shot' };
 export function adaptKey(info = {}) {
-  return info.adapt ?? ({ cleave: 'slash', burn: 'fire' }[info.type] ?? info.type ?? 'punch');
+  return info.adapt ?? ({ burn: 'fire' }[info.type] ?? info.type ?? 'punch');
 }
 const kindLabel = (k) => (k === 'prop' ? '사물' : DUMMY_TYPES[k]?.label.replace(/\(.*\)/, '') ?? k);
 export function adaptLabel(k) {
@@ -2372,7 +2375,7 @@ export class Adaptation {
 
   /** 받는 피해 배율 */
   mul(k) {
-    return Math.pow(0.42, this.level(k)) * (this.spin ? 0.3 : 1);
+    return Math.pow(0.42, this.level(k)) * (this.spin ? 0.15 : 1);
   }
 
   /** 처음 닿은 성질은 분석을 시작한다 (분석이 끝나면 법진이 돈다) */
@@ -2567,6 +2570,7 @@ const MOVES = {
   hook: {
     dur: 1.05,
     cd: 2.5,
+    fistL: 1,
     events: [[0.42, 'impact']],
     pose(e, k) {
       const { J, G } = e;
@@ -2751,6 +2755,33 @@ const MOVES = {
   },
 };
 
+/** 무하한 적응 ②: 공간째 벤다 — 대상이 있는 공간에 검은 금이 가며 갈라진다 */
+function spaceCut(ctx, at, dir) {
+  const g = new THREE.Group();
+  const black = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.05), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.22), new THREE.MeshBasicMaterial({ color: 0xbfe4ff, side: THREE.DoubleSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  g.add(glow, black);
+  g.position.copy(at);
+  const d = dir.clone().setY(0);
+  if (d.lengthSq() < 1e-4) d.set(0, 0, 1);
+  g.lookAt(at.clone().add(d));
+  g.rotateZ((Math.random() - 0.5) * 1.6);
+  ctx.fx.addTransient(g, 0.7, (k) => {
+    const open = k < 0.2 ? k / 0.2 : 1;
+    g.scale.set(open, 1 + (k > 0.3 ? (k - 0.3) * 3 : 0), 1);
+    black.material.opacity = 1 - Math.max(0, k - 0.5) * 2;
+    glow.material.opacity = 0.8 * (1 - k);
+  }, () => {
+    black.geometry.dispose();
+    black.material.dispose();
+    glow.geometry.dispose();
+    glow.material.dispose();
+  });
+  ctx.fx.burst(at, 30, new THREE.Color(0xdff0ff), 4, 0.03, 0.4);
+  ctx.sfx.play('shimmer', { at, vol: 0.6, rate: 0.6 });
+  ctx.sfx.slash(at, 0.4);
+}
+
 /** 땅을 울리는 충격파 고리 */
 function shockRing(ctx, at, r) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
@@ -2800,6 +2831,8 @@ function swordWave(e, from, dir) {
   });
 }
 
+const _vT = new THREE.Vector3();
+
 export class Mahoraga extends Shiki {
   constructor(owner, inherit = null) {
     super(owner, { height: 4.6, riseDur: 2.2, sinkDur: 1.2, poolR: 2.6 });
@@ -2847,7 +2880,19 @@ export class Mahoraga extends Shiki {
         stiff: 0.11,
         damp: 0.92,
         gravity: 3.5,
-        colliders: [{ bone: R.get('chest'), r: 0.5 * u }, { bone: R.get('spine'), r: 0.45 * u }, { bone: R.get('hip'), r: 0.48 * u }],
+        // 등 · 허리 · 넓은 하카마(치마)를 구로 감싼다 — 몸집(growth)이 커지면 같이 커지고, 등 쪽으로 살짝 밀어 둔다
+        colliders: (() => {
+          const g = () => u * (this.body?.scale.x ?? 1);
+          const back = (d, down = 0) => () => _vT.set(-Math.sin(this.yaw) * d * g(), -down * g(), -Math.cos(this.yaw) * d * g());
+          return [
+            { bone: R.get('neck'), r: () => 0.3 * g(), off: back(0.05) },
+            { bone: R.get('chest'), r: () => 0.55 * g(), off: back(0.08) },
+            { bone: R.get('spine'), r: () => 0.52 * g(), off: back(0.08) },
+            { bone: R.get('hip'), r: () => 0.62 * g(), off: back(0.04) },
+            { bone: R.get('hip'), r: () => 0.72 * g(), off: back(0.02, 0.45) }, // 하카마 엉덩이
+            { bone: R.get('hip'), r: () => 0.78 * g(), off: back(0.0, 0.95) }, // 하카마 허벅지
+          ];
+        })(),
       });
       this.tailT = 0;
     } else {
@@ -2949,6 +2994,11 @@ export class Mahoraga extends Shiki {
     }
     this.hurtK = Math.min(1, this.hurtK + dmg / 120);
     this.ad.expose(k);
+    // 참격 적응 ①: 재생력이 절단력을 웃돈다 — 잘려 나간 살점을 그대로 집어 던져 반격
+    if ((k === 'slash' || k === 'cleave') && (this.ad.res.get('slash') ?? 0) >= 1 && (this._throwT ?? 0) <= 0 && dmg < this.hp) {
+      this._throwT = 1.2;
+      this._throwChunk(c);
+    }
     if (dmg >= this.hp) {
       this._annihilate(dmg >= this.maxHp * 0.5);
       return dmg;
@@ -2963,9 +3013,20 @@ export class Mahoraga extends Shiki {
     const k = done.key;
     this.wheelTarget += Math.PI / 4;
     this.hp = this.maxHp;
-    if (k === 'slash' || k === 'impact') {
-      // 몸을 부풀려 상대적으로 피해를 줄인다
-      this.growth = Math.min(1.22, this.growth * 1.05);
+    // 같은 성질에 거듭 적응할수록 더 근본적인 해법 — 앞의 것과 충돌하지 않으면 함께 쓴다
+    const lv = this.ad.res.get(k) ?? 0;
+    let how = null;
+    if (k === 'slash' || k === 'cleave') {
+      const L = this.ad.res.get('slash') ?? 0;
+      if (k === 'slash' && L === 1) how = '재생력이 절단력을 웃돈다 — 잘린 살점을 던져 반격';
+      else if (k === 'slash' && L === 2) {
+        how = '몸집을 키워 맷집으로 버틴다';
+        this.growth = Math.min(1.32, this.growth * 1.14);
+      } else if (L >= 3) how = '참격 그 자체에 적응';
+    } else if (k === 'impact') this.growth = Math.min(1.32, this.growth * 1.05);
+    if (k === 'infinity') {
+      this.infStage = Math.min(2, lv);
+      how = lv === 1 ? '주력의 성질을 바꿔 무하한을 중화한다' : '공간째 벤다 — 무하한이 의미를 잃는다';
     }
     if (k === 'evade') {
       // 술사가 피하는 패턴에 적응: 더 멀리, 더 빨리 벤다
@@ -2978,9 +3039,9 @@ export class Mahoraga extends Shiki {
     // 재생: 상처에서 하얀 김이 피어오르며 한순간에 아문다
     const c = this.aimPoint(_v2);
     for (let i = 0; i < 10; i++) fx.fire.smoke(_v3.copy(c).add(_v4.randomDirection().multiplyScalar(0.9 * this.growth)), _v4.set(0, 1.2, 0), { size0: 0.3, size1: 1.1, life: 0.9, shade: 1, lit: 0, opacity: 0.3, drag: 2, rise: 0.6 });
-    ui.callout(`적응 · ${adaptLabel(k)}`, { color: '#ffe0a0', size: 44, dur: 0.9 });
+    ui.callout(how ? `적응 · ${adaptLabel(k)} ${'①②③④⑤'[Math.min(4, lv - 1)]} — ${how}` : `적응 · ${adaptLabel(k)}`, { color: '#ffe0a0', size: how ? 36 : 44, dur: how ? 2.2 : 0.9 });
     if (done.spinNow) {
-      ui.callout('법진 무한회전 — 존재 그 자체에 적응한다', { color: '#ffd28a', size: 40, dur: 2 });
+      ui.callout('법진 무한회전 — 존재 그 자체에 적응한다 (그 상대가 일으키는 모든 현상이 거의 통하지 않는다)', { color: '#ffd28a', size: 36, dur: 2.5 });
       sfx.play('domain_open', { at: wp, vol: 0.4, rate: 1.4 });
     }
   }
@@ -3069,19 +3130,55 @@ export class Mahoraga extends Shiki {
     R.rot('L_elbow', AX.X, J.elL.rotation.x - 0.2);
     R.rot('R_elbow', AX.X, J.elR.rotation.x - 0.2);
     R.rot('R_wrist', AX.X, G.wrist);
-    R.rot('L_leg', AX.X, -J.hpL.rotation.x);
-    R.rot('R_leg', AX.X, -J.hpR.rotation.x);
-    R.rot('L_knee', AX.X, J.knL.rotation.x);
-    R.rot('R_knee', AX.X, J.knR.rotation.x);
-    R.rot('L_ankle', AX.X, G.anL);
-    R.rot('R_ankle', AX.X, G.anR);
+    // 싸움 자세 (그림처럼): 다리를 넓게 벌려 무릎을 바깥으로 굽히고 낮게 — 걸음·기술 위에 더한다
+    const s = this.stanceK ?? 0;
+    const splay = 0.4 * s;
+    R.rot('L_leg', AX.Z, splay);
+    R.rot('R_leg', AX.Z, -splay);
+    R.rot('L_leg', AX.X, -J.hpL.rotation.x - 0.32 * s);
+    R.rot('R_leg', AX.X, -J.hpR.rotation.x - 0.22 * s);
+    R.rot('L_knee', AX.X, J.knL.rotation.x + 0.78 * s);
+    R.rot('R_knee', AX.X, J.knR.rotation.x + 0.7 * s);
+    R.rot('L_ankle', AX.X, G.anL - 0.42 * s);
+    R.rot('R_ankle', AX.X, G.anR - 0.4 * s);
+    R.rot('L_ankle', AX.Z, -splay * 0.9);
+    R.rot('R_ankle', AX.Z, splay * 0.9);
+    // 가만히 있을 땐 칼을 앞 아래로 겨누고 왼손은 낮게 벌린다
+    const a = this.stanceArm ?? 0;
+    if (a > 0.01) {
+      R.rot('R_arm', AX.X, -0.55 * a);
+      R.rot('R_arm', AX.Z, -0.25 * a);
+      R.rot('R_elbow', AX.X, -0.25 * a);
+      R.rot('R_wrist', AX.X, -0.5 * a);
+      R.rot('L_arm', AX.Z, 0.45 * a);
+      R.rot('L_arm', AX.X, -0.25 * a);
+      R.rot('L_elbow', AX.X, -0.35 * a);
+      R.rot('spine', AX.Y, -0.18 * a);
+      R.rot('chest', AX.X, 0.2 * a);
+      R.rot('head', AX.X, -0.15 * a);
+    }
+    R.rot('spine', AX.X, 0.18 * s);
+    R.rot('neck', AX.X, -0.12 * s);
   }
 
   update(dt) {
     const alive = this._update(dt);
+    if (alive) {
+      // 싸울 상대가 있거나 기술 중이면 낮은 싸움 자세 (빨리 걸을수록 덜), 솟아오를 때도
+      const fight = this.state !== 'act' || this.move || this.swingT > 0 || (this.hostile && !this.tamed) || (this.target?.alive ?? false);
+      const want = fight ? 1 - Math.min(1, this.speed / 3) * 0.65 : 0.15;
+      this.stanceK = damp(this.stanceK ?? 1, want, 5, dt);
+      const armWant = !this.move && this.swingT <= 0 && this.speed < 0.5 && fight ? 1 : 0;
+      this.stanceArm = damp(this.stanceArm ?? 0, armWant, 4, dt);
+      if (this.state !== 'act') this.stanceK = this.stanceArm = 1;
+    }
     if (alive && this.M) {
       this.tailT = (this.tailT ?? 0) + dt;
       this._applyRig();
+      // 손가락: 칼을 단 오른손도, 왼손도 늘 주먹을 꽉 쥔다
+      this.fingers ??= new FingerRig({ mapId: 'jjk', clone: this.M.root, bones: this.M.rig.bones });
+      const fistL = this.move?.M?.fistL ?? 0.95; // 평소에도 주먹을 쥐고 있다
+      this.fingers.apply(dt, { L: fistL, R: 0.95 });
       this.root.updateMatrixWorld(true);
       this.tail?.update(dt, this.body.scale.x * this.M.scale);
     }
@@ -3117,6 +3214,7 @@ export class Mahoraga extends Shiki {
       this.ctx.ui.callout('조복의 의식 — 마허라가 술사부터 노린다 · 쓰러뜨리면 조복, 쓰러지면 술사가 마허라가 된다', { color: '#ffb0b0', dur: 3.5 });
     }
     for (const k in this.moveCds) this.moveCds[k] -= dt;
+    this._throwT = (this._throwT ?? 0) - dt;
     if (this.move) {
       this._runMove(dt);
       return true;
@@ -3237,6 +3335,83 @@ export class Mahoraga extends Shiki {
     }
   }
 
+  /** 술사를 친다: 술사(고죠)의 무하한에 막히면 무하한을 분석하고, 적응 단계에 따라 뚫는다 */
+  _playerHit(at, dmg, type, dir) {
+    const W = this.ctx.world;
+    if (W.meleeShield?.(this, at)) {
+      this.ad.expose('infinity');
+      const st = this.infStage ?? 0;
+      if (st === 0) return false;
+      if (st >= 2) spaceCut(this.ctx, at, dir ?? _v3.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)));
+      dmg *= st >= 2 ? 1 : 0.5;
+    }
+    W.hitPlayer(dmg, { type, src: this });
+    return true;
+  }
+
+  /** 상대가 무하한을 두르고 있으면 분석 (뚫는 정도는 damage 의 vsInf 로) */
+  _vsInfinity(t, c, dir) {
+    if (!t.infinityOn) return;
+    this.ad.expose('infinity');
+    if ((this.infStage ?? 0) >= 2) spaceCut(this.ctx, c, dir ?? _v3.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)));
+  }
+
+  /** 참격 적응 ①: 잘려 나간 살점을 집어 던진다 */
+  _throwChunk(from) {
+    const { world, input: inp, fx, sfx } = this.ctx;
+    let to = null;
+    if (this.hostile && !this.tamed) to = inp.head.clone().add(_v3.set(0, -0.4, 0));
+    else {
+      let best = 18;
+      for (const t of world.enemies()) {
+        if (!t.alive || t.heldBy) continue;
+        const c = t.center(new THREE.Vector3());
+        const d = c.distanceTo(from);
+        if (d < best) {
+          best = d;
+          to = c;
+        }
+      }
+    }
+    if (!to) return;
+    const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28 * this.growth, 0), new THREE.MeshToonMaterial({ color: 0xe8e2d8 }));
+    mesh.position.copy(from);
+    const T = Math.max(0.35, from.distanceTo(to) / 14);
+    const v = to.clone().sub(from).divideScalar(T);
+    v.y += 4.9 * T;
+    const hostile = this.hostile && !this.tamed;
+    let done = false;
+    fx.addTransient(mesh, T + 0.3, (_k, dt) => {
+      if (done) return;
+      v.y -= 9.8 * dt;
+      mesh.position.addScaledVector(v, dt);
+      mesh.rotation.x += dt * 9;
+      mesh.rotation.z += dt * 6;
+      if (Math.random() < 0.5) fx.spawn(mesh.position.clone(), _v3.set(0, 0, 0), new THREE.Color(0x8a1a1a), 0.05, 0.3, 2, 0);
+      if (hostile) {
+        if (mesh.position.distanceTo(inp.head) < 0.7) {
+          done = true;
+          mesh.visible = false;
+          this._playerHit(mesh.position.clone(), 15, 'impact', v.clone().normalize());
+        }
+      } else {
+        for (const t of world.enemies()) {
+          if (!t.alive || t.center(_v3).distanceTo(mesh.position) > 0.6 * (t.scale ?? 1)) continue;
+          done = true;
+          mesh.visible = false;
+          t.damage(45 * this.growth, { type: 'impact', push: v.clone().normalize().multiplyScalar(3) });
+          t.impulse?.(v.clone().normalize().multiplyScalar(5), 3);
+          fx.burst(mesh.position, 20, new THREE.Color(0x8a1a1a), 3, 0.05, 0.4);
+          break;
+        }
+      }
+    }, () => {
+      mesh.geometry.dispose();
+      mesh.material.dispose();
+    });
+    sfx.whoosh(from, 0.7, 0.6);
+  }
+
   /** 술사를 겨눌 때 쓰는 가짜 대상 */
   _playerTgt() {
     const inp = this.ctx.input;
@@ -3339,8 +3514,7 @@ export class Mahoraga extends Shiki {
       const ph = _v4.copy(inp.head).add(_v3.set(0, -0.5, 0));
       if (!this.ctx.character?.possessed && !m?.hitSet.has('player') && test(ph)) {
         m?.hitSet.add('player');
-        world.hitPlayer(o.pdmg ?? 30, { type: o.type ?? 'slash', src: this });
-        fx.burst(ph, 24, new THREE.Color(0xff3030), 3, 0.04, 0.4);
+        if (this._playerHit(ph.clone(), o.pdmg ?? 30, o.type ?? 'slash', o.push)) fx.burst(ph, 24, new THREE.Color(0xff3030), 3, 0.04, 0.4);
         any = true;
       }
       for (const s2 of this.owner.list) {
@@ -3367,7 +3541,8 @@ export class Mahoraga extends Shiki {
       const a = this.adapt.get(key) ?? 0;
       const dmg = o.dmg * (1 + a * 0.35) * this.growth;
       const plane = o.plane ?? new THREE.Plane().setFromNormalAndCoplanarPoint(_v3.randomDirection(), c);
-      t.damage(dmg, { type: o.type ?? 'slash', plane: o.type === 'slash' ? plane : undefined, push: o.push?.clone().multiplyScalar(2), color: '#ffe0a0' });
+      this._vsInfinity(t, c, o.push);
+      t.damage(dmg, { type: o.type ?? 'slash', plane: o.type === 'slash' ? plane : undefined, push: o.push?.clone().multiplyScalar(2), color: '#ffe0a0', vsInf: this.infStage ?? 0 });
       if (o.push) t.impulse?.(o.push.clone().multiplyScalar(o.force ?? 4).add(_v4.set(0, o.up ?? 2, 0)), o.force ?? 4);
       if (t.kind !== 'prop') this.ad.expose('atk:' + key);
       fx.burst(c, 20, new THREE.Color(0xffffff), 4, 0.03, 0.3);
@@ -3409,8 +3584,7 @@ export class Mahoraga extends Shiki {
     if (this.hostile && !this.tamed) {
       // 조복 의식: 술사와 술사의 식신을 벤다. 빗나가면 피하는 패턴을 분석한다
       if (_v2.copy(inp.head).setY(0).distanceTo(_v4.copy(P).setY(0)) < (2.9 + this.reach) * this.growth) {
-        world.hitPlayer(30, { type: 'slash', src: this });
-        fx.burst(inp.head.clone().add(_v2.set(0, -0.3, 0)), 30, new THREE.Color(0xff3030), 3, 0.04, 0.4);
+        if (this._playerHit(inp.head.clone().add(_v2.set(0, -0.3, 0)), 30, 'slash', fwd)) fx.burst(inp.head.clone().add(_v2.set(0, -0.3, 0)), 30, new THREE.Color(0xff3030), 3, 0.04, 0.4);
         this.misses = 0;
       } else if (++this.misses >= 2) {
         this.misses = 0;
@@ -3433,7 +3607,8 @@ export class Mahoraga extends Shiki {
       const a = this.adapt.get(key) ?? 0;
       const dmg = 140 * (1 + a * 0.35) * this.growth;
       const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, c);
-      t.damage(dmg, { type: 'slash', plane, push: fwd.clone().multiplyScalar(2), color: '#ffe0a0' });
+      this._vsInfinity(t, c, fwd);
+      t.damage(dmg, { type: 'slash', plane, push: fwd.clone().multiplyScalar(2), color: '#ffe0a0', vsInf: this.infStage ?? 0 });
       t.impulse?.(fwd.clone().multiplyScalar(4).add(_v4.set(0, 2, 0)), 4);
       if (t.kind !== 'prop') this.ad.expose('atk:' + key);
       hitAny = true;
@@ -3520,7 +3695,7 @@ export class Mahoraga extends Shiki {
     G.breath = Math.sin(this.breathT * 1.3) * 0.025;
     if (this.state === 'act') {
       const prevY = this.body.position.y;
-      this.body.position.y = G.bob;
+      this.body.position.y = G.bob - 0.5 * (this.stanceK ?? 0);
       // 몸이 내려가면 뿔은 늦게 따라 내려온다
       G.hairLag = damp(G.hairLag, THREE.MathUtils.clamp((this.body.position.y - prevY) / Math.max(dt, 1e-3) * 0.6, -0.4, 0.4), 6, dt);
     }

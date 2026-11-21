@@ -1,0 +1,3769 @@
+[
+ {
+  "k": "게토 스구루",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "극번 「渦」",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "쓰러졌다… 주령이 몸을 감싸 일으킨다",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주력 부족",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/core/caster.js"
+  ]
+ },
+ {
+  "k": "{0} — 이미 나가 있다",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "데스웜",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "큰코 주령",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "{0} · 주령구",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "{0} 조복 — 주령구를 쥐고 삼켜라",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "{0} 흡수 — …토사물을 닦은 걸레 맛",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "{0} 흡수 — 주령조술로 부릴 수 있다",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "극번「渦」",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "술식 추출 — {0} 「{1}」",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "소용돌이를 풀었다",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "극번 「소용돌이」",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "저급 주령 {0}마리{1}",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주령구 꺼내기 · 부르기",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "왼손바닥을 하늘로 펴서 가슴 앞에 → 가진 주령의 주령구가 떠오른다\n오른손으로 하나를 쥐고 던지기 → 떨어진 곳·맞힌 대상에서 주령이 나온다 (그냥 놓으면 바라보는 곳)",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주령 흡수",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "쓰러뜨린 주령은 주령구가 된다 → 손으로 쥐거나, 편 손바닥을 향하고 몸 쪽으로 당겨 끌어오기\n멀리 있으면: 편 손의 손끝(컨트롤러는 컨트롤러 앞쪽 = 레이저 방향)으로 주령구를 가리켜 커지며 깜빡이면 쥐기 → 손으로 날아온다\n쥔 주령구를 입에 가져가면 삼킨다 → 다음부터 부를 수 있다 (주력 회복)",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "극번 「渦」 소용돌이",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "두 손바닥을 마주 보게 (공을 감싸 쥐듯) → 저급 주령이 모여 검은 구가 커진다\n두 손을 앞으로 밀면 발사 · 2초 넘게 모으면 거둔 특급 주령을 녹여 술식 추출 · 손을 풀면 취소",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "체술",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주먹으로 치기 · 잡기 (게토는 체술도 1급 이상)",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "조작 (데스크톱)",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "주령 부르기",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "숫자 키 (조준한 대상을 노린다)\n1 지네 · 2 큰코 · 3 데스웜 · 4 효수 · 5 쿠치사케온나 · 6 홍룡 · 7 타마모노마에 · 8~9 거둔 주령",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "E: 가장 가까운 주령구를 끌어와 삼키기",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "Q 누르고 있기(모으기) → 떼면 발사",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주먹 · 잡기",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "V 주먹 · T 잡기 → 다시 T 던지기",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주령 고르기 · 부르기",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "왼쪽 트리거: 고르기 · 오른쪽 트리거: 부르기 (바라본 대상)",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "흡수",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주령구를 그립으로 쥐어 입으로 · 컨트롤러 앞쪽(레이저 방향)으로 주령구를 가리켜 커지며 깜빡이면 그립 → 끌어오기",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "두 그립을 쥐고 두 손을 모은다 → 앞으로 밀어 발사",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "주력",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "체력",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js",
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "주령",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "{0}마리 대기 · {1} 출격",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "저급 주령",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "처치",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "소용돌이",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "{0}마리{1}",
+  "f": [
+   "src/characters/geto/geto.js"
+  ]
+ },
+ {
+  "k": "선택",
+  "f": [
+   "src/characters/geto/geto.js",
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "지네 주령",
+  "f": [
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "2급",
+  "f": [
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "1급",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "효수 주령",
+  "f": [
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "쿠치사케온나",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "가상원령",
+  "f": [
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "홍룡",
+  "f": [
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "특급",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/characters/yuta/yuta.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "타마모노마에",
+  "f": [
+   "src/characters/geto/summons.js"
+  ]
+ },
+ {
+  "k": "마히토",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/characters/index.js",
+   "src/characters/mahito/mahito.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "죠고",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/characters/index.js",
+   "src/characters/jogo/jogo.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "손가락 보유자",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "나, 예뻐?",
+  "f": [
+   "src/characters/geto/summons.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "고죠 사토루",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/index.js",
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "술식순전 「蒼」 — 인력",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "검지+중지로 앞을 가리키면 손가락 끝에 생성\n그 상태로 손을 펴면 창이 손을 따라 멀리 이동(팔을 뻗을수록 멀리)",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "술식반전 「赫」 — 척력",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "검지만 펴서 충전 → 앞으로 찌르거나 손을 펴면 발사",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "창 ↔ 혁 전환 · 취소",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "창 상태에서 검지만 → 혁 / 혁 상태에서 검지+중지 → 창 · 주먹을 쥐면 사라짐",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "허식 「茈」 — 소멸",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "수인: 검지·중지를 접고 그 위에 엄지를 얹은 채 약지·새끼를 펴기\n→ 왼쪽의 창과 오른쪽의 혁이 다가와 합쳐져 茈 완성 → 손을 펴거나 앞으로 밀면 발사 · 주먹은 취소",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "영역전개 「無量空処」",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "검지·중지를 꼬아서 얼굴 앞에 세우고 6초 유지 (수인표 · 1초째부터 영창)\n전개 중 같은 자세 1.5초 → 해제 · 설정에서 손동작 끄기 / 메뉴에서 발동",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "무하한 · 육안 · 잡기 · 흑섬",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "무하한: 양 손바닥을 앞으로 1초 · 육안: 손으로 눈을 0.5초 가리기\n더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 빠르게 주먹으로 치면 흑섬 확률",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "우클릭 유지: 창 (휠: 거리) · 좌클릭 충전 후 놓기: 혁",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "E 유지 → 창·혁이 섞여 茈 완성 → E를 놓으면 발사",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "無量空処 / 토글",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "Q 6초: 영역전개 · I 무하한 · O 육안 · V 주먹(흑섬)",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "왼쪽 트리거 유지. 팔을 뻗을수록 멀리 생성",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "오른쪽 트리거로 충전 → 놓거나 앞으로 찌르면 발사",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "창 + 혁 유지 상태로 두 컨트롤러를 맞대기 → 밀거나 트리거를 놓아 발사",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "양쪽 스틱을 눌러 6초 (1초째부터 영창, 메뉴에서도 발동)",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "버튼",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "X 무하한 · A 육안 · Y 메뉴\n그립: 더미 잡기/던지기 · 그립 쥐고 휘둘러 치기 → 흑섬",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "준비",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "전개 중 {0}s",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "전개 중",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "재사용 {0}s",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "무하한",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "육안",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "ON (소모 -70%)",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "영역",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "무하한 해제",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "육안 봉인",
+  "f": [
+   "src/characters/gojo/gojo.js"
+  ]
+ },
+ {
+  "k": "영역전개 재사용 대기 중",
+  "f": [
+   "src/characters/gojo/gojo.js",
+   "src/characters/itadori/itadori.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js",
+   "src/core/caster.js"
+  ]
+ },
+ {
+  "k": "주술회전",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "무하한 주술 · 육안",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "료멘 스쿠나",
+  "f": [
+   "src/characters/index.js",
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "어주자(御廚子)",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "이타도리 유지",
+  "f": [
+   "src/characters/index.js",
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "체술 · 흑섬 · 적혈조술",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "후시구로 메구미",
+  "f": [
+   "src/characters/index.js",
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "십종영법술",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "주령조술",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "옷코츠 유타",
+  "f": [
+   "src/characters/index.js",
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카 · 모방 · 반전술식",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "무위전변",
+  "f": [
+   "src/characters/index.js",
+   "src/characters/mahito/mahito.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "화산 · 화력 조작",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "쿠기사키 노바라",
+  "f": [
+   "src/characters/index.js",
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "추령주법(芻霊呪法)",
+  "f": [
+   "src/characters/index.js"
+  ]
+ },
+ {
+  "k": "영역전개",
+  "f": [
+   "src/characters/itadori/itadori.js",
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js",
+   "src/characters/megumi/megumi.js",
+   "src/characters/nobara/nobara.js",
+   "src/characters/yuta/yuta.js",
+   "src/core/enemies.js",
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "쓰러졌다… 반전술식으로 회복",
+  "f": [
+   "src/characters/itadori/itadori.js",
+   "src/core/world.js"
+  ]
+ },
+ {
+  "k": "주먹 · 경정권(逕庭拳)",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "주먹으로 더미를 치면 한 박자 늦게 주력이 한 번 더 터진다 (2타)",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "흑섬(黒閃)",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "손을 편 채 휘두르다 닿기 직전에 주먹을 쥐면 흑섬 확정\n흑섬 뒤 8초는 존: 흑섬 확률↑ · 연속 기록",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "어주자 「解」",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "검지·중지를 편 가위 손으로 더미를 건드리기 → 절취선이 그어지고 싹둑\n영역 안에서는 가위 손으로 0.25초 가리키기만 해도 된다",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "적혈조술 「穿血」",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "두 손바닥을 맞대고 손끝을 앞으로 (백렴: 피가 압축된다)\n0.5초 이상 모은 뒤 두 손을 떼면 손끝 방향으로 발사",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "두 손을 깍지 끼고 두 검지만 맞대어 위로 세워 1.5초 (수인표)\n안의 모든 것에 영혼을 가르는 해가 필중 · 메뉴에서도 발동",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "잡기",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "더미에 손을 대고 천천히 주먹 → 잡기, 펴면 던지기",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "주먹 · 흑섬",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "좌클릭: 조준한 2.6m 이내 더미를 친다 (경정권 2타, 확률적으로 흑섬)",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "우클릭: 조준한 2.6m 이내 더미에 절취선 (영역 안에서는 거리 무관)",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "穿血 / 영역",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "C 길게 눌러 모으기 → 떼면 발사 · Q 1.5초: 영역전개",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "주먹 · 경정권 · 흑섬",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "그립 쥐고 휘둘러 치기 (2타) · 닿기 직전에 그립을 쥐면 흑섬 확정",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "컨트롤러를 더미에 대고 A/X 버튼 (영역 안에서는 겨누고 A/X)",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "두 컨트롤러를 맞대고 양쪽 그립 유지 → 하나를 놓으면 발사",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "양쪽 스틱을 눌러 1.5초 (메뉴에서도 발동)",
+  "f": [
+   "src/characters/itadori/itadori.js",
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "Y 메뉴",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": " · 존 {0}s",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "흑섬",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "연속 {0} · 최고 {1}{2}",
+  "f": [
+   "src/characters/itadori/itadori.js"
+  ]
+ },
+ {
+  "k": "화산이 다시 끓어오른다",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "화력충",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "주먹을 쥐었다가 앞으로 휙 던지며 손을 펴기 → 불벌레 넷이 바라본 대상에게 날아가 터진다",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "열선",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "검지(또는 검지·중지)로 가리키고 있으면 손끝에서 일직선의 불길 (주력을 계속 쓴다)",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "화산두",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "두 손으로 정수리를 짚고 0.4초 → 머리의 분화구에서 바라본 곳으로 용암을 쏜다",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "분화",
+  "f": [
+   "src/characters/jogo/jogo.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "손바닥을 아래로 해 빠르게 내리찍기 → 바라본 땅에서 불기둥",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "연옥",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "두 손바닥을 마주 보게 해 불을 모은다 → 두 손을 앞으로 밀어 던지기 (오래 모을수록 크다)",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "극번 「隕」",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "두 손을 머리 위로 높이 들고 손바닥을 하늘로 1.5초 → 바라본 곳에 거대한 운석",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "영역전개 「蓋棺鉄囲山」",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "두 손 손가락을 서로 엇갈려 끼우고 손끝을 맞은편으로 (지붕 모양) 1.2초\n들어온 것은 모두 탄다 · 메뉴에서도 발동",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "도깨비불",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "주먹으로 치면 고열로 불이 붙는다",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "불",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "1 화력충 · 2 열선(누르고 있기) · 3 화산두 · 4 분화 · 5 연옥(누르고 떼기) · 6 극번 「隕」 · Q 1.2초 영역전개",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "오른쪽 트리거: 열선 · 왼쪽 트리거: 화력충 · A: 분화 · B 길게: 화산두",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "연옥 · 극번",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "두 그립을 쥐고 손을 모았다가 밀기: 연옥 · 두 그립을 머리 위로 1.5초: 극번 「隕」",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "양쪽 스틱을 눌러 1.2초",
+  "f": [
+   "src/characters/jogo/jogo.js",
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "극번",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "극번 재사용 {0}s",
+  "f": [
+   "src/characters/jogo/jogo.js"
+  ]
+ },
+ {
+  "k": "몸이 부서졌다… 영혼의 형태를 다시 빚는다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "무위전변 — 영혼 만지기",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "편 맨손바닥으로 상대를 0.2초 만지면 영혼을 비틀어 개조 인간으로 (특급은 큰 피해)\n주먹이나 변형한 손으로는 발동하지 않는다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "칼날 팔",
+  "f": [
+   "src/characters/mahito/mahito.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "검지·중지를 곧게 펴 칼처럼 세우고(손바닥을 옆으로) 0.35초 → 손이 칼날로 바뀐다 → 휘둘러 베기\n주먹을 쥐면 되돌아온다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "드릴 팔",
+  "f": [
+   "src/characters/mahito/mahito.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "주먹을 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르면 꿰뚫는다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "늘어나는 팔",
+  "f": [
+   "src/characters/mahito/mahito.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "검지로 앞을 빠르게 찌르면 팔이 7m까지 늘어나 때리고 끌어당긴다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "개조인간 발사",
+  "f": [
+   "src/characters/mahito/mahito.js",
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "주먹을 입에 0.25초 → 입에서 개조 인간 스톡(체스 말만 하게 줄여 둔 개조 인간)을 꺼내 쥔다 → 앞으로 던지면\n풀려나 벌레 같은 개조 인간으로 자라나 바라본 적을 물어뜯는다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "다중혼 「撥体」",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "두 손바닥을 가슴 앞에서 맞대 0.4초 → 입에서 스톡 8개가 나와 두 손 사이에 모인다 (영혼을 합친다)\n두 손을 앞으로 밀면 개조 인간 8명이 한 덩어리로 꼬여 튀어나간다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "영역전개 「自閉円頓裹」",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "두 손 검지 끝을 맞대고 엄지 끝도 맞대 손가락을 위로 (마름모) 1.2초\n안의 모든 영혼에 무위전변이 필중 · 메뉴에서도 발동",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "E: 1.6m 안의 조준한 대상을 만진다",
+  "f": [
+   "src/characters/mahito/mahito.js",
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "몸 변형",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "1 칼날 베기 · 2 드릴 찌르기 · 3 늘어나는 팔 · 4 다중혼 발체 · 5 개조인간 발사 · Q 1.2초 영역전개",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "그립을 쥐지 않은 손을 대상에 대고 트리거",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "오른쪽 그립: 칼날 팔 (휘두르기) · 왼쪽 그립: 드릴 팔 (찌르기) · A: 늘어나는 팔 · X: 스톡 꺼내기 → 떼면 던지기 · 양쪽 그립을 모으고 밀기: 발체",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "변형",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "칼날",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "드릴",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "맨손",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "개조 인간",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "개조 인간 스톡 — 입에서 꺼냈다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "다중혼 — 개조 인간 8명의 영혼을 합친다",
+  "f": [
+   "src/characters/mahito/mahito.js"
+  ]
+ },
+ {
+  "k": "옥견",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "누에",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "가마",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "오로치",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "만상",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "탈토",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "관우",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "마허라",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "쓰러졌다… 그림자 속에서 다시 일어선다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "{0} 파괴 — 남은 옥견이 힘을 이어받는다 (다음 옥견 수인: 玉犬・渾)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "{0} 파괴 — 다시 부를 수 없다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "玉犬 옥견 · 鵺 누에",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "옥견: 두 손을 포개 손날을 세우고 네 손가락을 앞으로 곧게, 엄지를 세운다 (개 머리와 귀)\n누에: 두 손바닥을 내 쪽으로 해 손목을 X자로 겹치고 손가락을 날개처럼 펴기 (엄지를 걸어도 OK)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "蝦蟇 가마 · 脱兎 탈토",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "가마: 두 손 검지 끝끼리, 엄지 끝끼리 맞대 마름모 (두꺼비 얼굴) → 혀로 끌어온다\n탈토: 한 손 검지·중지를 얼굴 옆에서 토끼 귀처럼 세우기 → 더미가 토끼를 쫓는다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "大蛇 오로치 · 満象 만상",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "貫牛 관우",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "魔虚羅 마허라",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "두 주먹을 가슴 높이에서 맞대고 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "영역전개 「嵌合暗翳庭」",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "팔을 앞으로 뻗어 허리 아래에서 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "공통",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "玉犬 옥견",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "1 (다시 누르면 돌려보내기 · 조준한 대상을 노린다)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "鵺 누에",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "蝦蟇 가마",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "大蛇 오로치",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "満象 만상",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "脱兎 탈토",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "8 (조복 전이면 조복의 의식 · 다시 누르면 돌려보내기)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "Q 1.2초 누르고 있기",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "V 주먹(흑섬) · T 잡기 → 다시 T 던지기",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "식신 고르기 · 부르기",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "왼쪽 트리거: 식신 고르기 · 오른쪽 트리거: 부르기 (바라본 대상을 노린다)\n다시 부르면 돌려보내기",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "양쪽 스틱을 눌러 1.2초 (메뉴에서도 발동)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "그립 쥐고 휘둘러 치기 → 흑섬 · Y 메뉴",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "영창 중",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "식신",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "마허라 (조복 의식)",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "적응",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "법진 적응",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/possess.js"
+  ]
+ },
+ {
+  "k": " · 무한회전",
+  "f": [
+   "src/characters/megumi/megumi.js",
+   "src/characters/megumi/possess.js"
+  ]
+ },
+ {
+  "k": "십종영법술이 망가졌다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "{0} 해제",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "{0}은(는) 파괴되어 부를 수 없다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "법진만 소환 — 받는 공격에 적응한다 · 같은 수인으로 마허라",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "마허라 재소환 대기 {0}s",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "대상이 없다",
+  "f": [
+   "src/characters/megumi/megumi.js"
+  ]
+ },
+ {
+  "k": "술사가 쓰러져 마허라가 되었다 — 두 손이 마허라의 팔, 오른팔엔 퇴마의 검 · 두 주먹을 가슴 앞에 1초 맞대면 돌아온다",
+  "f": [
+   "src/characters/megumi/possess.js"
+  ]
+ },
+ {
+  "k": "마허라의 몸이 무너졌다… 술사로 돌아왔다",
+  "f": [
+   "src/characters/megumi/possess.js"
+  ]
+ },
+ {
+  "k": "술사로 돌아왔다",
+  "f": [
+   "src/characters/megumi/possess.js"
+  ]
+ },
+ {
+  "k": "마허라(나)",
+  "f": [
+   "src/characters/megumi/possess.js"
+  ]
+ },
+ {
+  "k": "옥견 白",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "옥견 黒",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "옥견 혼",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "타격",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "충격",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "참격(解)",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "참격(捌)",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "관통",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "총탄",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "전격",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "화염",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "허식 「茈」",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "인력(蒼)",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "척력(赫)",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "회피 패턴",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "피",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "영혼",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "사물",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "{0} 공략",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "{0} 공략{1}",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "법진",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "적",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "법진 적응 · {0}",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "재생력이 절단력을 웃돈다 — 잘린 살점을 던져 반격",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "몸집을 키워 맷집으로 버틴다",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "참격 그 자체에 적응",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "주력의 성질을 바꿔 무하한을 중화한다",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "공간째 벤다 — 무하한이 의미를 잃는다",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "적응 · {0} {1} — {2}",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "적응 · {0}",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "법진 무한회전 — 존재 그 자체에 적응한다 (그 상대가 일으키는 모든 현상이 거의 통하지 않는다)",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "조복 완료 — 이제 마허라는 술사를 노리지 않고, 법진만 먼저 부를 수 있다",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "마허라 파괴 — 십종영법술이 기능을 잃었다",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "조복의 의식 — 마허라가 술사부터 노린다 · 쓰러뜨리면 조복, 쓰러지면 술사가 마허라가 된다",
+  "f": [
+   "src/characters/megumi/shikigami.js"
+  ]
+ },
+ {
+  "k": "이 정도로 쓰러질 내가 아니야",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "망치",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "오른쪽 허리춤에 걸린 망치 손잡이에 손을 대고 주먹을 쥐면 뽑힌다 · 휘둘러 치기 (흑섬도 난다)\n손을 펴면 망치가 허리로 돌아간다",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "못 → 망치로 쏘기",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "왼쪽 허리춤 못 주머니에 손을 대고 엄지·검지를 꼬집듯 모으면 못 세 개 → 손을 펴며 위로 띄운다\n떠 있는 못을 망치로 후려치면 바라본 대상에게 날아가 박힌다",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "簪 비녀",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "못이 박혀 있을 때 왼손을 활짝 폈다가 주먹을 꽉 쥐기 → 박힌 못에서 주력이 터진다",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "共鳴り 공명",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "왼쪽 옆구리에 꽂힌 짚인형을 왼손 주먹으로 쥐어 뽑는다 → 망치로 인형 가슴을 내리치기 · 손을 펴면 다시 꽂힌다\n못이 박힌 대상(내 주력이 남은 대상)에게 그대로 울려 몸 안에서 가시가 터진다",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "추령주법",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "1 못 띄우고 망치로 쏘기 · 2 簪 · 3 共鳴り · V 망치로 치기",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "망치 · 못",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "오른쪽 그립: 망치 · 왼쪽 트리거 누르기 → 못, 떼면 띄운다 → 망치로 후려치기\n(오른쪽 트리거: 떠 있는 못을 바로 쏘기)",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "왼쪽 그립: 簪 · 왼쪽 옆구리의 짚인형에 대고 왼쪽 그립 → 들고 망치로 내리치면 共鳴り",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "대상 없음",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "박힌 못",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "공명",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "공명할 대상이 없다 — 못이나 망치로 먼저 주력을 남겨라",
+  "f": [
+   "src/characters/nobara/nobara.js"
+  ]
+ },
+ {
+  "k": "解(해) — 참격",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "손을 펴고 빠르게 휘두르기. 휘두른 방향으로 참격이 날아감 (연속 가능)",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "捌(팔) — 난도질",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "편 손으로 더미를 직접 건드리기. 약한 상대일수록 잘게 썰림",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "竈 開(フーガ) — 화염",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "세계를 가르는 해",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "편 손바닥을 앞으로 뻗고 다른 손 주먹으로 그 손목을 붙잡은 채 1.3초 (영창) → 편 손을 크게 휘두르기",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "영역전개 「伏魔御廚子」",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "얼굴 앞에서 손바닥을 마주 대고 손가락을 세워 1.5초 (염마천인) · 메뉴에서도 발동",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "잡기 · 흑섬",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "좌클릭: 해 (누르고 있으면 연사, 마우스 움직임 방향으로 벰)\n우클릭: 조준한 2.5m 이내 더미에 팔",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "F 길게 눌러 당기기 → 떼면 발사",
+  "f": [
+   "src/characters/sukuna/sukuna.js",
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "세계참 / 영역 / 흑섬",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "G 1.3초 영창 후 좌클릭: 세계를 가르는 해 · Q 1초: 복마어주자 · V 주먹",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "트리거: 정면 참격 · 트리거를 쥐고 휘두르면 휘두른 방향으로 연속 참격",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "컨트롤러를 더미에 댄 채 트리거",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "왼쪽 그립 유지 + 오른 컨트롤러를 왼손에 대고 트리거 → 뒤로 당겼다 놓기",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "A 버튼 1.3초 (영창) → 오른 컨트롤러를 크게 휘두르기",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "조리",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "해와 팔로 먼저 조리해야 한다",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "세계를 가르는 참격",
+  "f": [
+   "src/characters/sukuna/sukuna.js"
+  ]
+ },
+ {
+  "k": "반전술식으로 몸을 고쳤다",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "카타나 · 검기",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "왼쪽 허리 칼집의 손잡이를 주먹으로 쥐고 칼집을 따라 끝까지 당겨 뽑는다 (덜 뽑고 놓으면 도로 들어감) · 다른 손으로 칼집을 쥘 수 있다\n휘둘러 벤다 (칼끝이 빠를수록 깊게) · 아주 세게 휘두르면 검기 · 칼끝을 칼집 입구에 대고 밀어 넣거나 손을 펴면 납도",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카 현현",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "왼손 주먹(반지)을 입술에 0.5초 → 리카 완전현현, 곁에서 싸운다 (1분)\n왼손 검지로 적을 가리키면 그 적에게 · 다시 하면 돌려보낸다",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "순애빔",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카 완전현현 중에: 두 손바닥을 마주 보게 모았다가 앞으로 밀기\n리카의 입에서 주력의 고출력 지향 방출 (오래 모을수록 굵다)",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "주언 「動くな」",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "편 손바닥으로 입을 가렸다가 떼며 앞으로 내밀기 → 그 손에 확성기가 쥐어지고 외친다\n바라본 적들이 3초 동안 멈춘다 (특급은 절반)",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "반전술식",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "가만히 있어도 체력이 천천히 차오른다",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "영역전개 「真贋相愛」",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "손날을 펴 세우고 손등을 앞으로, 다른 손은 주먹을 쥐어 턱 앞에 1.2초\n(수인표처럼 편 손 옆에 만 손을 붙여도 OK)\n모방한 술식(해 · 주언 · 야곱의 사다리)이 깃든 칼이 날아든다 · 메뉴에서도 발동",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "기술",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "E 누르고 있기: 칼 뽑기(마우스를 휙 돌려 베기) · F 리카 · 1 순애빔(누르고 떼기) · 2 주언 「動くな」 · Q 1.2초 영역전개",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "칼",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "오른쪽 그립: 칼을 쥐고 휘두르기",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카 · 주언",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "X: 리카 현현/돌려보내기 · 왼쪽 트리거: 리카에게 바라본 적을 공격시키기 · A: 주언 「動くな」",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "순애빔 · 영역",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "두 트리거를 쥐고 손을 모았다가 밀기: 순애빔 · 양쪽 스틱 1.2초: 영역전개",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "현현 {0}s",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카 재사용 {0}s",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "리카 모델을 불러오는 중…",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "주언",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "바라본 곳에 적이 없다",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "순애빔은 리카 완전현현 중에만 — 왼손 주먹(반지)을 입술에",
+  "f": [
+   "src/characters/yuta/yuta.js"
+  ]
+ },
+ {
+  "k": "모델 로드 실패:",
+  "f": [
+   "src/core/assets.js"
+  ]
+ },
+ {
+  "k": "{0} 재사용 대기 {1}초",
+  "f": [
+   "src/core/cooldown.js"
+  ]
+ },
+ {
+  "k": "아무것도 안 누름 = 편 손 · 트리거 = 집기 · 그립 = 검지 · 그립+A(X) = 검지·중지\n그립+트리거 = 주먹 · 그립+트리거+A(X) = 엄지 세운 주먹\nY 메뉴 · 왼쪽 스틱 이동 · 오른쪽 스틱 회전",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "아무것도 누르지 않은",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 손으로 컨트롤러를 빠르게 휘두르기 → 휘두른 방향으로 참격 (연속 가능)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 손으로 적을 직접 건드리기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "한 손은 {0} 채, 다른 손 트리거를 당겨 그 손 앞에서 활처럼 뒤로 당겼다가 트리거를 놓기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "오른손은 {0} 채 앞으로 뻗고, 왼손 그립+트리거(주먹)로 오른 손목을 잡은 채 1.3초 (영창) → 오른손을 크게 휘두르기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "두 손 모두 그립만 쥐고, 얼굴 앞에서 두 컨트롤러 옆면을 맞대 세워 1.5초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "적에 대고 그립+트리거 → 잡기, 놓으면 던지기 · 그립+트리거로 빠르게 치면 흑섬",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+A(X)로 앞을 가리키면 생성 → 버튼을 모두 놓으면 창이 손을 따라 멀리",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립만 쥐어 충전 → 앞으로 찌르거나 버튼을 모두 놓으면 발사",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "창일 때 그립만 → 혁 · 혁일 때 그립+A(X) → 창 · 그립+트리거 → 사라짐",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+트리거+A(X) (엄지 세운 주먹) → 창과 혁이 합쳐져 茈 → 버튼을 모두 놓거나 앞으로 밀어 발사",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립만 쥐고 컨트롤러를 얼굴 앞에 세워 6초 (손가락이 꼬인 수인으로 바뀐다)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "무하한: {0} 두 손을 앞으로 1초 · 육안: 컨트롤러로 눈을 0.5초 가리기 · 잡기·흑섬: 그립+트리거",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+트리거로 쥐고 치기 → 한 박자 뒤 한 번 더 (2타)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 채 휘두르다 닿기 직전에 그립+트리거 → 흑섬 확정",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+A(X)(가위 손)로 적을 건드리기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 손을 맞대고 앞으로 0.5초 → 두 손을 떼면 발사",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "두 손 모두 그립만 쥐고, 가슴 앞에서 맞대 위로 세워 1.5초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+트리거 → 앞으로 휙 던지며 모두 놓기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립만(또는 그립+A(X))으로 가리키고 있기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 컨트롤러를 정수리에 0.4초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 채 손바닥 쪽(컨트롤러 안쪽)을 아래로 해 빠르게 내리찍기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 손을 마주 보게 모았다가 앞으로 밀기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 손을 머리 위로 높이 들고 1.5초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 손을 가슴 앞에서 컨트롤러 앞쪽이 서로 엇갈리게 1.2초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "왼쪽 허리 칼집의 손잡이에 오른 컨트롤러를 대고 그립+트리거 → 칼집 끝까지 뽑아야 빠진다 → 휘둘러 베기 · 왼손 그립으로 칼집을 잡을 수 있다 · 칼집에 다시 꽂고 놓으면 납도",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "왼손 그립+트리거(주먹)를 입술에 0.5초 → 리카 · 왼손 그립만으로 적을 가리키면 그 적에게",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "리카 현현 중: {0} 두 손을 마주 보게 모았다가 앞으로 밀기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 손으로 입을 가렸다가 떼며 앞으로 내밀기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "왼손 그립+트리거(주먹)를 턱 앞에, 오른손은 {0} 채 세워 그 앞에 1.2초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "오른쪽 허리의 망치 손잡이에 대고 그립+트리거 → 휘둘러 치기 · 허리에 대고 놓으면 다시 찬다",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "왼쪽 허리 못 주머니에 대고 트리거 → 못 세 개 → 트리거를 놓으며 위로 띄우기 → 망치로 후려치기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "못이 박혀 있을 때: 왼손 {0} 채 있다가 그립+트리거",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "왼쪽 옆구리의 짚인형에 왼 컨트롤러를 대고 그립+트리거(주먹) → 쥔 채 앞으로 → 망치로 인형 가슴을 내리치기 · 놓으면 다시 꽂힌다",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 손을 적에 0.2초 대기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+A(X)(검지·중지)를 옆으로 세워 0.35초 → 칼날 → 휘둘러 베기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+트리거를 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립만 쥐고 앞으로 빠르게 찌르기 → 팔이 늘어난다",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "그립+트리거를 입에 0.25초 (스톡을 꺼내 쥔다) → 앞으로 던지며 모두 놓기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 손을 가슴 앞에서 맞대 0.4초 (스톡 8개가 모인다) → 앞으로 밀기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "{0} 두 손을 가슴 앞에서 맞대고 위로 세워 1.2초",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "화면 클릭 → 마우스 고정 · 마우스로 둘러보기 · WASD 이동 · H/Tab 메뉴\nV 주먹 · T 조준한 대상 잡기(다시 T: 던지기)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 우클릭을 누르고 있기 → 창 · 휠로 거리 조절 · 떼면 사라짐",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 좌클릭을 누르고 있기(충전) → 떼면 발사",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "우클릭(창) ↔ 좌클릭(혁)을 바꿔 누르기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "E 누르고 있기 → 창과 혁이 섞여 茈 완성 → E를 떼면 발사",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "Q 6초 누르고 있기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "I 무하한 켜기/끄기 · O 육안 켜기/끄기 · V 주먹 · T 잡기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 좌클릭 (누르고 있으면 연사, 마우스를 움직인 방향으로 벰)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 우클릭: 조준한 2.5m 이내 대상",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "G 1.3초 누르고 있기(영창) → 마우스 좌클릭",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "Q 1초 누르고 있기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "T 잡기 → 다시 T 던지기 · V 주먹(흑섬)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 좌클릭: 조준한 2.6m 이내 대상 (경정권 2타)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 좌클릭 — 일정 확률로 흑섬",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "마우스 우클릭: 조준한 2.6m 이내 대상 (영역 안에서는 거리 무관)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "C 길게 눌러 모으기 → 떼면 발사",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "Q 1.5초 누르고 있기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "T 잡기 → 다시 T 던지기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "E 누르고 있기: 칼을 뽑아 든다 → 마우스를 휙 돌려 베기 (세게 돌리면 검기)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "F: 리카 현현 / 돌려보내기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "리카 현현 중 1 누르고 있다 떼기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "1: 칼날 팔로 베기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "2: 드릴 팔로 찌르기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "3: 팔을 늘려 때리기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "5: 입에서 스톡을 꺼내 던진다 → 개조 인간",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "4: 스톡 8개를 모아 다중혼 발체",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "2 누르고 있기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "4: 조준한 땅에서 불기둥",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "5 누르고 있다 떼기 (오래 모을수록 크다)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "V 주먹",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "V: 망치로 치기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "1: 못을 띄우고 망치로 쏘기 (조준한 대상)",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "3: 짚인형을 꺼내 망치로 내리치기",
+  "f": [
+   "src/core/ctrlHands.js"
+  ]
+ },
+ {
+  "k": "자폐원돈과",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "개관철위산",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "불완전한 영역",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "무량공처",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "영역 싸움",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "압도적인 차이 — 상대 영역을 짓누른다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "격이 다르다 — 이대로는 밀려난다!",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "중첩 — 서로의 필중 효과가 사라졌다 · 두 손바닥으로 밀어 주력을 쏟아라",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "결계를 바깥에서 친다 — 영역은 바깥의 공격에 약하다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "결계 파괴",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "밀어붙였다!",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "밀린다!",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "영역을 밀어냈다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "{0} 붕괴 — 술식이 타 버렸다 · 필중이 다시 먹힌다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "두 영역이 함께 사그라들었다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "영역이 밀려났다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "영역이 밀려났다 — 필중을 맞는다!",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "내 영역이 먼저 닫혔다 — 상대 영역만 남았다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "필중 — 무위전변이 영혼을 만진다 (맞영역으로 막아라)",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "필중 — 몸이 타들어 간다 (맞영역으로 막아라)",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "필중(불완전) — 사방에서 주력이 터진다 (맞영역으로 막아라)",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "필중 — 무한한 정보가 쏟아진다! 풀린 틈에 영역을 펼쳐라",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "— 밀어붙였다 —",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "— 밀린다 —",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "격이 다르다 · 짓누른다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "격이 다르다 · 주력을 쏟아 버텨라",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "주력을 쏟는 중",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "두 손바닥을 앞으로 — 주력을 쏟아라",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "중첩 · 필중 상쇄",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "시전자가 쓰러져 {0}이(가) 무너진다",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "{0} — 바깥에서 결계가 깨졌다 (시전자의 술식이 타 버렸다)",
+  "f": [
+   "src/core/domainClash.js"
+  ]
+ },
+ {
+  "k": "기본",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "사격형",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "돌격형",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "거대",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "샌드백(∞)",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "단안 주령",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "특급 술사",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "주저사(봉투)",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "주저사",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "다나카 히로시",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "스즈키 켄타",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "야마다 타로",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "사토 유이치",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "이토 마사키",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "와타나베 쇼",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "나카무라 료",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "고바야시 준",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "카토 다이스케",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "요시다 하루",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "야마모토 렌",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "마츠모토 카이",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "이노우에 소타",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "기무라 히나",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "하야시 아오이",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "시미즈 유키",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "모리 겐지",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "이케다 세나",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "무너졌다!",
+  "f": [
+   "src/core/dummy.js"
+  ]
+ },
+ {
+  "k": "잽",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "스트레이트",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "훅",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "앞차기",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "연타",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "내려찍기",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "짓밟기",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "휩쓸기",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "돌진",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "거대한 주먹",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "무위전변 — 영혼을 만졌다",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "다중혼 발체",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "마히토가 개조 인간 8명의 영혼을 합친다",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "불덩이",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "불벌레",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "화염 방사",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "칼 베기",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "순간이동",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "{0} — 영역전개! (같이 영역을 펼쳐 맞서라)",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "주력포",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "주력 방출(장벽)",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "주력 튕기기",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "무하한 — 닿지 않는다 (영역의 필중이라면 뚫는다)",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "반전술식으로 회복한다",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "무위전변으로 몸을 고친다",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "몸을 재생한다",
+  "f": [
+   "src/core/enemies.js"
+  ]
+ },
+ {
+  "k": "연습장",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "도쿄 오피스가",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "뒷골목",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "시부야",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "신주쿠",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "초원",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "패스스루\n(현실)",
+  "f": [
+   "src/core/env/backgrounds.js"
+  ]
+ },
+ {
+  "k": "환경맵 실패",
+  "f": [
+   "src/core/env/environment.js"
+  ]
+ },
+ {
+  "k": "손 모델을 불러오지 못함",
+  "f": [
+   "src/core/handDemo.js"
+  ]
+ },
+ {
+  "k": "술 식  시 뮬 레 이 터",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "캐릭터",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "배경",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "시작",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "손가락으로 직접 누르기 · 멀리서는 손으로 가리키고 엄지와 검지를 맞대기",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "게임 중 메뉴: 퀘스트 기본 메뉴(왼손바닥을 얼굴 쪽으로 → ≡ 집기) · Y 버튼 · H 키",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "더미 소환",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "설정",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "조작법",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "메인 메뉴",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "종류",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "주령은 100 = 기본 체력, 나머지는 배율",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "수량",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "{0}개",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "소환",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "모두 제거",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "켜짐",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "꺼짐",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "더미 AI\n{0}",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "아레나 초기화",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "적 영역전개 (영역 싸움)",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "B 버튼 / R 키: 선택한 더미 바로 소환",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "마히토 · 죠고 · 고죠는 스스로도 영역을 펼친다 → 같이 펼쳐 맞서기",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "손목 HUD",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "기술명 표시",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "데미지 숫자",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "플레이어 무적",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "이동 (스틱·엄지척)",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "{0} 손동작",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "그림자",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "컨트롤러 손 모양",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "스킬 쿨타임",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "카미노 원작 조건",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "세계참 PC 연출",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "마허라 조복됨",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "옥견 혼 (白 파괴됨)",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "마허라 소환 연출",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "옵션",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "{0} 발동",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "높이 보정  {0}{1} cm",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "초기화",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "세상이 크거나 작게 느껴지면 높이 보정으로 눈높이를 맞추세요.",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "VR 시작 전 기기에서 바닥 높이(가디언)를 설정해 두면 가장 정확합니다.",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "컨트롤러 버튼 → 손 모양",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "키보드 · 마우스",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "먹은 뒤: 解 · 捌 · 竈開 · 세계를 가르는 해를 함께 쓰고, 영역전개에 복마어주자(사당 · 참격 난사)가 겹친다",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "X 키: 먹기",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "오른쪽 허리의 손가락에 컨트롤러를 대고 그립 → 입으로 가져가면 먹는다",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": " · 먹은 뒤 B: 정면 解",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "오른쪽 허리의 손가락을 주먹(또는 집게)으로 쥐어 입으로 가져가면 먹는다",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "宿儺の指 스쿠나의 손가락",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "이동 (핸드트래킹)",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "왼손 엄지 척 → 그 자리에서 손을 민 방향으로 걷기\n오른손 엄지 척 → 옆으로 밀면 30° 회전",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "손 모양",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "컨트롤러",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "키보드",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "▶ 손 모양",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "손 모양 영상 없음",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "왼쪽 위 「손 모양」을 누르면 핸드트래킹 동작을 영상으로 볼 수 있어요",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "영역을 쓰는 적(마히토 · 죠고 · 고죠 사토루)을 먼저 소환하세요",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "이미 적의 영역이 펼쳐져 있다",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "더미 AI 가 꺼져 있으면 적이 움직이지 않습니다",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "누적 {0}",
+  "f": [
+   "src/core/ui.js"
+  ]
+ },
+ {
+  "k": "스쿠나의 손가락을 삼켰다 — 解 · 捌 · 竈開 · 세계를 가르는 해를 함께 쓴다",
+  "f": [
+   "src/core/vessel.js"
+  ]
+ },
+ {
+  "k": "먹음 — 스쿠나의 술식",
+  "f": [
+   "src/core/vessel.js"
+  ]
+ },
+ {
+  "k": "허리춤 (쥐어서 입으로)",
+  "f": [
+   "src/core/vessel.js"
+  ]
+ },
+ {
+  "k": "{0} — 메뉴: Y 버튼 / 왼손바닥 위로 / H",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "모델 불러오는 중…",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "셰이더 예열",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "3D 모델 불러오는 중… {0} / {1}",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "배경 · 셰이더 준비 중…",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "준비 완료",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "불러오기",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "일부 모델을 불러오지 못했습니다 — 그래도 시작할 수 있습니다",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "가나다라 술식시뮬레이터",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "이 브라우저는 WebXR을 지원하지 않습니다. VR 기기 브라우저에서 HTTPS 주소로 열거나 데스크톱 모드로 체험하세요.",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "VR 기기가 감지되지 않았습니다. 데스크톱 모드로 체험할 수 있습니다.",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "VR 준비 완료 — 핸드트래킹 권장 (컨트롤러를 내려놓으면 손 인식으로 전환)",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "WebXR 확인 실패: ",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": " 세션 시작 실패: ",
+  "f": [
+   "src/main.js"
+  ]
+ },
+ {
+  "k": "ANIME VR — 술식 시뮬레이터",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "ANIME VR · 술식 시뮬레이터",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "고죠 · 스쿠나 · 이타도리 · 메구미",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "더미를 소환하고 기술을 마음껏 시험해보세요",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "VR 시작",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "MR 패스스루로 시작",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "데스크톱으로 체험",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "WebXR 확인 중…",
+  "f": [
+   "index.html"
+  ]
+ },
+ {
+  "k": "비공식 팬메이드 시뮬레이터 · 핸드트래킹 권장 · VR 안에서 캐릭터와 배경을 고릅니다",
+  "f": [
+   "index.html"
+  ]
+ }
+]

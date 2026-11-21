@@ -47,6 +47,10 @@
     .foot { margin-top: 14px; font-size: 11px; color: #5e6c90; }
     #crosshair { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #fff; opacity: .7; z-index: 5; pointer-events: none; }
     #crosshair.hidden { display: none; }
+    #langs { position: fixed; top: 14px; right: 16px; z-index: 11; display: flex; gap: 6px; }
+    #langs button { font-size: 13px; padding: 7px 12px; border-radius: 10px; background: rgba(40,60,120,.45); }
+    #langs button.on { background: linear-gradient(90deg,#2a6bff,#7a3cff); border: none; }
+    #overlay.hidden ~ #langs { display: none; }
   </style>
   <script type="importmap">
     {
@@ -94,6 +98,7 @@
       <div class="foot">비공식 팬메이드 시뮬레이터 · 핸드트래킹 권장 · VR 안에서 캐릭터와 배경을 고릅니다</div>
     </div>
   </div>
+  <div id="langs"></div>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

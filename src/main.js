@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LANGS, getLang, setLang, onLangChange } from './core/i18n.js'; // 먼저: 캔버스 글자 번역을 걸어 둔다
 import { Input } from './core/input.js';
 import { Environment } from './core/env/environment.js';
 import { World } from './core/world.js';
@@ -123,6 +124,22 @@ ctx.game = game;
 
 // 모델(더미·하얀 방·사당)을 먼저 받은 뒤 시작 버튼을 연다
 const btnVR0 = document.getElementById('btn-vr');
+// 첫 화면의 언어 버튼 (VR 안의 메뉴에도 있다)
+{
+  const box = document.getElementById('langs');
+  const draw = () => {
+    box.innerHTML = '';
+    for (const [id, label] of LANGS) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = getLang() === id ? 'on' : '';
+      b.onclick = () => setLang(id);
+      box.appendChild(b);
+    }
+  };
+  draw();
+  onLangChange(draw);
+}
 const btnDesk0 = document.getElementById('btn-desktop');
 btnDesk0.disabled = true;
 btnVR0.disabled = true;

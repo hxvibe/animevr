@@ -8,6 +8,7 @@ import { CHARACTERS } from '../characters/index.js';
 import { BACKGROUNDS } from './env/backgrounds.js';
 import { DUMMY_TYPES } from './dummy.js';
 import { HandDemo } from './handDemo.js';
+import { LANGS, getLang, setLang, tr } from './i18n.js';
 
 export const FONT = "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
 export const JFONT = "'Noto Serif JP', 'Yu Mincho', 'Hiragino Mincho ProN', serif";
@@ -29,6 +30,7 @@ function rr(g, x, y, w, h, r) {
 
 /** 글자 폭에 맞춰 줄바꿈 (한글은 글자 단위, 공백 우선) */
 function wrap(g, text, maxW) {
+  text = tr(text); // 번역은 줄을 나누기 전에 (조각마다 바꾸면 사전에 없다)
   const out = [];
   let line = '';
   for (const word of text.split(/(\s+)/)) {
@@ -88,12 +90,14 @@ class Panel {
     g.font = `${o.weight ?? 700} ${o.size ?? 28}px ${FONT}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    const lines = String(label).split('\n');
+    // 번역한 글이 길면 버튼 안에 들어가게 글자를 줄인다
+    const lines = tr(String(label)).split('\n');
     lines.forEach((ln, k) => {
-      if (k > 0) {
-        g.font = `400 ${Math.round((o.size ?? 28) * 0.7)}px ${FONT}`;
-        g.fillStyle = 'rgba(255,255,255,0.75)';
-      }
+      let fs = k > 0 ? Math.round((o.size ?? 28) * 0.7) : (o.size ?? 28);
+      const wt = k > 0 ? 400 : (o.weight ?? 700);
+      g.font = `${wt} ${fs}px ${FONT}`;
+      while (fs > 12 && g.measureText(ln).width > w - 16) g.font = `${wt} ${(fs -= 1)}px ${FONT}`;
+      if (k > 0) g.fillStyle = 'rgba(255,255,255,0.75)';
       g.fillText(ln, x + w / 2, y + h / 2 + (k - (lines.length - 1) / 2) * (o.size ?? 28) * 1.15);
     });
     g.textAlign = 'left';
@@ -227,6 +231,8 @@ export class UI {
     g.fillStyle = '#b9c6ea';
     g.fillText('술 식  시 뮬 레 이 터', W / 2, 218);
     g.textAlign = 'left';
+    // 언어 (오른쪽 위)
+    LANGS.forEach(([id, label], i) => p.button(W - 60 - (LANGS.length - i) * 150, 40, 140, 60, label, 'lang:' + id, { active: getLang() === id, size: 24, accent: '#3a6ad6' }));
 
     g.font = `700 34px ${FONT}`;
     g.fillStyle = '#ffffff';
@@ -244,7 +250,7 @@ export class UI {
         g.fillText(c.name, x + 30, 405);
         g.font = `400 30px ${FONT}`;
         g.fillStyle = 'rgba(255,255,255,0.8)';
-        g.fillText(`${c.work} · ${c.technique}`, x + 32, 458);
+        g.fillText(`${tr(c.work)} · ${tr(c.technique)}`, x + 32, 458);
         g.font = `900 46px ${JFONT}`;
         g.fillStyle = c.color;
         g.fillText(c.kanji, x + 30, 530);
@@ -274,7 +280,7 @@ export class UI {
         g.fillText(c.kanji, x + 20, y + 84);
         let ts = 20;
         g.font = `400 ${ts}px ${FONT}`;
-        const sub = `${c.work} · ${c.technique}`;
+        const sub = `${tr(c.work)} · ${tr(c.technique)}`;
         while (ts > 14 && g.measureText(sub).width > cw - 40) g.font = `400 ${(ts -= 1)}px ${FONT}`;
         g.fillStyle = 'rgba(255,255,255,0.75)';
         g.fillText(sub, x + 20, y + chh - 14);
@@ -298,7 +304,7 @@ export class UI {
         const nameW = g.measureText(c.name).width;
         g.font = `400 24px ${FONT}`;
         g.fillStyle = 'rgba(255,255,255,0.78)';
-        g.fillText(`${c.work} · ${c.technique}`, x + 28, y + chh - 22);
+        g.fillText(`${tr(c.work)} · ${tr(c.technique)}`, x + 28, y + chh - 22);
         g.textAlign = 'right';
         let ks = 32;
         g.font = `900 ${ks}px ${JFONT}`;
@@ -398,6 +404,10 @@ export class UI {
       g.fillStyle = 'rgba(255,255,255,0.6)';
       g.fillText('세상이 크거나 작게 느껴지면 높이 보정으로 눈높이를 맞추세요.', 50, 880);
       g.fillText('VR 시작 전 기기에서 바닥 높이(가디언)를 설정해 두면 가장 정확합니다.', 50, 920);
+      g.font = `700 30px ${FONT}`;
+      g.fillStyle = '#ffffff';
+      g.fillText('언어 · Language', 50, 1000);
+      LANGS.forEach(([id, label], i) => p.button(330 + i * 200, 955, 185, 70, label, 'lang:' + id, { active: getLang() === id, size: 26, accent: '#3a6ad6' }));
     } else {
       this._drawHelp(g, p);
     }
@@ -500,7 +510,8 @@ export class UI {
     const S = ctx.settings;
     this.ctx.sfx.click();
     const [k, v] = id.split(':');
-    if (k === 'char') this.sel.character = v;
+    if (k === 'lang') setLang(v);
+    else if (k === 'char') this.sel.character = v;
     else if (k === 'bg') {
       this.sel.background = v;
       if (this.mode === 'game') ctx.game.setBackground(v);

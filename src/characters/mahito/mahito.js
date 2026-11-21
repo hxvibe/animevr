@@ -10,7 +10,7 @@ import { Caster } from '../../core/caster.js';
 import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
 import { TransfiguredWorm, StockPiece, MergedWorms } from '../../core/transfigured.js';
-import { HandMaw, VOID_WALL } from '../../core/mahitoDomain.js';
+import { HandMaw, VOID_WALL, bakeHandSet } from '../../core/mahitoDomain.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -169,14 +169,42 @@ class HandForm {
 
 // 늘어나는 팔
 class StretchArm {
-  constructor(ctx) {
+  constructor(ctx, side = 'right') {
     this.ctx = ctx;
+    this.side = side;
     this.mat = new THREE.MeshToonMaterial({ color: FLESH });
-    this.tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1, 10, 1, true).translate(0, 0.5, 0).rotateX(-Math.PI / 2), this.mat);
-    this.fist = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10).scale(1, 0.85, 1.2), this.mat);
-    this.tube.visible = this.fist.visible = false;
-    ctx.scene.add(this.tube, this.fist);
+    // 팔: +Z 로 길이 1 (앞으로 늘어난다) — 손목 쪽이 살짝 가늘다
+    this.tube = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.048, 1, 12, 8, true).translate(0, 0.5, 0).rotateX(Math.PI / 2), this.mat);
+    this.hand = this._makeHand();
+    this.tube.visible = this.hand.visible = false;
+    this.tube.frustumCulled = this.hand.frustumCulled = false;
+    ctx.scene.add(this.tube, this.hand);
     this.t = -1;
+  }
+
+  /** 마히토 손(주먹)을 모델에서 구워 쓴다 — 없으면 둥근 주먹으로 */
+  _makeHand() {
+    const S = bakeHandSet();
+    if (!S) return new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10).scale(1, 0.85, 1.2), this.mat);
+    const g = new THREE.BufferGeometry();
+    const P = S.geo.attributes.pClose.clone();
+    const N = S.geo.attributes.nClose.clone();
+    const idx = Array.from(S.geo.index.array);
+    if (this.side === 'left') {
+      // 오른손 → 왼손: x 를 뒤집고 면 방향도 뒤집는다
+      for (let i = 0; i < P.count; i++) {
+        P.setX(i, -P.getX(i));
+        N.setX(i, -N.getX(i));
+      }
+      for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]];
+    }
+    g.setAttribute('position', P);
+    g.setAttribute('normal', N);
+    g.setIndex(idx);
+    // 손 좌표(손목 원점 · 손가락 +Y · 손바닥 +Z · 길이 1) → 실제 크기 (마히토는 손이 조금 크다)
+    g.scale(0.2, 0.2, 0.2);
+    this.elbowY = S.elbowY * 0.2;
+    return new THREE.Mesh(g, this.mat);
   }
 
   fire(from, dir, len, onHit) {
@@ -187,6 +215,10 @@ class StretchArm {
     this.t = 0;
     this.hit = false;
     this.ctx.sfx.whoosh(from, 0.6, 1.5);
+  }
+
+  get active() {
+    return this.t >= 0;
   }
 
   update(dt, h) {
@@ -204,23 +236,31 @@ class StretchArm {
         this.onHit?.(this.from.clone().addScaledVector(this.dir, this.len));
       }
     } else k = Math.max(0, 1 - (this.t - out - hold) / back);
-    if (h?.active) this.from.copy(h.palm);
-    const L = Math.max(0.01, this.len * k);
+    if (h?.active) this.from.copy(h.palm).addScaledVector(h.fingersDir ?? this.dir, -0.08); // 손목 언저리에서 뻗는다
+    const L = Math.max(0.05, this.len * (1 - Math.pow(1 - k, 2)));
     this.tube.position.copy(this.from);
     this.tube.lookAt(_v.copy(this.from).add(this.dir));
-    this.tube.scale.set(1 + Math.sin(this.t * 40) * 0.1, 1, L);
-    this.fist.position.copy(this.from).addScaledVector(this.dir, L);
-    this.tube.visible = this.fist.visible = true;
+    const wob = 1 + Math.sin(this.t * 40) * 0.08;
+    this.tube.scale.set(wob, wob, L);
+    // 손: 손가락(+Y)을 뻗는 방향으로, 손바닥(+Z)은 아래로 — 주먹 쥔 손등이 위
+    const y = _v.copy(this.dir);
+    const z = _v2.set(0, -1, 0).addScaledVector(y, y.y).normalize();
+    if (z.lengthSq() < 0.01) z.set(0, 0, 1);
+    const x = _v3.crossVectors(y, z).normalize();
+    z.crossVectors(x, y);
+    this.hand.quaternion.setFromRotationMatrix(_m.makeBasis(x, y, z));
+    this.hand.position.copy(this.from).addScaledVector(this.dir, L);
+    this.tube.visible = this.hand.visible = true;
     if (this.t > out + hold + back) {
       this.t = -1;
-      this.tube.visible = this.fist.visible = false;
+      this.tube.visible = this.hand.visible = false;
     }
   }
 
   dispose() {
-    this.ctx.scene.remove(this.tube, this.fist);
+    this.ctx.scene.remove(this.tube, this.hand);
     this.tube.geometry.dispose();
-    this.fist.geometry.dispose();
+    this.hand.geometry.dispose();
     this.mat.dispose();
   }
 }
@@ -331,7 +371,7 @@ export class Mahito extends Caster {
     this.reviveText = '몸이 부서졌다… 영혼의 형태를 다시 빚는다';
     this.aura = new HandAura(ctx, AURA);
     this.forms = { left: new HandForm(ctx), right: new HandForm(ctx) };
-    this.arms = { left: new StretchArm(ctx), right: new StretchArm(ctx) };
+    this.arms = { left: new StretchArm(ctx, 'left'), right: new StretchArm(ctx, 'right') };
     this.effects = [];
     this.stocks = { left: null, right: null, desk: null }; // 손에 쥔 개조 인간 스톡
     this.stockFx = [];
@@ -422,9 +462,12 @@ export class Mahito extends Caster {
       this._domainSign(dt);
       if (inp.mode === 'desktop') this._desktop();
     }
+    // 몸을 바꾼 손(칼날 · 드릴 · 늘어나는 팔)은 플레이어 손을 숨긴다
+    inp.hideHand ??= { left: false, right: false };
     for (const s of ['left', 'right']) {
       this.forms[s].update(dt, inp[s]);
       this.arms[s].update(dt, inp[s]);
+      inp.hideHand[s] = !!this.forms[s].form || this.arms[s].active;
     }
     this.effects = this.effects.filter((e) => e.update(dt));
     this.worms = (this.worms ?? []).filter((w) => w.update(dt));
@@ -445,10 +488,16 @@ export class Mahito extends Caster {
     if (F.form === 'blade' && (ctrl ? !h.btn.grip : (g === 'fist' || g === 'pinch') && h.gestureTime > 0.25)) F.set(null);
     if (F.form === 'drill' && (ctrl ? !h.btn.grip : g !== 'fist' && h.gestureTime > 0.25)) F.set(null);
     // 칼날: 검지·중지를 곧게 모아 세운 칼 손(손바닥을 옆으로) 유지 — 그냥 편 손으로는 바뀌지 않는다
-    const knife = ctrl ? h.side === 'right' && h.btn.grip : g === 'two' && Math.abs(h.palmNormal.y) < 0.6 && h.speed < 1.0;
+    const knife = ctrl ? h.side === 'right' && h.btn.grip && !this._ctrlBoth() : g === 'two' && Math.abs(h.palmNormal.y) < 0.6 && h.speed < 1.0;
     if (!F.form && this.held(h.side + 'blade', knife, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
     // 드릴: 주먹을 앞으로 겨눈다
-    const aimFist = ctrl ? h.side === 'left' && h.btn.grip : g === 'fist' && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0 && h.palm.distanceTo(inp.head) > 0.22;
+    //  입에서 스톡을 꺼내는 주먹(입 가까이 · 스톡을 쥔 채 · 방금 입에 댔던 손)은 드릴이 되지 않는다
+    const mouthD = h.palm.distanceTo(this.mouthPos(_v));
+    const sideKey = h.side + 'mouthT';
+    if (g === 'fist' && mouthD < 0.22) this.cds[sideKey] = 1.0;
+    this.cds[sideKey] = (this.cds[sideKey] ?? 0) - dt;
+    const nearStock = !!this.stocks[h.side] || this.cds[sideKey] > 0 || mouthD < 0.32 || this.holdK(h.side + 'pull', 0.25) > 0;
+    const aimFist = ctrl ? h.side === 'left' && h.btn.grip && !this._ctrlBoth() : g === 'fist' && !nearStock && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0 && h.palm.distanceTo(inp.head) > 0.22;
     if (!F.form && this.held(h.side + 'drill', aimFist, dt, ctrl ? 0.05 : 0.35)) F.set('drill');
     if (F.form && !F.k) this.aura.set(h.side, 0.6);
     // 휘두르기 / 찌르기
@@ -504,7 +553,9 @@ export class Mahito extends Caster {
   /** 입 (스톡을 꺼내는 곳) */
   mouthPos(out) {
     const inp = this.ctx.input;
-    return out.copy(inp.head).add(_v3.set(0, -0.09, 0)).addScaledVector(inp.headDir, 0.07);
+    out.copy(inp.head).addScaledVector(inp.headDir, 0.07);
+    out.y -= 0.09; // (임시 벡터를 쓰지 않는다 — 부르는 쪽의 _v3 를 덮어쓰지 않게)
+    return out;
   }
 
   /** 입에서 스톡을 하나 꺼내 손에 쥔다 */
@@ -588,6 +639,12 @@ export class Mahito extends Caster {
     }
   }
 
+  /** 컨트롤러 두 개를 그립으로 쥐고 가슴 앞에서 맞댔다 (다중혼) — 칼날·드릴보다 먼저 본다 */
+  _ctrlBoth() {
+    const { left: L, right: R } = this.ctx.input;
+    return L.active && R.active && L.source === 'controller' && R.source === 'controller' && L.btn.grip && R.btn.grip && L.palm.distanceTo(R.palm) < 0.26;
+  }
+
   _drillThrust(h, F) {
     const now = this.ctx.world.time;
     if ((this._drillT ?? -1) > now - 0.5) return;
@@ -625,8 +682,10 @@ export class Mahito extends Caster {
     const R = inp.right;
     const ok = L.active && R.active;
     let together = false;
-    if (ok && L.source === 'hand' && R.source === 'hand') together = L.palm.distanceTo(R.palm) < 0.09 && L.palmNormal.dot(R.palmNormal) < -0.5 && L.gesture !== 'fist' && R.gesture !== 'fist' && L.fingersDir.y < 0.7;
-    else if (ok && L.source === 'controller') together = L.btn.grip && R.btn.grip && L.palm.distanceTo(R.palm) < 0.15;
+    // 컨트롤러로 흉내 낸 손은 몸체끼리 부딪혀 손바닥이 완전히 맞닿지 못한다 → 넉넉히
+    const em = L.emulated || R.emulated;
+    if (ok && L.source === 'hand' && R.source === 'hand') together = L.palm.distanceTo(R.palm) < (em ? 0.2 : 0.09) && L.palmNormal.dot(R.palmNormal) < (em ? -0.15 : -0.5) && L.gesture !== 'fist' && R.gesture !== 'fist' && L.fingersDir.y < 0.7;
+    else if (ok && L.source === 'controller') together = this._ctrlBoth();
     if (this.held('repelArm', together, dt, 0.4) && !this._isomer) {
       // 입에서 스톡 8개를 꺼내 두 손 사이로 모은다
       const mid = new THREE.Vector3();
@@ -780,6 +839,7 @@ export class Mahito extends Caster {
   }
 
   dispose() {
+    if (this.ctx.input.hideHand) this.ctx.input.hideHand = { left: false, right: false };
     this.cancelDomain();
     this.shell.dispose();
     this.maw.dispose();

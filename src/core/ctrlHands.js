@@ -284,7 +284,7 @@ export class CtrlHands {
       }
     }
     S.cur = pose;
-    H.root.visible = !this.input.hideHands;
+    H.root.visible = !this.input.hideHands && !this.input.hideHand?.[side];
     H.apply(pose);
     H.root.updateMatrixWorld(true);
     // 3) 관절: 뼈 위치 (rig 공간)

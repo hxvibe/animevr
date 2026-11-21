@@ -381,7 +381,7 @@ export class Input {
       for (const hd of ['left', 'right']) {
         const m = slot.models[hd];
         const on = tracked && src.handedness === hd;
-        m.group.visible = on && !this.hideHands; // hideHands: 손이 다른 몸으로 바뀐 동안 (마허라)
+        m.group.visible = on && !this.hideHands && !this.hideHand?.[hd]; // hideHand[side]: 그 손만 다른 모양으로 바뀐 동안(마히토 변형) · hideHands: 손이 다른 몸으로 바뀐 동안 (마허라)
         if (on) m.mesh.updateMesh();
       }
       if (!src) continue;
@@ -393,7 +393,7 @@ export class Input {
       }
       else if (src.gamepad) this._readController(h, slot, dt);
       // 손을 그리면 컨트롤러 모델은 숨긴다
-      slot.grip.visible = !(h.emulated && h.active);
+      slot.grip.visible = !(h.emulated && h.active) && !this.hideHand?.[h.side];
     }
     // 컨트롤러 손: 두 손을 다 읽은 뒤 수인 맞물림까지 판단하고 관절을 만든다
     const CH = this.ctrlHands;

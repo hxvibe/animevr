@@ -110,6 +110,7 @@ export class Input {
     this._palmUp = 0;
     this._snapReady = true;
     this.locomotion = true;
+    this.moveMul = 1; // 이동 속도 배율 (메구미가 그림자에 무거운 걸 짊어지면 느려진다)
     // 핸드트래킹 이동: 엄지 척을 한 손이 가상 조이스틱 (왼손 = 이동, 오른손 = 회전)
     this.handLoco = { left: null, right: null };
     this._locoViz = this._makeLocoViz();
@@ -214,7 +215,7 @@ export class Input {
         const k = THREE.MathUtils.clamp((d - 0.03) / 0.09, 0, 1);
         if (k > 0) {
           const dir = off.clone().normalize().applyQuaternion(this.rig.quaternion);
-          this.rig.position.addScaledVector(dir, k * k * 2.6 * dt);
+          this.rig.position.addScaledVector(dir, k * k * 2.6 * this.moveMul * dt);
         }
       } else {
         // 회전: 옆으로 7cm 밀면 30도, 가운데로 돌아와야 다시
@@ -410,7 +411,7 @@ export class Input {
       if (Math.hypot(x, y) > 0.15) {
         _fwd.copy(this.headDir).setY(0).normalize();
         const rightV = _v.set(-_fwd.z, 0, _fwd.x);
-        const speed = 2.4 * dt;
+        const speed = 2.4 * this.moveMul * dt;
         this.rig.position.addScaledVector(_fwd, -y * speed).addScaledVector(rightV, x * speed);
       }
     }
@@ -598,7 +599,7 @@ export class Input {
     if (this.locomotion) {
       _fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       const rightV = _v.set(-_fwd.z, 0, _fwd.x);
-      const sp = (k.has('ShiftLeft') ? 6 : 3) * dt;
+      const sp = (k.has('ShiftLeft') ? 6 : 3) * this.moveMul * dt;
       if (k.has('KeyW')) this.rig.position.addScaledVector(_fwd, sp);
       if (k.has('KeyS')) this.rig.position.addScaledVector(_fwd, -sp);
       if (k.has('KeyD')) this.rig.position.addScaledVector(rightV, sp);

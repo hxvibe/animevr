@@ -318,7 +318,7 @@ export function buildTrainingHall(ctx) {
       m.castShadow = true;
       m.receiveShadow = true;
       group.add(m);
-      ctx.world.addProp(m, { radius: 0.32, mass: 1.2, hp: 30, color: 0xf0f0f0 });
+      ctx.world.addProp(m, { radius: 0.32, mass: 1.2, kg: 6, label: '스펀지 블록', hp: 30, color: 0xf0f0f0 });
     }
   }
   const coneMat = new THREE.MeshStandardMaterial({ color: 0xf06a1a, roughness: 0.5 });
@@ -328,7 +328,7 @@ export function buildTrainingHall(ctx) {
     m.position.set(x, 0, z);
     m.castShadow = true;
     group.add(m);
-    ctx.world.addProp(m, { radius: 0.18, mass: 0.6, hp: 20, color: 0xf06a1a });
+    ctx.world.addProp(m, { radius: 0.18, mass: 0.6, kg: 2, label: '고깔', hp: 20, color: 0xf06a1a });
   }
 
   // 조명: LED 판을 대신하는 넓은 사각 조명 몇 개 (그림자는 해 하나로)
@@ -343,6 +343,7 @@ export function buildTrainingHall(ctx) {
   return {
     id: 'white',
     bright: true,
+    enclosed: true, // 사방이 막힌 실내 (메구미의 미완성 영역도 결계가 닫힌다)
     group,
     sky: new THREE.Mesh(new THREE.SphereGeometry(400, 16, 8), new THREE.MeshBasicMaterial({ color: 0x2a2d33, side: THREE.BackSide, fog: false })),
     fog: { color: 0xd9dce2, near: 40, far: 140 },

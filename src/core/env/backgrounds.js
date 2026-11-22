@@ -115,7 +115,7 @@ export function buildWhiteRoom(ctx) {
       m.position.set(sx + (k % 3) * 0.65 - 0.65 + layer * 0.3, 0.3 + layer * 0.6, sz + (T.rnd() - 0.5) * 0.1);
       m.rotation.y = (T.rnd() - 0.5) * 0.3;
       group.add(m);
-      ctx.world.addProp(m, { radius: 0.32, mass: 1.5, hp: 30, color: 0xf0f0f0 });
+      ctx.world.addProp(m, { radius: 0.32, mass: 1.5, kg: 12, label: '상자', hp: 30, color: 0xf0f0f0 });
     }
   }
   return {
@@ -167,7 +167,7 @@ function buildWhiteRoomGLB(ctx, src) {
       m.rotation.y = (T.rnd() - 0.5) * 0.3;
       m.castShadow = true;
       group.add(m);
-      ctx.world.addProp(m, { radius: 0.32, mass: 1.5, hp: 30, color: 0xf0f0f0 });
+      ctx.world.addProp(m, { radius: 0.32, mass: 1.5, kg: 12, label: '상자', hp: 30, color: 0xf0f0f0 });
     }
   }
   return {

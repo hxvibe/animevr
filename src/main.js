@@ -152,6 +152,7 @@ const ALL_MODELS = [
   'curse_bignose', 'curse_centipede', 'curse_cyclops', 'curse_finger_bearer', 'curse_inventory', 'curse_jogo', 'curse_kuchisake', 'curse_mahito',
   'curse_rainbow_dragon', 'curse_rika', 'curse_tamamo', 'curse_transfigured', 'curse_worm',
   'shiki_dog_black', 'shiki_dog_totality', 'shiki_dog_white', 'shiki_elephant', 'shiki_mahoraga', 'shiki_nue', 'shiki_ox', 'shiki_rabbit', 'shiki_serpent', 'shiki_toad',
+  'prop_cars', 'wpn_megumi_blade', 'wpn_megumi_sword',
   'wpn_chain', 'wpn_hammer', 'wpn_mallet', 'wpn_nail', 'wpn_spear', 'wpn_splitsoul', 'wpn_strawdoll', 'wpn_yuta_sheath', 'wpn_yuta_sword',
 ];
 

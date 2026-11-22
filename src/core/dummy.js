@@ -38,6 +38,8 @@ let _nameIdx = Math.floor(Math.random() * NAMES.length);
 
 // ───────── 래그돌 (위치 기반 물리) ─────────
 // 관절 위치를 입자로 두고 거리 구속으로 몸을 유지한다. 잡은 부위는 손에 고정되고 나머지는 중력에 따라 늘어진다.
+const _wallP = new THREE.Vector3();
+const _wallD = new THREE.Vector3();
 export const RAG = ['hips', 'chest', 'neck', 'head', 'shL', 'elL', 'hdL', 'shR', 'elR', 'hdR', 'hpL', 'knL', 'ftL', 'hpR', 'knR', 'ftR'];
 const RI = Object.fromEntries(RAG.map((k, i) => [k, i]));
 const TORSO = ['hips', 'chest', 'neck', 'shL', 'shR', 'hpL', 'hpR'];
@@ -890,6 +892,10 @@ export class Dummy {
     const h = dt / sub;
     const b = this.world.ctx.env.bounds;
     let impact = 0;
+    let impactAt = -1;
+    let wallV = 0;
+    const wallP = _wallP;
+    const wallD = _wallD;
     for (let s = 0; s < sub; s++) {
       for (let i = 0; i < n; i++) {
         R.prev[i].copy(R.p[i]);
@@ -912,10 +918,22 @@ export class Dummy {
           const P = R.p[i];
           const r = RAD[RAG[i]] * this.scale;
           if (P.y < r) {
-            if (it === 0) impact = Math.max(impact, -R.v[i].y);
+            if (it === 0 && -R.v[i].y > impact) {
+              impact = -R.v[i].y;
+              impactAt = i;
+            }
             P.y = r;
           }
           if (b) {
+            // 벽에 세게 박혔는가 (자국용)
+            if (it === 0 && (P.x < b.minX || P.x > b.maxX || P.z < b.minZ || P.z > b.maxZ)) {
+              const hv = Math.hypot(R.v[i].x, R.v[i].z);
+              if (hv > wallV) {
+                wallV = hv;
+                wallP.copy(P);
+                wallD.set(R.v[i].x, 0, R.v[i].z);
+              }
+            }
             P.x = THREE.MathUtils.clamp(P.x, b.minX, b.maxX);
             P.z = THREE.MathUtils.clamp(P.z, b.minZ, b.maxZ);
           }
@@ -936,6 +954,18 @@ export class Dummy {
       }
     }
     if (impact > 9 && this.state === 'air') this.damage((impact - 9) * 4, { type: 'impact' });
+    // 아주 세게 떨어지거나 벽에 박히면 바닥이 패이고 벽이 부서진다
+    const W = this.world;
+    if ((this._markT ?? -9) < W.time) {
+      if (impact > 11 && impactAt >= 0) {
+        this._markT = W.time + 0.5;
+        W.impacts?.floor(R.p[impactAt], 0.4 + (impact - 11) * 0.12);
+      } else if (wallV > 9) {
+        this._markT = W.time + 0.5;
+        if (wallV > 13) this.damage((wallV - 9) * 4, { type: 'impact' });
+        W.impacts?.wall(wallP, wallD, 0.4 + (wallV - 9) * 0.12);
+      }
+    }
     // 평균 속도 = 몸 전체 속도
     this.vel.set(0, 0, 0);
     for (let i = 0; i < n; i++) this.vel.add(R.v[i]);

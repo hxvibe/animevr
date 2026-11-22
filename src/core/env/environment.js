@@ -50,6 +50,7 @@ export class Environment {
     this.id = bg.id;
     this.scene.add(bg.group, bg.sky);
     this.bounds = bg.bounds;
+    this.enclosed = !!bg.enclosed; // 벽 · 천장으로 막힌 공간인가
     // 고정된 물체(기둥·나무·자판기·벤치…): 배경이 직접 주지 않으면 바닥에 선 작은 메시들의 상자로 만든다
     this.colliders = bg.colliders ?? autoColliders(bg.group, bg.bounds);
     this.base = {

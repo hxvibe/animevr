@@ -7,6 +7,7 @@ import { Dummy, DUMMY_TYPES } from './dummy.js';
 import { RiggedEnemy } from './enemies.js';
 import { Shatter, Slicer } from './slicer.js';
 import { DomainClash } from './domainClash.js';
+import { Impacts } from './impacts.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -31,7 +32,11 @@ const CORNERS = [];
 for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) CORNERS.push(new THREE.Vector3(x, y, z));
 
 export class Prop {
-  constructor(world, obj, { radius = 0.35, halfH, mass = 2, hp = 40, color = 0x888888, fixed = false } = {}) {
+  /**
+   * mass: 물리용 무게 단위 (밀리고 튀는 정도) · kg: 실제 무게 — 들 수 있는지 · 휘두르는 굼뜸 · 던지는 속도 · 부딪힌 피해
+   *  label: 들 수 없을 때 알려 주는 이름
+   */
+  constructor(world, obj, { radius = 0.35, halfH, mass = 2, kg, label = null, hp = 40, color = 0x888888, fixed = false } = {}) {
     this.world = world;
     this.obj = obj;
     this.pos = obj.position;
@@ -39,6 +44,8 @@ export class Prop {
     this.spin = new THREE.Vector3(); // 각속도 (rad/s, 월드)
     this.radius = radius;
     this.mass = mass;
+    this.kg = kg ?? mass * 8;
+    this.label = label;
     this.hp = this.maxHp = hp;
     this.color = new THREE.Color(color);
     this.alive = true;
@@ -60,6 +67,8 @@ export class Prop {
     this.he = size.multiplyScalar(0.5); // 반 길이
     this.offset = box.getCenter(new THREE.Vector3()).sub(obj.position); // 몸 중심 - 원점 (로컬, 회전 전)
     this.halfH = halfH ?? this.he.y;
+    // 자동차처럼 길쭉하고 큰 물체는 구 하나로 근사하면 앞뒤가 비므로 상자로 거리를 잰다
+    this.big = Math.max(this.he.x, this.he.y, this.he.z) > 0.8;
     // 관성 (상자) → 단순화한 스칼라
     this.invI = 3 / (mass * Math.max(0.01, this.he.lengthSq()));
     // 처음 놓인 바닥 높이 (보도 위 등). 멀리 밀려나면 땅(0)
@@ -89,7 +98,17 @@ export class Prop {
     return out.copy(this.offset).applyQuaternion(this.obj.quaternion).add(this.pos);
   }
 
+  /** 상자 겉면에서 p 와 가장 가까운 점 (p 가 안에 있으면 p 그대로) */
+  closest(p, out = new THREE.Vector3()) {
+    const q = this.obj.quaternion;
+    _qd.copy(q).invert();
+    out.subVectors(p, this.center(_t)).applyQuaternion(_qd);
+    out.set(THREE.MathUtils.clamp(out.x, -this.he.x, this.he.x), THREE.MathUtils.clamp(out.y, -this.he.y, this.he.y), THREE.MathUtils.clamp(out.z, -this.he.z, this.he.z));
+    return out.applyQuaternion(q).add(this.center(_t));
+  }
+
   distanceTo(p) {
+    if (this.big) return this.closest(p, _w).distanceTo(p);
     return this.center(_t).distanceTo(p) - this.radius;
   }
 
@@ -162,10 +181,24 @@ export class Prop {
       this.vel.x *= Math.max(0, 1 - dt * (contacts >= 4 ? 3 : 0.8));
       this.vel.z *= Math.max(0, 1 - dt * (contacts >= 4 ? 3 : 0.8));
       if (impact > 9) this.damage((impact - 9) * 3);
+      // 무거운 물체(차 등)가 세게 떨어지면 바닥이 패인다
+      if (impact > 6 && this.kg >= 250 && !((this._markT ?? -9) > this.world.time)) {
+        this._markT = this.world.time + 0.6;
+        this.world.impacts?.floor(_c.copy(this.pos), Math.min(2, 0.5 + (impact - 6) * 0.12 + this.kg / 3000), { size: Math.max(1, this.he.x + this.he.z) });
+      }
     }
     // 벽
     if (bounds) {
       const r = Math.max(this.he.x, this.he.z);
+      // 무거운 물체가 빠르게 벽에 박히면 벽이 부서진다
+      const hv = Math.hypot(this.vel.x, this.vel.z);
+      if (hv > 6 && this.kg >= 100 && !((this._markT ?? -9) > this.world.time)) {
+        const out = this.pos.x < bounds.minX + r || this.pos.x > bounds.maxX - r || this.pos.z < bounds.minZ + r || this.pos.z > bounds.maxZ - r;
+        if (out) {
+          this._markT = this.world.time + 0.6;
+          this.world.impacts?.wall(this.center(_c), _r.set(this.vel.x, 0, this.vel.z), Math.min(2, 0.4 + (hv - 6) * 0.1 + this.kg / 3000));
+        }
+      }
       if (this.pos.x < bounds.minX + r) { this.pos.x = bounds.minX + r; this.vel.x = Math.abs(this.vel.x) * 0.3; }
       if (this.pos.x > bounds.maxX - r) { this.pos.x = bounds.maxX - r; this.vel.x = -Math.abs(this.vel.x) * 0.3; }
       if (this.pos.z < bounds.minZ + r) { this.pos.z = bounds.minZ + r; this.vel.z = Math.abs(this.vel.z) * 0.3; }
@@ -228,6 +261,7 @@ export class World {
     this.pieceForce = null;
     this.player = { hp: 100, maxHp: 100, lastHit: -10, paralyzed: false };
     this.clash = new DomainClash(ctx); // 적의 영역전개 · 영역 싸움
+    this.impacts = new Impacts(ctx); // 바닥이 패이고 벽이 부서진 자국
     this.onDamage = (d, amount, info) => ctx.ui?.damageNumber(d, amount, info);
     this.onKill = () => this.kills++;
     this.bulletGeo = new THREE.CapsuleGeometry(0.018, 0.12, 3, 6);
@@ -289,6 +323,7 @@ export class World {
   }
 
   clearDebris() {
+    this.impacts?.clear();
     this.slicer.clear();
     this.shatter.clear();
     for (const p of this.limbs) {
@@ -596,25 +631,12 @@ export class World {
         if (!c.alive || c.away || (a.asleep && c.asleep)) continue;
         this._collide(a, c);
       }
-      if (a.asleep) continue;
       for (const d of this.dummies) {
         if (!d.alive) continue;
+        // 잠든 소품엔 빠르게 날아오는 적만 부딪힌다 (세워 둔 차에 던져진 적이 처박힌다)
+        if (a.asleep && d.vel.lengthSq() < 16) continue;
         if (a.ignoreD === d && this.time < a.ignoreUntil) continue;
-        const dc = d.center(_v2);
-        _n.subVectors(a.pos, dc);
-        const dist = _n.length();
-        const rr = a.radius + 0.35 * d.scale;
-        if (dist < rr && dist > 0) {
-          _n.divideScalar(dist);
-          const rel = a.vel.dot(_n);
-          if (rel < -6 && !((a.hitCd?.get(d) ?? 0) > this.time)) {
-            (a.hitCd ??= new Map()).set(d, this.time + 0.3);
-            d.damage((-rel - 6) * 4, { type: 'impact' });
-            d.impulse(_v.copy(_n).multiplyScalar(rel * 0.4 * a.mass / d.mass));
-          }
-          a.pos.addScaledVector(_n, rr - dist);
-          if (rel < 0) a.vel.addScaledVector(_n, -rel * 1.2);
-        }
+        this._hitDummy(a, d);
       }
     }
 
@@ -650,6 +672,7 @@ export class World {
     }
 
     this._updateBleeds(dt);
+    this.impacts.update(dt);
     this.clash.update(dt);
     this.slicer.update(dt, this.pieceForce);
     this.shatter.update(dt);
@@ -657,6 +680,75 @@ export class World {
     if (this.dummies.some((d) => !d.alive)) this.dummies = this.dummies.filter((d) => d.alive);
     if (this.props.some((p) => !p.alive)) this.props = this.props.filter((p) => p.alive);
     if (this.bullets.some((b) => !b.alive)) this.bullets = this.bullets.filter((b) => b.alive);
+  }
+
+  /**
+   * 소품 ↔ 적: 무게(kg)를 그대로 쓴 충돌. 다가오는 상대 속도 × 맞부딪힌 무게(환산 질량)로 피해 · 서로 밀려나는 속도
+   *  → 휘두른 차는 적을 날려 버리고, 가벼운 상자는 툭 친다. 던져진 적이 세워 둔 차에 박히면 적이 크게 다친다
+   */
+  _hitDummy(a, d) {
+    const dc = d.center(_v2);
+    const rD = 0.35 * d.scale;
+    let dist;
+    let rr;
+    if (a.big) {
+      a.closest(dc, _cp);
+      _n.subVectors(_cp, dc);
+      dist = _n.length();
+      rr = rD;
+      if (dist < 1e-4) {
+        _n.subVectors(a.center(_cp), dc);
+        dist = Math.min(_n.length(), rD * 0.5) || 1e-3;
+      }
+    } else {
+      _n.subVectors(a.pos, dc);
+      dist = _n.length();
+      rr = a.radius + rD;
+    }
+    if (!(dist < rr && dist > 0)) return;
+    _n.normalize(); // 적 → 소품
+    const closing = d.vel.dot(_n) - a.vel.dot(_n); // + = 가까워지는 중
+    const mD = 75 * d.scale ** 3;
+    const kg = a.kg;
+    const mu = (kg * mD) / (kg + mD); // 환산 질량
+    if (closing > 4 && !((a.hitCd?.get(d) ?? 0) > this.time)) {
+      (a.hitCd ??= new Map()).set(d, this.time + 0.3);
+      const fast = Math.max(0, closing - 4);
+      // 휘두르거나 던진 물체가 적을 친 거면 그 물체의 무게가 그대로 실린다 (차는 치명적) · 적이 날아와 박힌 거면 적의 몸무게까지만
+      const propHit = -a.vel.dot(_n) >= d.vel.dot(_n);
+      const kgEff = propHit ? kg : mu;
+      const dmg = fast * (2 + 1.2 * Math.sqrt(kgEff));
+      const point = _cm.copy(dc).addScaledVector(_n, Math.min(dist, rD));
+      d.damage(dmg, { type: 'impact', dir: _n.clone().negate(), point: point.clone() });
+      // 서로 밀려난다 (무거운 쪽은 거의 그대로)
+      const J = closing * 1.3;
+      if (d.alive) d.impulse(_v.copy(_n).multiplyScalar(-J * kg / (kg + mD)));
+      if (!a.held && !a.fixed) {
+        a.vel.addScaledVector(_n, J * mD / (kg + mD));
+        a.asleep = false;
+      }
+      const ctx = this.ctx;
+      if (fast > 2) {
+        ctx.fx?.burst?.(point, Math.round(8 + Math.min(20, fast * 2)), new THREE.Color(0xe8e0d0), 2 + fast * 0.3, 0.05, 0.4);
+        ctx.sfx?.play?.('punch_3', { at: point, vol: Math.min(1, 0.4 + fast * 0.06), rate: kg > 300 ? 0.5 : 0.8 });
+        if (kg > 300) ctx.sfx?.play?.('shatter_2', { at: point, vol: 0.5, rate: 0.6 });
+        if (a.held && ctx.game) ctx.game.hitstop = Math.max(ctx.game.hitstop ?? 0, Math.min(0.09, 0.02 + dmg / 4000));
+      }
+    }
+    // 겹침 풀기: 가벼운 소품은 밀려나고, 무거운 소품은 적을 밀어낸다
+    const pen = rr - dist;
+    const kP = a.held || a.fixed ? 0 : mD / (kg + mD);
+    if (kP > 0) a.pos.addScaledVector(_n, pen * kP);
+    const kD = 1 - kP;
+    if (kD > 0.05 && d.state !== 'held') {
+      _v.copy(_n).multiplyScalar(-pen * kD);
+      if (d.rag && d.state !== 'stand') for (let i = 0; i < d.rag.p.length; i++) {
+        d.rag.p[i].add(_v);
+        d.rag.prev?.[i]?.add(_v);
+      }
+      else d.root?.position.add(_v.setY(0));
+    }
+    if (!a.held && !a.fixed && closing > 0 && closing <= 4) a.vel.addScaledVector(_n, closing * kP);
   }
 
   _collide(a, c) {

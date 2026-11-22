@@ -10,7 +10,7 @@ import { DUMMY_TYPES } from './dummy.js';
 import { HandDemo } from './handDemo.js';
 import { LANGS, getLang, setLang, tr } from './i18n.js';
 
-export const CREDIT_LINE = '3D models: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab, CC BY-NC 4.0) · "Low-poly test dummy" by HipDaMaster (Sketchfab, CC BY 4.0)';
+export const CREDIT_LINE = '3D models: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab, CC BY-NC 4.0) · "Low-poly test dummy" by HipDaMaster (Sketchfab, CC BY 4.0) · "Generic passenger car pack" by Comrade1280 (Sketchfab, CC BY 4.0)';
 export const FONT = "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
 export const JFONT = "'Noto Serif JP', 'Yu Mincho', 'Hiragino Mincho ProN', serif";
 

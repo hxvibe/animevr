@@ -512,7 +512,7 @@ export function sever(d, root, opts = {}) {
   // 장면에 놓고 소품으로
   W.scene.add(pieceRoot);
   const len = pa.distanceTo(pb) * (root === 'head' ? 1.6 : root.startsWith('el') || root.startsWith('kn') ? 1.3 : 2);
-  const prop = W.addProp(pieceRoot, { radius: Math.max(0.09 * sc, len * 0.32), mass: MASS[root] * sc * sc, hp: 60 * sc, color: 0x6a0c0c });
+  const prop = W.addProp(pieceRoot, { radius: Math.max(0.09 * sc, len * 0.32), mass: MASS[root] * sc * sc, kg: MASS[root] * 3.6 * sc ** 3, label: PART_NAME[root], hp: 60 * sc, color: 0x6a0c0c });
   prop.floor0 = 0; // 떨어진 높이를 바닥으로 여기지 않게
   prop._supported = false;
   prop.limb = root;

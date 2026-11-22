@@ -329,9 +329,12 @@ WebXR은 **HTTPS**에서만 동작합니다.
 |---|---|---|---|
 | dummy.glb | Low-poly test dummy | HipDaMaster | CC BY 4.0 |
 | shrine.glb | Malevolent Shrine (No Glow) — 스쿠나의 사당(복마어주자) | **NexusB** | **CC BY-NC 4.0 (비상업적 이용만)** |
+| prop_cars.glb | Generic passenger car pack — 도쿄 맵의 자동차 10종 (바닥 원판 제거) | Comrade1280 | CC BY 4.0 |
 | white_room.glb | Empty White Room | che02 | CC BY 4.0 (지금은 연습장을 코드로 지어 쓰지 않음) |
 
-게임 첫 화면(HTML)과 VR 타이틀 화면 아래에도 저작권 표시가 나옵니다: *3D models: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab, CC BY-NC 4.0) · "Low-poly test dummy" by HipDaMaster (Sketchfab, CC BY 4.0)*.
+게임 첫 화면(HTML)과 VR 타이틀 화면 아래에도 저작권 표시가 나옵니다: *3D models: "Malevolent Shrine (No Glow)" by NexusB (Sketchfab, CC BY-NC 4.0) · "Low-poly test dummy" by HipDaMaster (Sketchfab, CC BY 4.0) · "Generic passenger car pack" by Comrade1280 (Sketchfab, CC BY 4.0)*.
+
+메구미의 주구 `wpn_megumi_blade.glb`(곡도) · `wpn_megumi_sword.glb`(고리칼)는 사용자가 제공한 STL 기반 모델(원작자 정보 없음)입니다. 원본은 140만 삼각형 · UV 없음(37MB)이라 `tools/models/`의 스크립트로 1.6만 삼각형으로 줄이고, 부위(날 · 날 면 · 코등이 · 손잡이 · 감은 천)를 나눠 UV를 만들고 참고 이미지처럼 텍스처(색 · 거칠기/금속 · 노멀)를 그려 넣었습니다 (약 0.37MB).
 
 ### 식신 모델
 

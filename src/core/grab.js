@@ -35,6 +35,13 @@ export class Grab {
     this.tearS = null; // 뜯는 중인 상태
   }
 
+  /** 다른 기능(메구미의 그림자 등)이 꺼낸 물건을 그 손에 바로 쥐여 준다 */
+  hold(side, t, h) {
+    if (this.held[side] || !t?.alive) return false;
+    this._grab(side, t, h ?? this.ctx.input[side]);
+    return !!this.held[side];
+  }
+
   isHolding(side) {
     return !!this.held[side];
   }
@@ -53,6 +60,7 @@ export class Grab {
         // 다른 손이 이미 잡은 적도 한 손 더 잡을 수 있다 (두 손 잡기)
         const foes = this.canGrabFoes();
         const t = world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? foes && (!x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2)) : !x.held));
+        if (t && t.kind !== 'dummy' && !this._canLift(t, h)) continue;
         if (t) this._grab(side, t, h);
       } else {
         const t = H.t;
@@ -71,10 +79,15 @@ export class Grab {
         }
         else if (H.offL && t.obj) {
           // 소품 · 떨어진 팔다리: 손을 따라 함께 돈다 (쥔 순간의 자세를 손 기준으로 기억)
+          // 무거울수록 손을 굼뜨게 따라온다 (들 수 있는 무게에 가까울수록)
+          const rate = 25 / (1 + (2 * (t.kg ?? 0)) / this._liftKg());
           target.copy(H.offL).applyQuaternion(h.quat).add(h.palm);
-          t.pos.lerp(target, 1 - Math.exp(-dt * 25));
-          t.obj.quaternion.slerp(_q.multiplyQuaternions(h.quat, H.rel), 1 - Math.exp(-dt * 25));
-          t.vel.copy(h.vel); // 휘두르면 그 속도로 부딪힌다 (몽둥이처럼)
+          const prev = (H.prev ??= t.pos.clone());
+          prev.copy(t.pos);
+          t.pos.lerp(target, 1 - Math.exp(-dt * rate));
+          t.obj.quaternion.slerp(_q.multiplyQuaternions(h.quat, H.rel), 1 - Math.exp(-dt * rate));
+          // 휘두르면 실제로 움직인 속도로 부딪힌다 (몽둥이처럼 · 차로 후려치기)
+          if (dt > 0) t.vel.lerp(_v2.subVectors(t.pos, prev).divideScalar(dt), 0.6);
         } else t.pos.lerp(target, 1 - Math.exp(-dt * 25));
         if (t.kind === 'dummy') this._slam(H, t, h);
         if (release) this._release(side, h.vel.clone().multiplyScalar(1.7));
@@ -101,6 +114,7 @@ export class Grab {
             t = x;
           }
         }
+        if (t && t.kind !== 'dummy' && !this._canLift(t, inp.right)) t = null;
         if (t) {
           this.desk = { t };
           if (t.kind === 'dummy') t.grab({ drop: () => (this.desk = null) }, null);
@@ -122,6 +136,27 @@ export class Grab {
         }
       }
     }
+  }
+
+  /** 들 수 있는 무게(kg): 마허라는 차도 번쩍 · 이타도리·스쿠나는 장사 · 나머지는 사람 힘 */
+  _liftKg() {
+    const c = this.ctx.character;
+    if (c?.possessed) return 3000;
+    return { itadori: 300, sukuna: 500 }[c?.id] ?? 60;
+  }
+
+  /** 이 물체를 들 수 있나 (못 들면 알려 준다) */
+  _canLift(t, h) {
+    const kg = t.kg ?? 0;
+    const cap = this._liftKg();
+    if (kg <= cap) return true;
+    if (!((this._heavyT ?? -9) > this.ctx.world.time)) {
+      this._heavyT = this.ctx.world.time + 2.5;
+      const name = t.label ? `${t.label} ` : '';
+      this.ctx.ui.callout(`꿈쩍도 않는다 — ${name}${Math.round(kg).toLocaleString()}kg (들 수 있는 무게 ${cap}kg · 마허라라면 든다)`, { color: '#ffb0a0', dur: 1.8 });
+      h?.pulse?.(0.9, 120);
+    }
+    return false;
   }
 
   /** 고죠의 무량공처 안에서 정보에 굳은 적인가 */
@@ -217,6 +252,13 @@ export class Grab {
     const dmg = sp * 9 * k;
     t.damage(dmg, { type: 'impact', dir: h.vel.clone().normalize(), point: lead.clone(), color: '#ffffff' });
     fx.burst(lead, Math.round(16 * k), new THREE.Color(0xd8d0c0), 3 + k, 0.06, 0.5);
+    // 바닥이 패이고 벽이 부서진다
+    const im = world.impacts;
+    if (im) {
+      const str = 0.35 + (sp * k) / 9;
+      if (ground) im.floor(_v3.set(lead.x, Math.max(0, lead.y - 0.3 * sc), lead.z), str);
+      else im.wall(lead, _v3.copy(h.vel).setY(0), str);
+    }
     fx.shockwave?.(lead, new THREE.Color(0xd8d0c0), 0.8 * k, 0.35);
     sfx.play('punch_3', { at: lead, vol: Math.min(1, 0.5 + sp * 0.06), rate: this._mighty() ? 0.55 : 0.85 });
     sfx.rumble?.(0.2 * k, 0.25);
@@ -412,10 +454,12 @@ export class Grab {
     if (t.kind === 'dummy') {
       if (t.heldBy) t.release(vel, this.by[side]);
     } else {
+      // 무거울수록 덜 날아간다 · 덜 돈다
+      const k = 1 / (1 + (t.kg ?? 0) / this._liftKg());
       t.held = false;
-      t.vel.copy(vel);
+      t.vel.copy(vel).multiplyScalar(k);
       t.asleep = false;
-      t.spin.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(vel.length());
+      t.spin.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(vel.length() * k);
     }
   }
 

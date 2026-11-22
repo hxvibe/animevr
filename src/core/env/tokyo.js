@@ -2,6 +2,7 @@
 // 모두 1 유닛 = 1m. 정적인 기하는 재질별로 합쳐(Batch) 드로우콜을 줄인다.
 import * as THREE from 'three';
 import * as R from './realism.js';
+import { makeCar, CARS } from '../cars.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -170,8 +171,41 @@ function tree(B, x, z, s = 1) {
   }
 }
 
-/** 택시·승용차 (파괴 가능한 소품) */
+// 세워 둔 차: 차 팩의 진짜 차 (택시는 세단에 지붕 등). 차마다 실제 무게(kg) — 마허라만 들어 휘두르거나 던진다
+const CAR_ORDER = ['sedan', 'hatchback', 'suv', 'compact', 'minivan', 'wagon', 'coupe', 'pickup', 'sport', 'offroad'];
+let _carN = 0;
 function car(ctx, group, x, z, rotY, color, taxi = false) {
+  const id = taxi ? 'sedan' : CAR_ORDER[_carN++ % CAR_ORDER.length];
+  const m = makeCar(id);
+  if (!m) return boxCar(ctx, group, x, z, rotY, color, taxi);
+  const def = CARS[id];
+  const size = m.userData.size;
+  const s = def.len / size.z;
+  m.scale.setScalar(s);
+  const hh = (size.y * s) / 2;
+  m.position.y = -hh;
+  const g = new THREE.Group();
+  g.add(m);
+  if (taxi) {
+    // 택시: 차체를 칠하고 지붕에 표시등
+    m.traverse((o) => {
+      if (o.isMesh && /body/i.test(o.material?.name ?? '') && !/glass|optic/i.test(o.material?.name ?? '')) {
+        o.material = o.material.clone();
+        o.material.color.set(color);
+      }
+    });
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.22), new THREE.MeshStandardMaterial({ color: 0xffe9a0, emissive: 0xffd060, emissiveIntensity: 1 }));
+    lamp.position.y = hh + 0.06;
+    g.add(lamp);
+  }
+  g.position.set(x, hh, z);
+  g.rotation.y = rotY;
+  group.add(g);
+  ctx.world.addProp(g, { radius: Math.max(size.x, size.z) * s * 0.3, halfH: hh, mass: 25, kg: def.kg, label: def.label, hp: 200 + def.kg * 0.06, color });
+}
+
+/** 차 모델이 없을 때: 상자로 만든 차 */
+function boxCar(ctx, group, x, z, rotY, color, taxi = false) {
   const g = new THREE.Group();
   const body = new THREE.MeshStandardMaterial({ color, roughness: 0.25, metalness: 0.6 });
   const glass = new THREE.MeshStandardMaterial({ color: 0x0c1218, roughness: 0.05, metalness: 0.9 });
@@ -197,7 +231,7 @@ function car(ctx, group, x, z, rotY, color, taxi = false) {
   g.position.set(x, 0.8, z);
   g.rotation.y = rotY;
   group.add(g);
-  ctx.world.addProp(g, { radius: 1.3, halfH: 0.8, mass: 25, hp: 260, color });
+  ctx.world.addProp(g, { radius: 1.3, halfH: 0.8, mass: 25, kg: 1300, label: '자동차', hp: 260, color });
 }
 
 /** 파괴 가능한 작은 소품 (쓰레기통 · 콘 · 자전거 대신 상자) */
@@ -210,16 +244,16 @@ function props(ctx, group, list) {
     if (kind === 'bin') {
       m = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.25, 0.9, 14), bin);
       m.position.set(x, 0.45 + 0.15, z);
-      ctx.world.addProp(m, { radius: 0.32, mass: 2, hp: 30, color: 0x5a6a6e });
+      ctx.world.addProp(m, { radius: 0.32, mass: 2, kg: 14, label: '쓰레기통', hp: 30, color: 0x5a6a6e });
     } else if (kind === 'cone') {
       m = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.7, 12), cone);
       m.position.set(x, 0.35, z);
-      ctx.world.addProp(m, { radius: 0.2, mass: 0.6, hp: 10, color: 0xff5a10 });
+      ctx.world.addProp(m, { radius: 0.2, mass: 0.6, kg: 2.5, label: '고깔', hp: 10, color: 0xff5a10 });
     } else {
       // 맥주 상자 (플라스틱)
       m = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.32, 0.36), crate);
       m.position.set(x, 0.16 + 0.15, z);
-      ctx.world.addProp(m, { radius: 0.26, mass: 1, hp: 15, color: 0x2c5fa8 });
+      ctx.world.addProp(m, { radius: 0.26, mass: 1, kg: 9, label: '맥주 상자', hp: 15, color: 0x2c5fa8 });
     }
     m.castShadow = true;
     group.add(m);

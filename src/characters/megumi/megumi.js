@@ -12,6 +12,7 @@ import { preloadShikigami } from './models.js';
 import { MahoragaRitual } from './ritual.js';
 import { Vessel } from '../../core/vessel.js';
 import { MahoragaSelf } from './possess.js';
+import { ShadowStore, CAP_KG } from './shadowStore.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -62,6 +63,7 @@ export class Megumi {
     this.wheel = null; // 법진만 소환
     this.fadingWheels = []; // 사라지는 중인 법진
     this.slashes = new SlashLines(ctx.scene, 60); // 옥견 혼의 발톱 자국
+    this.shadow = new ShadowStore(this); // 그림자 수납 (주구 · 물건) — 든 무게만큼 술사가 짊어진다
     const W = ctx.world;
     // 탈토가 나와 있으면 더미들은 토끼를 노리고, 가까이서 싸우는 식신이 있으면 그 식신을 친다
     W.decoy = (d) => {
@@ -147,7 +149,8 @@ export class Megumi {
         { head: '大蛇 오로치 · 満象 만상', demo: ['megumi.orochi', 'megumi.elephant'], color: '#a8b8ff', text: '오로치: 손등을 위로, 네 손가락을 모아 앞으로 내밀고 엄지를 그 밑에 붙이기 (뱀 머리)\n만상: 손등을 위로 하고 검지·중지를 아래로 늘어뜨리기 (코끼리 코)' },
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
         { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 팔을 앞으로 쭉 뻗고 두 주먹을 쥐어 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
-        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 아래로 내리고 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
+        { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 아래로 내리고 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동\n미완성 영역: 막힌 실내(연습장)에서만 결계가 닫히고, 탁 트인 곳에선 바닥만 그림자 바다가 된다' },
+        { head: '그림자 수납 (주구 · 물건)', color: '#b8c4ff', text: `발밑 그림자(바로 아래 바닥)에 편 손을 대면 꺼낼 물건이 떠오른다 → 주먹을 쥐면 꺼내 쥔다 · 편 손을 1초 대고 있으면 다음 물건\n주구(곡도 · 고리칼): 크게 휘둘러 벤다 · 손을 펴면 그림자로 돌아간다 · 물건을 쥔 채 발밑 그림자에 넣고 손을 펴면 그림자에 넣는다 (영역전개 중엔 그림자 바다 어디든)\n그림자에 든 무게는 술사가 짊어진다 — 무거울수록 느려지고 주력이 덜 찬다 · 최대 ${CAP_KG}kg` },
         { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 물체 집기 (적은 마허라가 된 뒤에만 붙잡는다)' },
       ];
     }
@@ -164,12 +167,14 @@ export class Megumi {
         { head: '魔虚羅 마허라', color: '#ffd28a', text: '8 (조복 전이면 조복의 의식 · 다시 누르면 돌려보내기)' },
         { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: 'Q 1.2초 누르고 있기' },
         { head: '주먹 · 잡기', color: '#ffd0d0', text: 'V 주먹(흑섬) · T 물체 집기 → 다시 T 던지기' },
+        { head: '그림자 수납', color: '#b8c4ff', text: `G 주구 꺼내기/돌려보내기 · T로 든 물건을 G로 그림자에 넣기 · B 꺼낼 물건 고르기 (짊어지는 무게 최대 ${CAP_KG}kg)` },
       ];
     }
     return [
       { head: '식신 고르기 · 부르기', color: '#a8b8ff', text: '왼쪽 트리거만: 식신 고르기 · 오른쪽 트리거만: 부르기 (바라본 대상을 노린다 · 그립까지 쥐면 주먹이라 부르지 않는다)\n다시 부르면 돌려보내기' },
       { head: '魔虚羅 마허라', color: '#ffd28a', text: '두 컨트롤러를 앞으로 쭉 뻗고 두 그립+트리거(주먹)를 1초' },
       { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: '팔을 아래로 내리고 두 그립+트리거(주먹)를 맞대고 1.2초 (메뉴에서도 발동)' },
+      { head: '그림자 수납', color: '#b8c4ff', text: `발밑 바닥에 컨트롤러를 대고 그립 → 주구·물건 꺼내기 (대고 1초: 다음 물건) · 그립을 놓으면 주구는 그림자로\n물건을 쥔 채 발밑에 대고 그립을 놓으면 그림자에 넣는다 · 짊어지는 무게 최대 ${CAP_KG}kg` },
       { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · Y 메뉴' },
     ];
   }
@@ -197,6 +202,7 @@ export class Megumi {
     if (m) rows.push({ label: m.tamed ? '마허라' : '마허라 (조복 의식)', bar: m.hp / m.maxHp, color: '#ffd28a' });
     if (ad) rows.push({ label: m ? '적응' : '법진 적응', text: (ad.summary() || '—') + (ad.spin ? ' · 무한회전' : ''), color: '#ffe0a0' });
     if (this.ctx.input.hands.some((h) => h.source === 'controller')) rows.splice(3, 0, { label: '선택', text: SIGNS[ORDER[this.ctrlSel]].label, color: '#c0ccff' });
+    rows.push(this.shadow.hudRow());
     if (this.vessel) rows.push(this.vessel.hudRow());
     return rows;
   }
@@ -205,7 +211,10 @@ export class Megumi {
   update(dt) {
     const { input: inp } = this.ctx;
     const blocked = this.ctx.ui.menuOpen || !!this.ritual?.alive; // 조복 의식 중엔 술식도 못 쓴다
-    this.energy = Math.min(this.maxEnergy, this.energy + 12 * dt);
+    // 그림자에 든 무게를 짊어진다: 무거울수록 주력이 덜 차고 몸이 느려진다
+    const burden = this.possessed ? 0 : this.shadow.burden;
+    this.energy = Math.min(this.maxEnergy, this.energy + 12 * (1 - 0.85 * burden) * dt);
+    inp.moveMul = 1 - 0.6 * burden;
     for (const k in this.cds) this.cds[k] -= dt;
     if (this.possessed) {
       // 술사가 마허라가 된 동안: 식신·수인 없이 마허라의 몸으로 싸운다
@@ -217,7 +226,8 @@ export class Megumi {
       if (inp.left.source === 'hand' || inp.right.source === 'hand' || (inp.left.source === 'controller' && inp.right.source === 'controller')) this._updateSigns(dt);
       this._controller(dt);
       if (inp.mode === 'desktop') this._desktop(dt);
-    }
+      this.shadow.update(dt);
+    } else if (this.possessed) for (const sd of ['left', 'right']) this.shadow.putTool(sd);
     if (this.ritual && !this.ritual.update(dt)) this.ritual = null;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const s = this.list[i];
@@ -404,7 +414,7 @@ export class Megumi {
   }
 
   handBusy(side) {
-    return this.sign.t > 0 || this.elephant.armed > 0 || (side && this.vessel?.holds(side));
+    return this.sign.t > 0 || this.elephant.armed > 0 || (side && (this.vessel?.holds(side) || this.shadow?.holds(side)));
   }
 
   /** 지금 펼친 영역 (스쿠나의 손가락을 먹었으면 복마어주자가 겹친다) */
@@ -653,6 +663,8 @@ export class Megumi {
     world.domain = { center, radius: this.garden.radius, freeze: false };
     shadowSplash(this.ctx.fx, center, 3, 60);
     ui.manga({ top: '領域展開', main: '嵌合暗翳庭', ruby: 'かんごうあんえいてい', color: '#6f86ff', big: true });
+    // 미완성 영역: 막힌 공간이 아니면 결계가 닫히지 않는다 (바닥만 그림자)
+    if (!this.garden.closed) ui.callout('미완성 영역 — 결계를 닫지 못해 바닥만 그림자로 잠긴다 (막힌 실내에서는 결계가 닫힌다)', { color: '#9fb2ff', dur: 2.6 });
     sfx.rumble(2.5, 0.6);
     sfx.play('domain_open', { vol: 0.9, rate: 0.85 });
     sfx.play('void_open', { vol: 0.4, rate: 0.7 });
@@ -743,5 +755,7 @@ export class Megumi {
     this.aura.dispose();
     this.ctx.world.decoy = null;
     this.ctx.world.domain = null;
+    this.shadow.dispose();
+    this.ctx.input.moveMul = 1;
   }
 }

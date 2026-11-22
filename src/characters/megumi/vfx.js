@@ -223,12 +223,37 @@ export class ChimeraShadowGarden {
     ctx.scene.add(this.sea, this.sky);
   }
 
+  /**
+   * 嵌合暗翳庭는 미완성 영역: 결계를 스스로 닫지 못한다.
+   *  막힌 공간(실내)이면 벽과 천장이 결계 구실을 해 배경이 그림자에 잠기고, 탁 트인 곳이면 바닥만 그림자 바다가 된다
+   */
   start(center) {
+    this.closed = !!this.ctx.env.enclosed;
     this.center.copy(center);
-    this.sea.position.set(center.x, 0.01, center.z);
+    this.sea.position.set(center.x, this.closed ? 0.01 : this._seaLevel(center), center.z);
     this.state = 'opening';
     this.t = 0;
     this.sea.visible = true;
+  }
+
+  /**
+   * 바깥(거리)에선 보도처럼 살짝 높은 바닥이 있어 바다가 그 밑에 숨는다 →
+   *  둘레의 바닥 높이를 몇 군데 재서 가장 높은 곳 바로 위에 그림자 바다를 깐다 (발목까지 그림자에 잠긴 느낌)
+   */
+  _seaLevel(c) {
+    const G = this.ctx.env.current?.group;
+    if (!G) return 0.01;
+    const ray = new THREE.Raycaster();
+    let top = 0;
+    for (let i = 0; i < 25; i++) {
+      const a = i * 2.4;
+      const r = i === 0 ? 0 : 1.5 + (i % 5) * 2;
+      ray.set(new THREE.Vector3(c.x + Math.cos(a) * r, 1.2, c.z + Math.sin(a) * r), new THREE.Vector3(0, -1, 0));
+      ray.far = 1.6;
+      const h = ray.intersectObject(G, true).find((x) => x.object.visible && !x.object.userData.isProp && x.face && x.face.normal.y > 0.5);
+      if (h && h.point.y < 0.35) top = Math.max(top, h.point.y);
+    }
+    return top + 0.02;
   }
 
   stop() {
@@ -250,18 +275,23 @@ export class ChimeraShadowGarden {
     if (this.state === 'opening') {
       const k = Math.min(1, this.t / 1.2);
       this.u.uK.value = 1 - Math.pow(1 - k, 2);
-      if (k > 0.5 && !this.sky.visible) {
-        env.setHidden(true);
-        this.sky.visible = true;
+      if (this.closed) {
+        if (k > 0.5 && !this.sky.visible) {
+          env.setHidden(true);
+          this.sky.visible = true;
+        }
+        this.skyU.uFade.value = Math.max(0, (k - 0.5) * 2);
+        env.fog.color.lerp(new THREE.Color(0x05060c), Math.min(1, dt * 3));
+        env.fog.near = THREE.MathUtils.lerp(env.fog.near, 12, dt * 2);
+        env.fog.far = THREE.MathUtils.lerp(env.fog.far, 60, dt * 2);
+        env.hemi.color.lerp(new THREE.Color(0x8090c0), dt * 2);
+        env.hemi.groundColor.lerp(new THREE.Color(0x000000), dt * 2);
+        env.hemi.intensity = THREE.MathUtils.lerp(env.hemi.intensity, 0.9, dt * 2);
+        env.sun.color.lerp(new THREE.Color(0x6070a0), dt * 2);
+      } else {
+        // 탁 트인 곳: 하늘 · 건물은 그대로, 발밑만 그림자 바다 (빛이 아주 조금 가라앉는다)
+        env.hemi.groundColor.lerp(new THREE.Color(0x05060c), dt * 2);
       }
-      this.skyU.uFade.value = Math.max(0, (k - 0.5) * 2);
-      env.fog.color.lerp(new THREE.Color(0x05060c), Math.min(1, dt * 3));
-      env.fog.near = THREE.MathUtils.lerp(env.fog.near, 12, dt * 2);
-      env.fog.far = THREE.MathUtils.lerp(env.fog.far, 60, dt * 2);
-      env.hemi.color.lerp(new THREE.Color(0x8090c0), dt * 2);
-      env.hemi.groundColor.lerp(new THREE.Color(0x000000), dt * 2);
-      env.hemi.intensity = THREE.MathUtils.lerp(env.hemi.intensity, 0.9, dt * 2);
-      env.sun.color.lerp(new THREE.Color(0x6070a0), dt * 2);
       if (k >= 1) this.state = 'active';
     } else if (this.state === 'closing') {
       const k = Math.min(1, this.t / 0.8);

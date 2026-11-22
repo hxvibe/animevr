@@ -3,6 +3,7 @@
 //  · 쥔 채 크게 휘두르거나, 던져서 칼날이 빠르게 닿으면 벤다 (자른 면은 칼날이 지나간 면)
 //  · 잡기(grab.js)가 손잡이·칼날 어디든 손이 닿은 자리를 쥐게 하고, 칼끝은 언제나 엄지 쪽(앞)으로 — 두 손으로도 쥔다
 import * as THREE from 'three';
+import { tryStick, followStuck } from './stab.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -43,6 +44,8 @@ export function stepWeapon(ctx, p, dt, hand = null, time = 0) {
     disposeWeaponFx(ctx, p);
     return;
   }
+  // 꽂혀 있으면 박힌 곳을 따라간다 (쥔 동안은 grab.js 가)
+  if (W.stuck && !hand) followStuck(ctx, p, dt);
   p.obj.updateMatrixWorld(true);
   W.baseW.set(0, W.base, 0).applyMatrix4(p.obj.matrixWorld);
   W.tipW.set(0, W.tip, 0).applyMatrix4(p.obj.matrixWorld);
@@ -53,6 +56,11 @@ export function stepWeapon(ctx, p, dt, hand = null, time = 0) {
   }
   (W.prevTip ??= new THREE.Vector3()).copy(W.tipW);
   W.arc = speed > 1.8 ? W.arc + speed * dt : W.arc * Math.max(0, 1 - dt * 10);
+  if (W.stuck) {
+    if (W.mesh) W.mesh.visible = false;
+    W.trail.length = 0;
+    return;
+  }
   // 궤적 (빠를 때만 보인다)
   if (speed > 2.5 || W.trail.length) {
     W.mesh ??= trailMesh(ctx.scene, W.color);
@@ -76,6 +84,8 @@ export function stepWeapon(ctx, p, dt, hand = null, time = 0) {
   }
   // 베기: 쥐고 크게 휘두를 때 · 던져서 빠르게 날아갈 때
   const desk = hand?.source === 'desktop';
+  // 칼끝으로 찌르면(칼끝부터 던지면) 꽂힌다 — 꽂히면 베지 않는다
+  if (!desk && tryStick(ctx, p, hand)) return;
   const big = hand ? (desk ? speed > 2.6 : speed > 4 && W.arc > 0.4) : speed > 6;
   if (big) slash(ctx, p, speed, hand, time);
 }

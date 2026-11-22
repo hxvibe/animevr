@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { RAG } from './dummy.js';
 import { PART_NAME } from './dismember.js';
 import { gripPoint } from './body.js';
+import { onGrabStuck, holdStuck, afterHoldStuck, onReleaseStuck } from './stab.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -504,6 +505,8 @@ export class Grab {
     const edge = _v3.copy(g.ref).addScaledVector(g.dir, -g.ref.dot(g.dir)).normalize().negate();
     H.weapon = { y, es: X.dot(edge) >= 0 ? 1 : -1, blend: 0, prevQ: t.obj.quaternion.clone(), prevP: t.pos.clone(), w: new THREE.Vector3() };
     H.offL = null;
+    // 꽂혀 있던 칼: 적에 꽂혀 있으면 적을 칼에 꿴 채 쥔다
+    if (!H.second && W.stuck) onGrabStuck(this.ctx, t);
     if (H.second && !this._told2) {
       this._told2 = true;
       this.ctx.ui.callout('두 손으로 쥐었다 — 두 손을 잇는 방향으로 칼이 선다', { color: '#c8d0ff', dur: 1.4 });
@@ -540,9 +543,16 @@ export class Grab {
     _m.makeBasis(edge, dir, Z);
     _q.setFromRotationMatrix(_m);
     const target = _w.copy(g.G).addScaledVector(dir, -W.y);
-    // 쥔 순간엔 지금 자세에서 손 자세로 부드럽게 (휙 순간이동하지 않게) · 무거울수록 굼뜨다
+    // 꽂힌 칼: 박힌 채 움직이지 않거나(바닥 · 벽 · 무거운 물체) 꿰인 적 · 물체를 끌고 온다 (stab.js)
+    if (t.weapon.stuck && holdStuck(this.ctx, t, h, target, this._liftKg())) {
+      W.w.set(0, 0, 0);
+      t.heldHand = h;
+      return;
+    }
+    // 쥔 순간엔 지금 자세에서 손 자세로 부드럽게 (휙 순간이동하지 않게) · 무거울수록 굼뜨다 (꿰인 적의 몸무게까지)
     W.blend = Math.min(1, W.blend + dt * 7);
-    const rate = (8 + 32 * W.blend) / (1 + (2 * (t.kg ?? 0)) / this._liftKg());
+    const kgAll = (t.kg ?? 0) + (t.weapon.stuck ? t.weapon.extraKg ?? 0 : 0);
+    const rate = (8 + 32 * W.blend) / (1 + (2 * kgAll) / this._liftKg());
     const k = 1 - Math.exp(-dt * rate);
     W.prevP.copy(t.pos);
     W.prevQ.copy(t.obj.quaternion);
@@ -556,6 +566,7 @@ export class Grab {
       W.w.lerp(_n.set(_q2.x, _q2.y, _q2.z).multiplyScalar(2 / dt), 0.5);
     }
     t.heldHand = h;
+    if (t.weapon.stuck) afterHoldStuck(this.ctx, t);
   }
 
   // ───────────── 손이 물체를 뚫지 못하게 ─────────────
@@ -632,6 +643,12 @@ export class Grab {
       if (O && O.t === t) {
         // 한 손은 아직 쥐고 있다 → 그 손이 이어받는다
         O.second = false;
+        return;
+      }
+      // 꽂힌 칼을 놓았다: 그대로 꽂혀 있다 (꿰인 적은 놓여 쓰러진다)
+      if (t.weapon.stuck && onReleaseStuck(this.ctx, t, t.vel)) {
+        t.held = false;
+        t.heldHand = null;
         return;
       }
       // 던진다: 실제로 움직이던 속도와 손목이 돌던 회전 그대로 (위로 던져 돌다 떨어지는 칼을 다시 받을 수 있다)

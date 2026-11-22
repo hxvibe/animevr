@@ -9,6 +9,7 @@ import { MahoragaWheel, Adaptation, spaceCut } from './shikigami.js';
 import { HandAura } from '../../core/handAura.js';
 import { makeShiki } from './models.js';
 import { FingerRig } from '../../core/enemies.js';
+import { bodyHit, addWound } from '../../core/stab.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -286,6 +287,7 @@ export class MahoragaSelf {
       // 무하한에 적응(②)하면: 크게 휘두르면 공간째 베는 참격이 날아간다 (무하한을 무시한다)
       if (speed > 9 && this._infStage() >= 2 && (this.cutCd ?? 0) <= world.time) this._spaceSlash();
       if (this.exitT <= 0) this.aura.set('right', 0.2 + Math.min(0.5, speed * 0.05));
+      this._impale(dt, speed); // 칼끝으로 찌르면 꽂힌다 (꿴 채 휘두르고, 홱 빼면 빠진다)
       this._cut(this.base, this.tip, speed); // 닿기만 해도 (세기는 칼끝 속도)
       if (speed > 4 && Math.random() < 0.6) fx.spawn(this.tip, _v.randomDirection().multiplyScalar(0.4), new THREE.Color(0xfff0c0), 0.05, 0.3, 2, 0);
     } else this.hasPrev = false;
@@ -293,6 +295,68 @@ export class MahoragaSelf {
     this.aura.update(dt);
     void sfx;
     return true;
+  }
+
+  /**
+   * 퇴마의 검으로 꽂기: 칼끝이 칼날 방향으로 빠르게(찌르기) 몸에 들어가면 꽂혀 적이 칼에 꿰인다.
+   *  고죠(무하한)는 법진이 무하한에 다 적응(②)했을 때만. 꿴 채로 칼을 움직이면 적이 따라오고,
+   *  칼자루 쪽으로 홱 당기면 빠지고, 아주 세게 휘두르면 내동댕이쳐진다
+   */
+  _impale(dt, speed) {
+    const { world, fx, sfx, ui } = this.ctx;
+    const axis = _v.subVectors(this.tip, this.base).normalize();
+    const along0 = this.swing && dt > 0 ? this.swing.dot(axis) / dt : 0;
+    // 내지르는 속도는 잠깐 동안 부드럽게 (찌르는 동작 한 번 내내 이어지게)
+    this._along = THREE.MathUtils.lerp(this._along ?? 0, along0, 1 - Math.exp(-dt * 10));
+    const along = Math.max(along0, this._along);
+    // 칼날 방향으로 내지르는 중이면 베지 않고 찌른다 (_cut 이 건너뛴다)
+    this._thrust = along > 2 && along > 0.6 * speed;
+    const I = this.impaled;
+    if (I) {
+      const d = I.t;
+      if (!d.alive || !d.holders?.has(I.by)) {
+        this.impaled = null;
+        return;
+      }
+      // 칼끝에서 조금 안쪽(칼날 위)에 꿰여 있다
+      d.holdAt(_v2.copy(this.tip).addScaledVector(axis, -0.35 * (d.scale ?? 1)), I.by);
+      if (along < -3 || speed > 11) {
+        const fling = speed > 11 ? this.swing.clone().normalize().multiplyScalar(Math.min(14, speed)) : new THREE.Vector3();
+        d.release(fling, I.by);
+        this.impaled = null;
+        if (I.wound) {
+          I.wound.getWorldPosition(_v2);
+          fx.burst(_v2, 34, new THREE.Color(0x5a0508), 3.4, 0.05, 0.7, { dark: true, grav: 9 });
+          world.bleed(I.wound, 5, 22);
+        }
+        sfx.cut?.(this.tip);
+      }
+      return;
+    }
+    if (!this._thrust) return;
+    for (const d of world.dummies) {
+      if (!d.alive || d.dying || d.heldBy) continue;
+      if (d.center(_v2).distanceTo(this.tip) > 2 * (d.scale ?? 1)) continue;
+      const hit = bodyHit(d, this.tip);
+      if (!hit) continue;
+      if (d.def?.infinity && this._infStage() < 2) return; // 무하한: 다 적응하기 전엔 닿지 않는다
+      const by = { side: 'mahoraga', drop: () => (this.impaled = null), onLimb: () => {} };
+      if (!d.grab(by, this.tip, hit.key)) return;
+      const entry = _v2.copy(this.tip).addScaledVector(axis, -0.2);
+      const wound = addWound(this.ctx, d, hit.key, entry, axis.clone().negate(), { dur: 8, rate: 18 });
+      this.impaled = { t: d, by, wound };
+      d.damage((60 + Math.min(along, 12) * 10) * (d.def?.curse ? 1.6 : 1), { type: 'pierce', dir: axis.clone(), point: entry.clone(), color: '#ffe0a0', vsInf: this._infStage() });
+      fx.burst(entry, 30, new THREE.Color(0x5a0508), 3, 0.05, 0.6, { dark: true, grav: 9, dir: axis.clone().negate(), dirAmt: 0.8 });
+      sfx.cut?.(entry);
+      this.hitT.set(d, world.time + 0.5);
+      this.ctx.input.right.pulse?.(1, 100);
+      this.ctx.game.hitstop = Math.max(this.ctx.game.hitstop, 0.07);
+      if (!this._toldImpale) {
+        this._toldImpale = true;
+        ui.callout(d.def?.infinity ? '무하한을 꿰뚫었다 — 퇴마의 검에 꿰였다' : '퇴마의 검에 꿰였다 — 칼자루 쪽으로 홱 당기면 빠지고, 세게 휘두르면 내던진다', { color: '#ffe0a0', dur: 2 });
+      }
+      return;
+    }
   }
 
   /** 칼날이 지난 자리의 대상을 벤다 (정의 주력: 저주에 1.6배) */
@@ -328,10 +392,11 @@ export class MahoragaSelf {
 
   _cut(a, b, speed) {
     const { world, sfx, fx } = this.ctx;
+    if (this._thrust) return;
     const now = world.time;
     for (const t of world.targets()) {
       if (!t.alive) continue;
-      if ((this.hitT.get(t) ?? -1) > now) continue;
+      if ((this.hitT.get(t) ?? -1) > now || this.impaled?.t === t) continue;
       const c = t.center(_v);
       // 몸 전체(발~머리 기둥)와 칼날 선분의 거리 — 가슴 한 점만 보던 것을 바꿈
       const sc = t.scale ?? 1;
@@ -371,6 +436,10 @@ export class MahoragaSelf {
 
   exit(why = 'back') {
     const { world, rig, ui, sfx, fx, input: inp } = this.ctx;
+    if (this.impaled) {
+      this.impaled.t.release?.(new THREE.Vector3(), this.impaled.by);
+      this.impaled = null;
+    }
     rig.position.y = this.baseY;
     this.arms.left.dispose();
     this.arms.right.dispose();
@@ -403,6 +472,7 @@ export class MahoragaSelf {
     return [
       { head: '퇴마의 검 (오른팔)', color: '#ffe0a0', text: '오른팔에 늘 붙어 있다 · 휘두르면 칼날이 지난 자리의 적을 벤다 (빠를수록 깊게, 저주에는 1.6배)' },
       { head: '공간 베기 · 무하한', color: '#ffd28a', text: space },
+      { head: '꽂기', color: '#ff9a9a', text: '칼날 방향으로 내지르면 베지 않고 꽂혀 적이 칼에 꿰인다 → 꿴 채로 칼을 움직이면 따라오고, 칼자루 쪽으로 홱 당기면 빠지고, 아주 세게 휘두르면 내던진다\n고죠(무하한)는 법진이 무하한에 다 적응(②)한 뒤에만 꽂힌다' },
       { head: '거인의 주먹 (왼팔)', color: '#ffd0a0', text: ctrl ? '왼쪽 그립+트리거로 주먹을 쥐고 휘둘러 친다' : '왼손 주먹으로 친다 — 사람 주먹의 2.5배' },
       { head: '잡기 · 박기 · 뜯기', color: '#ffb0a0', text: (ctrl ? '그립으로 잡기' : '손을 대고 주먹으로 잡기') + ' → 잡은 채로 땅이나 벽에 세게 박으면 큰 피해\n한 손은 몸통, 한 손은 팔·다리를 잡고 벌리면 그 부위가 뜯겨 손에 남는다 (양팔을 잡으면 양팔 모두 · 머리는 뽑으면 죽는다)\n뜯긴 부위는 휘둘러 치거나 던질 수 있다' },
       { head: '법진 · 적응', color: '#ffe0a0', text: '맞은 성질을 분석해 적응하면 법진이 한 칸 돌며 몸이 완전히 회복된다' },

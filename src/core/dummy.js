@@ -617,9 +617,10 @@ export class Dummy {
   /**
    * @param by { drop() }
    * @param at 잡은 지점(월드). 가장 가까운 관절이 손에 고정된다. 없으면 가슴
+   * @param joint 관절 이름을 정하면 그 관절 (RAG)
    * @returns 잡은 관절 위치 - at (손에 붙일 오프셋)
    */
-  grab(by, at = null) {
+  grab(by, at = null, joint = null) {
     if (!this.alive || this.dying) return false;
     // 두 손으로 잡기: 이미 다른 손이 잡고 있으면 다른 관절을 하나 더 붙잡는다
     this.holders ??= new Map();
@@ -631,7 +632,9 @@ export class Dummy {
     const R = this.rag;
     R.pins ??= new Map();
     let pin = RI.chest;
-    if (at) {
+    // 관절을 정해 잡는다 (칼에 꽂힌 부위 — 그 자리를 부여잡은 손이 더 가까워도)
+    if (joint !== null && RI[joint] !== undefined && !R.pins.has(RI[joint])) pin = RI[joint];
+    else if (at) {
       let bd = Infinity;
       const lost = this._lost().set;
       for (let i = 0; i < RAG.length; i++) {

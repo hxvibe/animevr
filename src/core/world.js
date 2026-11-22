@@ -9,6 +9,7 @@ import { Shatter, Slicer } from './slicer.js';
 import { DomainClash } from './domainClash.js';
 import { Impacts } from './impacts.js';
 import { stepWeapon } from './weapons.js';
+import { updateWounds } from './stab.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -592,6 +593,7 @@ export class World {
 
   update(dt) {
     const ctx = this.ctx;
+    ctx._dt = dt;
     this.time += dt;
     const bc = ctx.input.bodyCenter(new THREE.Vector3());
     const dom = this.domain;
@@ -605,6 +607,7 @@ export class World {
       // 영역의 정지 효과 또는 주언(움직이지 마) 같은 속박
       d.frozen = !!(dom && dom.freeze && !this.clash.neutral && d.center(_v).distanceTo(dom.center) < dom.radius) || (d.stunUntil ?? 0) > this.time;
       d.update(dt);
+      if (d.wounds) updateWounds(ctx, d, dt); // 상처를 부여잡는다
       if (this.shield && d.alive && d.state === 'air' && d.vel.lengthSq() > 4) this.shield(d, dt, bc);
     }
 
@@ -632,8 +635,10 @@ export class World {
       for (let j = i + 1; j < props.length; j++) {
         const c = props[j];
         if (!c.alive || c.away || (a.asleep && c.asleep)) continue;
+        if (a.weapon?.stuck || c.weapon?.stuck) continue; // 꽂힌 칼은 박힌 대상과 밀어내지 않는다
         this._collide(a, c);
       }
+      if (a.weapon) continue; // 날붙이는 둔기로 치지 않고 베거나 꽂힌다 (weapons.js · stab.js)
       for (const d of this.dummies) {
         if (!d.alive) continue;
         // 잠든 소품엔 빠르게 날아오는 적만 부딪힌다 (세워 둔 차에 던져진 적이 처박힌다)

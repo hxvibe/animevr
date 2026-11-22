@@ -726,5 +726,13 @@ export default {
  "G 꺼내기 · T로 든 물건(주구 포함)을 G로 그림자에 넣기 · B 꺼낼 물건 고르기 (짊어지는 무게 최대 {0}kg)": "G pull out · G stores an object held with T (tools included) · B choose the item to pull out (max carried weight {0} kg)",
  "발밑 바닥에 컨트롤러를 대고 그립 → 주구·물건 꺼내기 (대고 1초: 다음 물건) · 주구는 던지고 받을 수 있고 두 손으로 쥔다\n물건(주구 포함)을 쥔 채 발밑에 대고 그립을 놓으면 그림자에 넣는다 · 짊어지는 무게 최대 {0}kg": "Hold a controller to the floor at your feet and grip → pull out a tool/object (hold there 1 s: next item) · tools can be thrown and caught, and gripped with both hands\nHold an object (tools included) down at your feet and release the grip to store it · max carried weight {0} kg",
  "{0} — 크게 휘둘러 벤다 · 던지고 받을 수 있다 · 발밑 그림자에 넣고 손을 펴면 돌려보낸다": "{0} — swing big to cut · you can throw and catch it · put it into the shadow at your feet and open the hand to send it back",
- "두 손으로 쥐었다 — 두 손을 잇는 방향으로 칼이 선다": "Gripped with both hands — the blade lines up between your hands"
+ "두 손으로 쥐었다 — 두 손을 잇는 방향으로 칼이 선다": "Gripped with both hands — the blade lines up between your hands",
+ "무하한을 꿰뚫었다 — 퇴마의 검에 꿰였다": "Pierced Infinity — impaled on the Sword of Extermination",
+ "퇴마의 검에 꿰였다 — 칼자루 쪽으로 홱 당기면 빠지고, 세게 휘두르면 내던진다": "Impaled on the Sword of Extermination — yank toward the hilt to pull it out, swing hard to fling it off",
+ "무하한 — 칼끝이 닿지 않는다 (마허라가 다 적응하면 퇴마의 검으로는 꽂힌다)": "Infinity — the tip can't reach (once Mahoraga fully adapts, the Sword of Extermination can pierce)",
+ "꽂혔다 — 칼을 쥐면 적이 꿰인 채 끌려오고, 칼자루 쪽으로 홱 당기면 빠진다": "Stuck — grip the blade and the foe comes along impaled; yank toward the hilt to pull it out",
+ "꽂기": "Impale",
+ "칼날 방향으로 내지르면 베지 않고 꽂혀 적이 칼에 꿰인다 → 꿴 채로 칼을 움직이면 따라오고, 칼자루 쪽으로 홱 당기면 빠지고, 아주 세게 휘두르면 내던진다\n고죠(무하한)는 법진이 무하한에 다 적응(②)한 뒤에만 꽂힌다": "Thrust along the blade and it pierces instead of cutting — the foe is impaled → move the sword and it follows; yank toward the hilt to pull out; swing very hard to fling it off\nGojo (Infinity) can only be impaled after the wheel fully adapts to Infinity (②)",
+ "꽂기 (주구)": "Impale (cursed tools)",
+ "칼끝으로 찌르면(칼끝부터 던지면) 적 · 물체 · 바닥 · 벽에 꽂힌다 (고죠는 무하한에 막힌다)\n꽂힌 적은 피를 흘리며 그 자리를 부여잡는다 · 꽂힌 칼을 쥐면 적이 꿰인 채 끌려온다 (몸무게만큼 굼뜨고, 힘이 모자라면 끌기만)\n칼자루 쪽으로 홱 당기면 빠진다 · 바닥 · 벽 · 무거운 물체에 꽂힌 칼은 칼자루 쪽으로 당겨 뽑는다": "Stab with the tip (or throw it tip-first) and it sticks into foes, objects, the floor or walls (Gojo's Infinity blocks it)\nA stabbed foe bleeds and clutches the wound · grip the stuck blade and the foe comes along impaled (sluggish by its body weight; if you're not strong enough you can only drag)\nYank toward the hilt to pull it out · a blade stuck in the floor, a wall or a heavy object comes out when you pull toward the hilt"
 };

@@ -518,8 +518,9 @@ export class Grab {
       if (h.side === 'left') out.dir.negate();
       out.ref.copy(h.fingersDir);
     } else {
+      // 컨트롤러: 가리키는 방향 · 날 기준은 컨트롤러의 위(+Y) — 손목을 돌리면 칼도 같이 돈다 (노바라의 망치 · 유타의 칼처럼)
       out.dir.copy(h.dir);
-      out.ref.copy(UP);
+      out.ref.set(0, 1, 0).applyQuaternion(h.quat);
     }
     out.dir.normalize();
     return out;
@@ -536,11 +537,12 @@ export class Grab {
     const A = _w.set(0, 1, 0).applyQuaternion(t.obj.quaternion);
     const other = this.held[side === 'left' ? 'right' : 'left'];
     H.second = !!(other && other.t === t);
-    const y = THREE.MathUtils.clamp(_v.subVectors(g.G, t.pos).dot(A), W.lo, W.tip - 0.04);
-    // 날이 향한 쪽: 지금 칼의 +X 와 가까운 쪽
-    const X = _v2.set(1, 0, 0).applyQuaternion(t.obj.quaternion);
-    const edge = _v3.copy(g.ref).addScaledVector(g.dir, -g.ref.dot(g.dir)).normalize().negate();
-    H.weapon = { y, es: X.dot(edge) >= 0 ? 1 : -1, blend: 0, prevQ: t.obj.quaternion.clone(), prevP: t.pos.clone(), w: new THREE.Vector3() };
+    // 쥔 자리: 손이 닿은 곳 (손잡이든 칼날이든) — 칼은 주먹 가운데 구멍을 지난다 (gripPoint)
+    const y = THREE.MathUtils.clamp(_v.subVectors(g.G, t.pos).dot(A), W.lo + 0.02, W.tip - 0.06);
+    // 날은 언제나 손가락이 감아쥔 쪽 (유타의 칼과 같다) — 쥘 때마다 칼이 뒤집히지 않게
+    H.weapon = { y, es: 1, blend: 0, prevQ: t.obj.quaternion.clone(), prevP: t.pos.clone(), w: new THREE.Vector3() };
+    // 손가락: 손잡이는 꽉, 칼날을 쥐면 조금 덜 접힌다
+    this.gripR[side] = y < W.base ? 0.016 : 0.032;
     H.offL = null;
     // 꽂혀 있던 칼: 적에 꽂혀 있으면 적을 칼에 꿴 채 쥔다
     if (!H.second && W.stuck) onGrabStuck(this.ctx, t);

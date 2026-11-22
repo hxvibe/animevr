@@ -568,7 +568,7 @@ export class Mahito extends Caster {
     if (F.form === 'drill' && (ctrl ? !h.btn.grip : g !== 'fist' && h.gestureTime > 0.25)) F.set(null);
     // 칼날: 검지·중지를 곧게 모아 세운 칼 손(손바닥을 옆으로) 유지 — 그냥 편 손으로는 바뀌지 않는다
     const knife = ctrl ? h.side === 'right' && h.btn.grip && !this._ctrlBoth() : g === 'two' && Math.abs(h.palmNormal.y) < 0.6 && h.speed < 1.0;
-    if (!F.form && this.held(h.side + 'blade', knife && !holding, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
+    if (!F.form && this.held(h.side + 'blade', knife && !holding && !F.noForm, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
     // 드릴: 주먹을 앞으로 겨눈다
     //  입에서 스톡을 꺼내는 주먹(입 가까이 · 스톡을 쥔 채 · 방금 입에 댔던 손)은 드릴이 되지 않는다
     const mouthD = h.palm.distanceTo(this.mouthPos(_v));
@@ -577,7 +577,11 @@ export class Mahito extends Caster {
     this.cds[sideKey] = (this.cds[sideKey] ?? 0) - dt;
     const nearStock = !!this.stocks[h.side] || this.cds[sideKey] > 0 || mouthD < 0.32 || this.holdK(h.side + 'pull', 0.25) > 0;
     const aimFist = ctrl ? h.side === 'left' && h.btn.grip && !this._ctrlBoth() : g === 'fist' && !nearStock && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0 && h.palm.distanceTo(inp.head) > 0.22;
-    if (!F.form && this.held(h.side + 'drill', aimFist && !holding, dt, ctrl ? 0.05 : 0.35)) F.set('drill');
+    // 뭔가를 쥐었던 주먹(적을 붙잡아 무위전변 · 물건)은 손을 한 번 펴기 전엔 드릴이 되지 않는다
+    const fistNow = ctrl ? h.btn.grip : g === 'fist';
+    if (holding || this.twists.some((x) => x.side === h.side) || (this._stockT?.[h.side] ?? -9) > this.ctx.world.time - 0.3) F.noForm = true;
+    else if (!fistNow) F.noForm = false;
+    if (!F.form && this.held(h.side + 'drill', aimFist && !holding && !F.noForm, dt, ctrl ? 0.05 : 0.35)) F.set('drill');
     if (F.form && !F.k) this.aura.set(h.side, 0.6);
     // 휘두르기 / 찌르기
     if (F.form === 'blade' && h.speed > 2.2) this._bladeSweep(h, F);
@@ -596,7 +600,11 @@ export class Mahito extends Caster {
     const soulT = gt?.kind === 'dummy' && gt.alive && !gt.dying && !this.twists.some((x) => x.t === gt) ? gt : null;
     const fire = this.held(h.side + 'soul', !!soulT && this.touchCd <= 0, dt, 0.7) || (soulT && ctrl && h.pressed('trigger') && this.touchCd <= 0);
     if (soulT) this.aura.set(h.side, 0.3 + this.holdK(h.side + 'soul', 0.7) * 0.7);
-    if (fire && soulT) this.transfigure(soulT, h);
+    if (fire && soulT) {
+      this.transfigure(soulT, h);
+      (this._stockT ??= {})[h.side] = this.ctx.world.time;
+      F.noForm = true;
+    }
     // 개조 인간 스톡: 주먹을 입에 대 0.25초 → 입에서 스톡(체스 말만 한 개조 인간)을 꺼내 쥔다 → 던지면 풀려난다
     const mouth = this.mouthPos(_v);
     const ak = h.side + 'pull';

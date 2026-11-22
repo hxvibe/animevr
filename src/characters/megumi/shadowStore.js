@@ -233,21 +233,25 @@ export class ShadowStore {
         this.reach[side] = 0;
         continue;
       }
-      // 바닥에 놓인 물건이 손 닿는 곳에 있으면 그걸 집게 둔다 (꺼내기보다 줍기가 먼저)
-      const near = world.nearestTarget(h.palm, 0.16, (t) => t.kind !== 'dummy' && !t.held);
-      if (near) {
-        this.reach[side] = 0;
-        continue;
+      // 바닥에 놓인 물건(떨어진 주구 등)이 손 가까이(35cm) 있으면 그걸 줍게 둔다 — 그림자는 나오지 않는다
+      const near = world.nearestTarget(h.palm, 0.35, (t) => t.kind !== 'dummy' && !t.held);
+      // 손바닥을 아래로 편 손을 잠깐(0.35초) 대고 있어야 그림자에서 떠오른다 (줍다가 그림자가 끼어들지 않게)
+      const open = h.source === 'hand' ? h.gesture === 'open' || h.gesture === 'none' : !h.btn.grip;
+      const down = (h.palmNormal?.y ?? -1) < -0.4 || h.source !== 'hand';
+      if (near || (!open && this.reach[side] < 0.35) || !down) {
+        if (!fist || near) this.reach[side] = 0;
+        if (!(fist && this.reach[side] >= 0.35)) continue;
       }
+      if (open) this.reach[side] += dt;
+      if (this.reach[side] < 0.35) continue;
       ghostSide = side;
-      if (fist && (h.source !== 'hand' || h.gestureTime < 0.3)) {
+      if (fist) {
         this.reach[side] = 0;
         this.take(side);
         continue;
       }
-      this.reach[side] += dt;
-      if (this.reach[side] > 1 && this.items.length > 1) {
-        this.reach[side] = 0;
+      if (this.reach[side] > 1.35 && this.items.length > 1) {
+        this.reach[side] = 0.35;
         this.next();
         h.pulse?.(0.4, 40);
       }

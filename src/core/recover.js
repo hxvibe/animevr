@@ -85,7 +85,7 @@ export function startGetup(d) {
     speed: 0.9 + Math.random() * 0.2,
     q0: d.root.quaternion.clone(),
     j0: Object.fromEntries(Object.entries(J).map(([k, j]) => [k, j.quaternion.clone()])),
-    seg: -1,
+    seg: null, // 첫 프레임에 받침점을 잰다 (-1 로 두면 첫 구간의 받침점이 원점(0,0,0)으로 남아 맵 가운데로 순간이동했다)
     anchor: new THREE.Vector3(),
   };
 }

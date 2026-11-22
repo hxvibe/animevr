@@ -189,6 +189,8 @@ function stickDummy(ctx, p, d, key, along, hand, dir) {
   d.damage((30 + Math.min(along, 12) * 7) * (W.dmg ?? 1), { type: 'pierce', dir: dir.clone(), point: entry.clone(), color: '#ff6060', soul: W.soul, vsInf: W.nullify ? 2 : undefined });
   if (d.alive) d.impulse?.(dir.clone().multiplyScalar(hand ? 1.2 : 2.5), 1);
   (d.stuckBy ??= new Set()).add(p);
+  // 쥔 채로 찔렀으면 그대로 꿴다 (놓았다 다시 쥐지 않아도 적이 칼을 따라온다)
+  if (p.held) onGrabStuck(ctx, p);
   hand?.pulse?.(0.9, 90);
   ctx.game.hitstop = Math.max(ctx.game.hitstop ?? 0, 0.05);
   if (!ctx._toldStab) {
@@ -216,7 +218,7 @@ function stickWorld(ctx, p, at, dir, along) {
   const depth = 0.06 + Math.min(0.08, along * 0.008);
   p.pos.addScaledVector(dir, depth - _v.subVectors(W.tipW, at).dot(dir));
   p.obj.updateMatrixWorld(true);
-  W.stuck = { kind: 'world', pos: p.pos.clone(), quat: p.obj.quaternion.clone() };
+  W.stuck = { kind: 'world', pos: p.pos.clone(), quat: p.obj.quaternion.clone(), depth };
   p.fixed = true;
   p.vel.set(0, 0, 0);
   p.spin.set(0, 0, 0);
@@ -235,6 +237,14 @@ export function followStuck(ctx, p, dt = 0.016) {
   const gone = !t.alive && (S.kind === 'prop' || !t.root?.parent);
   if (gone || (S.kind === 'dummy' && !S.bone.parent)) {
     unstick(ctx, p, false);
+    return;
+  }
+  if (S.pin) {
+    // 적째 박혀 있다: 칼은 박힌 자리에, 적은 상처 자리가 칼에 꿰인 채
+    p.pos.copy(S.pin.pos);
+    p.obj.quaternion.copy(S.pin.quat);
+    if (S.by && t.holders?.has(S.by)) afterHoldStuck(ctx, p, true);
+    else S.pin = null;
     return;
   }
   const obj = S.kind === 'dummy' ? S.bone : t.obj;
@@ -282,6 +292,7 @@ export function onGrabStuck(ctx, p) {
   const S = p.weapon.stuck;
   if (!S) return;
   p.fixed = false;
+  if (S.kind === 'dummy' && S.by && S.t.holders?.has(S.by)) return; // 이미 꿰여 있다 (적째 박힌 칼)
   if (S.kind === 'dummy' && S.t.alive && !S.t.dying) {
     S.by = { side: 'weapon', drop: () => (S.by = null), onLimb: () => {} };
     const ok = S.t.grab(S.by, S.wound ? S.wound.getWorldPosition(new THREE.Vector3()) : p.weapon.tipW, S.key);
@@ -304,18 +315,49 @@ export function holdStuck(ctx, p, h, target, lift) {
   // 박힌 채 움직이지 않는 곳: 바닥 · 벽 · 무거운 물체 · 다른 손이 쥔 물체(그 손을 따라간다)
   const otherHeld = S.kind === 'prop' && S.t.held && !S.carried;
   const heavy = S.kind === 'world' || (S.kind === 'prop' && (S.t.kg ?? 0) > lift) || (S.kind === 'prop' && S.t.fixed) || otherHeld;
-  if (heavy) {
-    // 박힌 그대로: 손이 칼자루 쪽으로 12cm 넘게 빠지면 뽑힌다
-    const pull = -_v2.subVectors(target, p.pos).dot(dir);
-    if (pull > 0.12 || yank > 3) {
+  if (heavy || S.pin) {
+    if (yank > 3.2) {
       unstick(ctx, p, true);
       h.pulse?.(0.8, 80);
       return false;
     }
-    if (S.kind === 'world') {
-      p.pos.copy(S.pos);
-      p.obj.quaternion.copy(S.quat);
-    } else followStuck(ctx, p);
+    if (S.kind === 'world' || S.pin) {
+      // 바닥 · 벽: 원하는 만큼 더 깊이 밀어 넣거나 뽑아낸다 — 적보다 단단해 천천히 (넣기 0.35m/s · 빼기 0.8m/s)
+      const A = S.pin ?? S;
+      const dt = ctx._dt ?? 0.016;
+      const want = _v2.subVectors(target, A.pos).dot(dir);
+      const step = THREE.MathUtils.clamp(want, -0.8 * dt, 0.35 * dt);
+      const maxD = Math.max(0.05, (W.tip - W.base) * 0.95); // 칼날 밑동까지
+      const nd = Math.min(maxD, A.depth + step);
+      if (nd <= 0.004) {
+        // 다 뽑혔다 (적과 함께 박혀 있었으면 적에게서는 아직 안 빠졌다)
+        if (S.pin) {
+          S.pin = null;
+          ctx.sfx.whoosh?.(W.tipW, 0.3, 1.2);
+          return false;
+        }
+        unstick(ctx, p, true);
+        h.pulse?.(0.8, 80);
+        return false;
+      }
+      if (Math.abs(nd - A.depth) > 1e-5) {
+        A.pos.addScaledVector(dir, nd - A.depth);
+        A.depth = nd;
+        if (Math.random() < 0.3) h.pulse?.(0.25, 20);
+      }
+      p.pos.copy(A.pos);
+      p.obj.quaternion.copy(A.quat);
+      if (S.pin) afterHoldStuck(ctx, p, true);
+    } else {
+      // 무거운 물체 · 다른 손이 쥔 물체: 그 물체에 박힌 그대로, 칼자루 쪽으로 12cm 넘게 당기면 뽑힌다
+      const pull = -_v2.subVectors(target, p.pos).dot(dir);
+      if (pull > 0.12) {
+        unstick(ctx, p, true);
+        h.pulse?.(0.8, 80);
+        return false;
+      }
+      followStuck(ctx, p);
+    }
     p.vel.set(0, 0, 0);
     return true;
   }
@@ -335,7 +377,7 @@ export function holdStuck(ctx, p, h, target, lift) {
 }
 
 /** 칼이 손을 따라 움직인 뒤: 꿰인 적 · 꽂힌 물체가 칼을 따라온다 */
-export function afterHoldStuck(ctx, p) {
+export function afterHoldStuck(ctx, p, pinned = false) {
   const S = p.weapon.stuck;
   if (!S) return;
   if (S.kind === 'dummy') {
@@ -346,8 +388,39 @@ export function afterHoldStuck(ctx, p) {
     }
     if (S.by && d.holders?.has(S.by)) {
       // 칼끝 가까이(상처 자리)를 칼과 함께 움직인다
+      p.obj.updateMatrixWorld(true);
       const at = _v.copy(S.lpWound ?? (S.lpWound = woundLocal(p, S))).applyMatrix4(p.obj.matrixWorld);
       d.holdAt(at, S.by, p.obj.quaternion);
+    }
+    if (pinned) return;
+    // 적을 꿴 채 칼끝이 바닥 · 벽까지 들어갔다 → 적째 박힌다 (놓아도 못 일어난다)
+    if (S.by && !S.pin) {
+      const W = p.weapon;
+      p.obj.updateMatrixWorld(true);
+      const tip = _v2.set(0, W.tip, 0).applyMatrix4(p.obj.matrixWorld);
+      const dir = _v3.set(0, 1, 0).applyQuaternion(p.obj.quaternion);
+      let into = tip.y < -0.015 ? -tip.y / Math.max(0.2, -dir.y) : 0;
+      if (!into) {
+        const G = ctx.env?.current?.group;
+        const wp = S.wound ? S.wound.getWorldPosition(_v4) : null;
+        if (G && wp && !ctx.env.hidden) {
+          const len = tip.distanceTo(wp);
+          _ray.set(wp, dir);
+          _ray.far = len;
+          const hh = _ray.intersectObject(G, true).find((x) => x.object.visible && !x.object.userData.isProp && x.face);
+          if (hh) into = len - hh.distance;
+        }
+      }
+      if (into > 0.02) {
+        S.pin = { pos: p.pos.clone(), quat: p.obj.quaternion.clone(), depth: into };
+        ctx.fx.burst(tip, 12, new THREE.Color(0xfff0c0), 2, 0.02, 0.25);
+        ctx.sfx.play?.('shatter_2', { at: tip, vol: 0.45, rate: 1.3 });
+        if (!ctx._toldPin) {
+          ctx._toldPin = true;
+          ctx.ui.callout('적째 바닥에 박았다 — 놓아도 못 일어난다 (칼을 뽑으면 풀린다)', { color: '#ff9a9a', dur: 2 });
+        }
+        return;
+      }
     }
     // 뼈 기준 자세를 새로 잰다 (놓으면 그 자리에 꽂힌 채)
     Object.assign(S, anchorTo(p, S.bone));
@@ -379,7 +452,9 @@ export function onReleaseStuck(ctx, p, vel) {
   const S = p.weapon.stuck;
   if (!S) return false;
   p.weapon.extraKg = 0;
-  if (S.kind === 'dummy') {
+  if (S.kind === 'dummy' && S.pin && S.by && S.t.holders?.has(S.by)) {
+    // 적째 박혀 있다: 칼은 그 자리에, 적은 꿰인 채 (못 일어난다)
+  } else if (S.kind === 'dummy') {
     if (S.by && S.t.holders?.has(S.by)) S.t.release(vel.clone().multiplyScalar(0.8), S.by);
     S.by = null;
     S.lpWound = null;

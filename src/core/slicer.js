@@ -2,35 +2,131 @@
 import * as THREE from 'three';
 
 /**
- * 잘린 단면으로 보이는 안쪽(뒷면)을 속이 빈 껍데기 대신 피 · 살로 칠한다.
- *  어떤 재질이든 조각 셰이더 끝에서 뒷면이면 붉은 살결(지방 얼룩 · 핏물)로 덮는다.
+ * 잘린 조각의 안쪽(뒷면) 색. 단면은 평면 뚜껑(아래 Slicer 의 스텐실 캡)이 덮고,
+ *  이건 뚜껑이 못 덮는 틈(열린 메시 가장자리 등)으로 보이는 안쪽만 칠한다.
+ *  mode 'flesh': 검붉은 피 · 'solid': 그 재질의 색을 어둡게 (상자 · 소품 — 피가 없다)
  */
-export function fleshInside(mat) {
+export function fleshInside(mat, mode = 'flesh') {
   const prev = mat.onBeforeCompile;
+  const solid = mode === 'solid' && !!mat.color;
   mat.onBeforeCompile = (sh, r) => {
     prev?.call(mat, sh, r);
-    const code = `
-  if (!gl_FrontFacing) {
-    vec2 fq = gl_FragCoord.xy * 0.03;
-    vec2 fi = floor(fq); vec2 ff = fract(fq); ff = ff * ff * (3.0 - 2.0 * ff);
-    #define FH(p) fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)
-    float fn = mix(mix(FH(fi), FH(fi + vec2(1.0, 0.0)), ff.x), mix(FH(fi + vec2(0.0, 1.0)), FH(fi + vec2(1.0, 1.0)), ff.x), ff.y);
-    vec2 gi = floor(fq * 2.3 + 7.0); vec2 gf = fract(fq * 2.3 + 7.0); gf = gf * gf * (3.0 - 2.0 * gf);
-    float fs = mix(mix(FH(gi), FH(gi + vec2(1.0, 0.0)), gf.x), mix(FH(gi + vec2(0.0, 1.0)), FH(gi + vec2(1.0, 1.0)), gf.x), gf.y);
-    vec3 meat = mix(vec3(0.3, 0.02, 0.03), vec3(0.6, 0.07, 0.065), fn);
-    meat = mix(meat, vec3(0.85, 0.6, 0.5), smoothstep(0.74, 0.86, fs) * 0.55); // 지방 · 힘줄
-    meat = mix(meat, vec3(0.14, 0.0, 0.01), smoothstep(0.3, 0.12, fn) * 0.7); // 핏물
-    gl_FragColor = vec4(meat, 1.0);
-  }
+    const code = solid
+      ? `
+  if (!gl_FrontFacing) gl_FragColor = vec4(diffuse * 0.55, 1.0);
+`
+      : `
+  if (!gl_FrontFacing) gl_FragColor = vec4(0.17, 0.0, 0.012, 1.0);
 `;
     const f = sh.fragmentShader;
     const k = f.lastIndexOf('}');
     sh.fragmentShader = f.slice(0, k) + code + f.slice(k);
   };
   const key = mat.customProgramCacheKey?.bind(mat);
-  mat.customProgramCacheKey = () => (key ? key() : '') + '|flesh';
+  mat.customProgramCacheKey = () => (key ? key() : '') + (solid ? '|solidIn' : '|flesh');
   mat.needsUpdate = true;
   return mat;
+}
+
+// ───────── 단면 뚜껑 (스텐실 캡) ─────────
+// 조각의 메시를 그 절단면으로만 잘라 뒷면 +1 · 앞면 −1 로 스텐실에 센다 → 0 이 아닌 곳이 '평면이 물체 속을 지나는 곳'
+//  → 그 평면 위 사각형을 스텐실 ≠ 0 인 곳에만 그린다 (다른 절단면으로는 잘라 둔다) → 정확히 평평한 단면
+let _ro = 100; // 뚜껑마다 그리는 순서 (스텐실 세기 → 뚜껑 → 지우기)
+const _capMats = new Map();
+/** 피 단면: 월드 좌표 잡음으로 짙은 피 · 엉긴 피 · 번들거리는 선홍 */
+function bloodCapMat() {
+  let m = _capMats.get('blood');
+  if (m) return m;
+  m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.22, metalness: 0, side: THREE.DoubleSide });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCapW;').replace('#include <project_vertex>', '#include <project_vertex>\nvCapW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vCapW;
+float capH(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float capN(vec3 p) {
+  vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(capH(i), capH(i + vec3(1, 0, 0)), f.x), mix(capH(i + vec3(0, 1, 0)), capH(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(capH(i + vec3(0, 0, 1)), capH(i + vec3(1, 0, 1)), f.x), mix(capH(i + vec3(0, 1, 1)), capH(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}`
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+  float cn = capN(vCapW * 14.0) * 0.6 + capN(vCapW * 37.0) * 0.4;
+  vec3 bc = mix(vec3(0.1, 0.0, 0.008), vec3(0.3, 0.012, 0.02), smoothstep(0.25, 0.7, cn));
+  bc = mix(bc, vec3(0.48, 0.03, 0.035), smoothstep(0.72, 0.85, cn) * 0.6);
+  bc *= mix(0.55, 1.0, smoothstep(0.12, 0.3, capN(vCapW * 9.0 + 3.0)));
+  diffuseColor.rgb = bc;`
+      );
+  };
+  m.customProgramCacheKey = () => 'bloodCap';
+  _capMats.set('blood', m);
+  return m;
+}
+
+/** 조각 obj 의 i 번째 절단면 뚜껑을 만든다 (obj 로컬 좌표) */
+function addCap(obj, piece, i, centerL, R, o) {
+  const ro = (_ro += 4);
+  const wp = piece.worldPlanes;
+  const stencil = (side, op) =>
+    new THREE.MeshBasicMaterial({
+      side,
+      colorWrite: false,
+      depthWrite: false,
+      depthTest: false,
+      stencilWrite: true,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilFail: op,
+      stencilZFail: op,
+      stencilZPass: op,
+      clippingPlanes: [wp[i]],
+    });
+  const back = stencil(THREE.BackSide, THREE.IncrementWrapStencilOp);
+  const front = stencil(THREE.FrontSide, THREE.DecrementWrapStencilOp);
+  const meshes = [];
+  obj.traverse((m) => {
+    // 반투명 · 머리카락 같은 양면 판 · 피 반구(열린 메시)는 세지 않는다
+    if (m.isMesh && !m.userData.capPart && m.userData.capSolid) meshes.push(m);
+  });
+  if (!meshes.length) return [];
+  for (const m of meshes) {
+    for (const mat of [back, front]) {
+      const sm = new THREE.Mesh(m.geometry, mat);
+      sm.renderOrder = ro + 1;
+      sm.userData.capPart = true;
+      sm.castShadow = false;
+      sm.frustumCulled = m.frustumCulled;
+      m.add(sm);
+    }
+  }
+  const lp = piece.localPlanes[i];
+  const others = wp.filter((_, j) => j !== i);
+  let capMat;
+  if (o.inside === 'solid') {
+    capMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(o.capColor ?? o.color ?? 0x888888).multiplyScalar(0.8), roughness: 0.85, side: THREE.DoubleSide });
+  } else capMat = bloodCapMat().clone();
+  if (o.inside !== 'solid') capMat.onBeforeCompile = bloodCapMat().onBeforeCompile;
+  if (o.inside !== 'solid') capMat.customProgramCacheKey = () => 'bloodCap';
+  Object.assign(capMat, { stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp, clippingPlanes: others });
+  const geo = new THREE.PlaneGeometry(R * 2.4, R * 2.4);
+  const cap = new THREE.Mesh(geo, capMat);
+  cap.position.copy(lp.projectPoint(centerL, new THREE.Vector3()));
+  cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), lp.normal);
+  cap.renderOrder = ro + 2;
+  cap.castShadow = false;
+  cap.userData.capPart = true;
+  obj.add(cap);
+  // 뚜껑이 다른 절단면에 잘려 남은 스텐실까지 지운다 (다음 조각이 오염되지 않게)
+  const clr = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, colorWrite: false, depthWrite: false, depthTest: false, stencilWrite: true, stencilRef: 0, stencilFunc: THREE.AlwaysStencilFunc, stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp }));
+  clr.position.copy(cap.position);
+  clr.quaternion.copy(cap.quaternion);
+  clr.renderOrder = ro + 3;
+  clr.userData.capPart = true;
+  obj.add(clr);
+  return [back, front, capMat, clr.material, geo];
 }
 
 const _m = new THREE.Matrix4();
@@ -152,7 +248,7 @@ export class Slicer {
     const invObj = new THREE.Matrix4().copy(obj.matrixWorld).invert();
     const all = [];
     obj.traverse((m) => {
-      if (!m.isMesh || !m.geometry?.attributes?.position) return;
+      if (!m.isMesh || !m.geometry?.attributes?.position || m.userData.capPart) return;
       const n = m.geometry.attributes.position.count;
       const step = Math.max(1, Math.ceil(n / 300));
       for (let i = 0; i < n; i += step) {
@@ -168,6 +264,10 @@ export class Slicer {
     });
     for (const s of [1, -1]) {
       const clone = obj.clone(true);
+      // 예전 뚜껑 · 스텐실은 버리고 새로 만든다
+      const old = [];
+      clone.traverse((m) => m.userData.capPart && old.push(m));
+      for (const m of old) m.parent?.remove(m);
       const matMap = new Map();
       const worldPlanes = [];
       const localPlanes = [];
@@ -191,9 +291,11 @@ export class Slicer {
           cm.side = THREE.DoubleSide;
           cm.clippingPlanes = worldPlanes;
           cm.clipShadows = false;
-          fleshInside(cm);
+          fleshInside(cm, o.inside);
           matMap.set(src, cm);
         }
+        // 단면 세기에 넣을 메시인가 (처음 자를 때의 재질로 정해 두고, 다시 자를 때도 그대로 쓴다)
+        m.userData.capSolid ??= !(src.transparent || src.alphaTest > 0 || src.side === THREE.DoubleSide || src.userData?.noFlash);
         m.material = cm;
       });
       // 조각 중심을 피벗으로 사용
@@ -218,8 +320,15 @@ export class Slicer {
         radius: o.radius ?? 0.3,
         grounded: false,
         samples: pickSamples(all, localPlanes),
+        inside: o.inside ?? 'flesh',
+        capColor: o.capColor,
       };
       this._updatePlanes(piece);
+      // 절단면마다 평평한 뚜껑 (몸: 피 · 소품: 제 색)
+      const cl = center.clone().applyMatrix4(invObj);
+      let R = 0;
+      for (const v of all) R = Math.max(R, v.distanceTo(cl));
+      for (let i = 0; i < localPlanes.length; i++) piece.materials.push(...addCap(clone, piece, i, cl, R || 0.5, { ...o, color: piece.color }));
       this.pieces.push(piece);
       out.push(piece);
     }
@@ -232,7 +341,7 @@ export class Slicer {
   sliceAgain(piece, plane, o = {}) {
     this.remove(piece, false);
     piece.pivot.updateMatrixWorld(true);
-    const res = this.slice(piece.obj, plane, { ...o, localPlanes: piece.localPlanes, color: piece.color, vel: piece.vel, center: piece.pivot.position });
+    const res = this.slice(piece.obj, plane, { ...o, localPlanes: piece.localPlanes, color: piece.color, vel: piece.vel, center: piece.pivot.position, inside: piece.inside, capColor: piece.capColor });
     this.scene.remove(piece.pivot);
     for (const m of piece.materials) m.dispose();
     return res;

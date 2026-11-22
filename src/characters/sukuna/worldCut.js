@@ -518,7 +518,7 @@ export class WorldCut {
     this.edgeU = { ...shared, uW: this.tintU.uW, uAmt: this.tintU.uAmt, uOW: { value: 0.02 }, uEdgeCol: { value: new THREE.Color(0.72, 0.9, 1.0) } };
     this.tintEdge = headSphere(tintEdgeFrag, this.edgeU, null, 402);
     // 임팩트 프레임 (렌더 타깃에 먼저 그린 장면을 가공)
-    this.rt = new THREE.WebGLRenderTarget(4, 4, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true });
+    this.rt = new THREE.WebGLRenderTarget(4, 4, { stencilBuffer: true, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true });
     this._size = new THREE.Vector2();
     this.impactU = {
       uTex: { value: this.rt.texture }, uRes: { value: new THREE.Vector2(1, 1) }, uVp: { value: new THREE.Vector2(0.5, 0.5) },
@@ -534,7 +534,7 @@ export class WorldCut {
     this._preRender = () => this._renderSources();
     (ctx.beforeRender ??= []).push(this._preRender);
     // ⑤ 충격파 껍질: 본 파동 + 약한 뒤따르는 파동. 배경은 반 해상도 렌더 타깃에서 가져와 굴절시킨다
-    this.shockRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true });
+    this.shockRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: true });
     this.shockGeo = new THREE.SphereGeometry(1, 64, 32);
     this.shocks = [
       { delay: 0, R: 60, dur: 0.34, str: 0.13, sheen: 0.3, dark: 0.35 },

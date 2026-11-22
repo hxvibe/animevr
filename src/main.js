@@ -34,7 +34,7 @@ if (settings.background === 'passthrough') settings.background = DEFAULTS.backgr
 // 지운 캐릭터(나루토·오공)를 고른 채 저장돼 있으면 처음 캐릭터로
 if (!CHARACTERS.some((c) => c.id === settings.character)) settings.character = DEFAULTS.character;
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true, powerPreference: 'high-performance' }); // stencil: 잘린 조각의 평평한 단면
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;

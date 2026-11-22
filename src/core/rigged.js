@@ -298,15 +298,21 @@ export class RiggedBody {
       if (!o.isSkinnedMesh || !o.visible || !o.parent) continue;
       o.skeleton.update();
       const g = o.geometry.clone();
-      const pos = g.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        v.fromBufferAttribute(o.geometry.attributes.position, i);
+      // 압축(양자화)된 위치는 −1~1 정수라 굳힌 좌표를 그대로 넣으면 잘려 납작해진다 → 새 실수 버퍼에
+      const src = o.geometry.attributes.position;
+      const pos = new THREE.Float32BufferAttribute(new Float32Array(src.count * 3), 3);
+      for (let i = 0; i < src.count; i++) {
+        v.fromBufferAttribute(src, i);
         o.applyBoneTransform(i, v);
         pos.setXYZ(i, v.x, v.y, v.z);
       }
+      g.setAttribute('position', pos);
       g.deleteAttribute('skinIndex');
       g.deleteAttribute('skinWeight');
+      g.deleteAttribute('normal');
       g.computeVertexNormals();
+      g.computeBoundingBox();
+      g.computeBoundingSphere();
       const m = new THREE.Mesh(g, o.material);
       m.position.copy(o.position);
       m.quaternion.copy(o.quaternion);

@@ -191,7 +191,7 @@ export class Prop {
     const type = info.type ?? 'shatter';
     const c = this.center(new THREE.Vector3());
     if ((type === 'slash' || type === 'cleave') && (info.plane || info.planes)) {
-      W.slicer.slice(this.obj, info.plane ?? info.planes[0], { color: this.color, vel: this.vel, center: c, radius: this.radius * 0.7, sep: 1 });
+      W.slicer.slice(this.obj, info.plane ?? info.planes[0], { color: this.color, vel: this.vel, center: c, radius: this.radius * 0.7, sep: 1, inside: this.limb ? 'flesh' : 'solid', capColor: this.color }); // 상자 · 소품엔 피가 없다
     } else if (type === 'erase') {
       W.ctx.fx.burst(c, 16, new THREE.Color(0xc07bff), 1.5, 0.05, 0.5, { spread: this.radius });
       this.obj.parent?.remove(this.obj);

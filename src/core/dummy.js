@@ -657,7 +657,31 @@ export class Dummy {
     this.holders?.clear();
     this.rag?.pins?.clear();
     this.rag?.grip?.clear();
+    this.rag?.anchors?.clear();
     for (const b of hs) b?.drop?.();
+  }
+
+  /**
+   * 발을 땅에 붙든다 (무량공처에서 머리를 잡혀도 서 있는 채로): 두 발을 지금 자리에 고정하는 핀.
+   *  손이 쥔 것이 아니라서 holders 에는 없다
+   */
+  anchorFeet(on) {
+    const R = this.rag;
+    if (!R) return;
+    R.pins ??= new Map();
+    for (const k of ['ftL', 'ftR']) {
+      const i = RI[k];
+      if (on) {
+        if (this._lost().set.has(i)) continue;
+        const p = R.p[i].clone();
+        p.y = RAD[k] * this.scale;
+        R.pins.set(i, p);
+        (R.anchors ??= new Set()).add(i);
+      } else if (R.anchors?.has(i)) {
+        R.pins.delete(i);
+        R.anchors.delete(i);
+      }
+    }
   }
 
   /** 지금 잡고 있는 손 수 */
@@ -690,11 +714,17 @@ export class Dummy {
     const standing = feet < (RAD.ftL + 0.06) * this.scale;
     for (const [pin, G] of R.grip) {
       if (!R.pins.has(pin)) continue;
-      if (!TORSO_I.has(pin) && !standing) {
+      // 머리를 쥐면 목을 통해 몸통도 손 회전을 따른다 (공중에서도) — 목이 조금 휘듯 몸통보다 부드럽게
+      const headGrip = pin === RI.head;
+      const q = G.q ?? (G.q0 ??= new THREE.Quaternion());
+      if (!TORSO_I.has(pin) && !headGrip && !standing) {
         G.offs = null; // 다시 땅을 디디면 그때 자세로 다시 잰다
+        // 팔·다리에 매달린 몸: 흔들림은 자유롭게, 팔·다리를 비트는 회전만 몸통에 전해진다
+        this._gripTwist(pin, G, q, k);
         continue;
       }
-      const q = G.q ?? (G.q0 ??= new THREE.Quaternion());
+      G.tw = null;
+      const kk = headGrip && !standing ? k * 0.45 : k;
       if (!G.offs) {
         // 쥔 순간: 몸통 관절의 위치를 손 기준으로 기억
         _qa.copy(q).invert();
@@ -705,7 +735,7 @@ export class Dummy {
       for (const [i, off] of G.offs) {
         if (R.pins.has(i) || lost?.has(i)) continue;
         _v3.copy(off).applyQuaternion(q).add(base);
-        R.p[i].lerp(_v3, k);
+        R.p[i].lerp(_v3, kk);
       }
     }
   }
@@ -735,6 +765,7 @@ export class Dummy {
     this.holders?.clear();
     this.rag?.pins?.clear();
     this.rag?.grip?.clear();
+    this.rag?.anchors?.clear();
     this.heldBy = null;
     if (!this.alive) return;
     this.state = 'air';
@@ -833,7 +864,7 @@ export class Dummy {
     const pins = R.pins?.size ? R.pins : null;
     const pinned = (i) => (pins ? pins.has(i) : i === R.pin);
     if (_v.lengthSq() > 1e-8) for (let i = 0; i < n; i++) if (!pinned(i)) R.v[i].add(_v);
-    const g = 9.8 * (this.frozen ? 0.15 : 1);
+    const g = 9.8; // 굳어 있어도(무량공처 · 기절) 중력은 그대로 — 몸이 공중에 떠 있지 않는다
     const damp = this.frozen ? 6 : 0.25;
     // 잡힌 동안: 손에 대한 상대 운동(흔들림 · 빙글빙글 돌기)을 줄인다 — 손을 멈추면 몸도 곧 멈춘다.
     //  손째 움직이는 것은 줄이지 않는다 (들고 휘두르기 · 던지기는 그대로)
@@ -843,6 +874,7 @@ export class Dummy {
       R.pinPrev ??= new Map();
       let n0 = 0;
       for (const [i, t] of pins) {
+        if (R.anchors?.has(i)) continue; // 땅에 붙든 발은 손이 아니다
         const pv = R.pinPrev.get(i);
         if (pv && dt > 0) {
           vPin.add(_v.subVectors(t, pv).divideScalar(dt));
@@ -985,6 +1017,45 @@ export class Dummy {
         P[S.a].addScaledVector(c.n, lam * w0);
         P[S.b].addScaledVector(c.n, lam * w1);
       }
+    }
+  }
+
+  /**
+   * 팔·다리를 쥐고 들어 올렸을 때: 쥔 곳 → 엉덩이 축(매달린 방향)을 중심으로 손이 비튼 만큼 몸 전체가 따라 돈다.
+   *  팔·다리는 길이 방향으로 혼자 비틀리지 못하니 어깨 · 고관절을 통해 몸통에 전해진다. 기울이기(흔들림)는 중력에 맡긴다.
+   *  손을 비틀지 않으면 몸도 제자리에서 돌지 않는다
+   */
+  _gripTwist(pin, G, q, k) {
+    const R = this.rag;
+    const P = R.p;
+    const lost = this._lostIdx?.set;
+    const a = _v3.subVectors(P[RI.hips], P[pin]);
+    if (a.lengthSq() < 1e-6) return;
+    a.normalize();
+    // 몸이 향한 방향의 기준선: 어깨선 (어깨를 잃었으면 골반선)
+    const useSh = !lost?.has(RI.shL) && !lost?.has(RI.shR);
+    const line = new THREE.Vector3().subVectors(P[useSh ? RI.shL : RI.hpL], P[useSh ? RI.shR : RI.hpR]);
+    if (!G.tw) {
+      G.tw = { q0: q.clone(), s0: line.clone() };
+      return;
+    }
+    // 손이 그 축으로 비튼 각도 (스윙-트위스트 분해의 트위스트)
+    const qr = _qa.copy(q).multiply(_qb.copy(G.tw.q0).invert());
+    const th = 2 * Math.atan2(qr.x * a.x + qr.y * a.y + qr.z * a.z, qr.w);
+    const want = _v.copy(G.tw.s0).applyAxisAngle(a, th);
+    want.addScaledVector(a, -want.dot(a));
+    line.addScaledVector(a, -line.dot(a));
+    if (want.lengthSq() < 1e-6 || line.lengthSq() < 1e-6) return;
+    const phi = Math.atan2(a.dot(_v2.crossVectors(line, want)), line.dot(want));
+    if (Math.abs(phi) < 1e-4) return;
+    // 쥔 곳을 지나는 축으로 몸 전체를 돌린다
+    const rot = _qa.setFromAxisAngle(a, phi * k);
+    const o = P[pin];
+    for (let i = 0; i < P.length; i++) {
+      if (i === pin || R.pins.has(i) || lost?.has(i)) continue;
+      P[i].sub(o).applyQuaternion(rot).add(o);
+      // 이전 위치도 같이 돌려 속도를 얹지 않는다 (돌린 만큼만 돌고 지나치게 돌지 않게)
+      R.prev[i].sub(o).applyQuaternion(rot).add(o);
     }
   }
 
@@ -1198,14 +1269,23 @@ export class Dummy {
       if (this.root.position.lengthSq() > 250 * 250 || this.root.position.y < -20) this.kill({ type: 'erase' });
       return;
     }
-    if (this.frozen) {
-      this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
+    // 굳어도 떨어지던 몸(선 채 낙하)은 끝까지 떨어진다
+    if (this.frozen && this.state !== 'drop') {
+      // 굳으면 수평으로는 멎지만 중력은 그대로
+      const fh = Math.max(0, 1 - dt * 6);
+      this.vel.x *= fh;
+      this.vel.z *= fh;
       this.angVel.multiplyScalar(Math.max(0, 1 - dt * 6));
       this.head.rotation.z = (Math.random() - 0.5) * 0.15;
       this.armL.sh.rotation.x = (Math.random() - 0.5) * 0.1;
       this.armR.sh.rotation.x = (Math.random() - 0.5) * 0.1;
       if (this.flash <= 0) this._setEmissive(_c.setHSL(0.58, 0.8, 0.08 + Math.random() * 0.1));
-      if (this.state === 'air') this._integrate(dt, 0.15);
+      if (this.state === 'air') this._integrate(dt, 1);
+      else if (this.state === 'stand') this._fall(dt);
+      else if (this.state === 'down') {
+        this._fallLying(dt);
+        this._keepAboveFloor();
+      }
       return;
     }
     // 놓였을 때: 선 자세로 떨어져 발로 착지 → 무릎으로 받고 선다 (recover.js)
@@ -1243,9 +1323,13 @@ export class Dummy {
       // 연출(마허라 조복 의식) 동안엔 아무도 공격하지 않는다: 제자리에서 숨만 쉰다
       if (this.world.cinematic) this._idleCine?.(dt);
       else this._ai(dt);
-      this.root.position.addScaledVector(this.vel, dt);
-      this.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
-      this.root.position.y = Math.max(0, this.root.position.y);
+      // 수평 밀림은 금방 멎고, 세로는 중력으로 (발밑이 비면 떨어진다)
+      this.root.position.x += this.vel.x * dt;
+      this.root.position.z += this.vel.z * dt;
+      const fh = Math.max(0, 1 - dt * 6);
+      this.vel.x *= fh;
+      this.vel.z *= fh;
+      this._fall(dt);
       // 벽 · 물체를 통과하지 못한다
       this.world.collideActor(this.root.position, 0.28 * this.scale, { height: 1.7 * this.scale, who: this });
       // 맷집 회복 (1.2초 동안 안 맞으면)
@@ -1273,7 +1357,9 @@ export class Dummy {
         this.stateT = 0;
       }
     } else if (this.state === 'down') {
-      this.vel.set(0, 0, 0);
+      this.vel.x = this.vel.z = 0;
+      // 쓰러진 채 공중이면 떨어진다
+      this._fallLying(dt);
       this._keepAboveFloor();
       if (this.dying) {
         if (this.stateT > 2.5) this.kill({ type: 'fade' });
@@ -1293,6 +1379,36 @@ export class Dummy {
       }
     }
     if (this.root.position.lengthSq() > 250 * 250 || this.root.position.y < -20) this.kill({ type: 'erase' });
+  }
+
+  /** 선 채로(또는 굳은 채로) 발밑이 비었으면 중력으로 떨어진다 — 땅(y=0)에 닿으면 멈춘다 */
+  _fall(dt) {
+    const P = this.root.position;
+    if (P.y <= 0 && this.vel.y <= 0) {
+      P.y = 0;
+      this.vel.y = 0;
+      return;
+    }
+    this.vel.y -= 9.8 * dt;
+    P.y += this.vel.y * dt;
+    if (P.y <= 0) {
+      P.y = 0;
+      this.vel.y = 0;
+    }
+  }
+
+  /** 쓰러진 자세로 공중에 떠 있으면 떨어진다 (가장 낮은 관절이 바닥에 닿을 때까지) */
+  _fallLying(dt) {
+    const J = this._jointMap();
+    this.root.updateMatrixWorld(true);
+    let gap = Infinity;
+    for (const k of RAG) gap = Math.min(gap, J[k].getWorldPosition(_v).y - RAD[k] * this.scale);
+    if (gap <= 0.003) {
+      this.vel.y = 0;
+      return;
+    }
+    this.vel.y -= 9.8 * dt;
+    this.root.position.y += Math.max(this.vel.y * dt, -gap);
   }
 
   /** 쓰러진 자세의 관절이 바닥 아래면 몸 전체를 들어 올린다 */

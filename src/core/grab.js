@@ -66,7 +66,8 @@ export class Grab {
         if (t.kind === 'dummy') {
           // 쥔 자리는 손을 따라 돈다: 손을 돌려도 손바닥이 몸 겉면에 남는다 (몸 속으로 파고들지 않게)
           if (H.offL) target.copy(H.offL).applyQuaternion(h.quat).add(h.palm);
-          t.holdAt(target, this.by[side], h.quat);
+          if (H.headTear) this._headTear(side, H, t, h, target, dt);
+          else t.holdAt(target, this.by[side], h.quat);
         }
         else if (H.offL && t.obj) {
           // 소품 · 떨어진 팔다리: 손을 따라 함께 돈다 (쥔 순간의 자세를 손 기준으로 기억)
@@ -121,6 +122,58 @@ export class Grab {
         }
       }
     }
+  }
+
+  /** 고죠의 무량공처 안에서 정보에 굳은 적인가 */
+  _voidFrozen(t) {
+    return this.ctx.character?.id === 'gojo' && !!this.ctx.world.domain?.freeze && !!t.frozen;
+  }
+
+  /**
+   * 무량공처 머리 뜯기: 머리만 조금(10cm) 딸려 오고 발은 땅에 붙은 채, 손이 멀어질수록 목이 당겨진다.
+   *  당길수록 진동 · 삐걱 · 붉어짐 · 목에 맺히는 핏방울 → 30cm 넘게 당긴 채 잠깐 버티거나 홱 당기면 머리가 뜯겨 손에 남는다
+   */
+  _headTear(side, H, t, h, target, dt) {
+    const S = H.headTear;
+    const by = this.by[side];
+    const sc = t.scale ?? 1;
+    const pull = _v3.subVectors(target, S.p0);
+    const dist = pull.length();
+    // 머리는 조금만 따라온다
+    t.holdAt(_v2.copy(S.p0).add(pull.clampLength(0, 0.1 * sc)), by, h.quat);
+    const k = dist / (0.3 * sc);
+    const { fx, sfx } = this.ctx;
+    const neck = t._jointMap().neck.getWorldPosition(new THREE.Vector3());
+    if (k > 0.12) {
+      S.tick -= dt;
+      if (S.tick <= 0) {
+        S.tick = 0.05;
+        h.pulse?.(0.12 + 0.6 * Math.min(1, k), 45);
+      }
+      t._strain = Math.max(t._strain ?? 0, Math.min(1, k));
+    }
+    if (k > 0.3) {
+      S.creak -= dt;
+      if (S.creak <= 0) {
+        S.creak = 0.24 - 0.12 * Math.min(1, k);
+        sfx.noise?.({ dur: 0.14, vol: 0.06 + 0.16 * Math.min(1, k), f0: 950 - 350 * Math.min(1, k), f1: 180, q: 7, type: 'bandpass', at: neck });
+      }
+    }
+    if (k > 0.55 && Math.random() < dt * 40 * k) fx.spawnDark(neck, _v.randomDirection().multiplyScalar(0.5).add(_v2.set(0, 0.4, 0)), _bloodC, 0.02 + Math.random() * 0.02, 0.6, 0.6, 9.8);
+    S.hold = k >= 1 ? S.hold + dt : Math.max(0, S.hold - dt * 2);
+    const yank = h.vel.dot(pull.lengthSq() > 1e-6 ? _v.copy(pull).normalize() : _v.set(0, 1, 0));
+    if (!(k >= 1 && (S.hold >= 0.12 || yank > 2.5))) return;
+    // ── 뜯긴다 ──
+    H.headTear = null;
+    t.anchorFeet(false);
+    const p = t.sever('head', { vel: h.vel.clone().clampLength(0, 5), cause: 'tear', spurt: 1.8, spin: 2 });
+    if (!p) return;
+    fx.burst(neck, 34, _bloodC, 3.4, 0.05, 0.7, { dark: true, grav: 9, dir: _v.set(0, 1, 0), dirAmt: 0.8 });
+    sfx.play('punch_3', { at: neck, vol: 1, rate: 0.55 });
+    sfx.play('shatter_2', { at: neck, vol: 0.45, rate: 0.45 });
+    sfx.noise?.({ dur: 0.38, vol: 0.5, f0: 1600, f1: 110, q: 1.2, type: 'lowpass', at: neck });
+    h.pulse?.(1, 140);
+    this.ctx.game.hitstop = Math.max(this.ctx.game.hitstop ?? 0, 0.08);
   }
 
   /** 적을 붙잡을 수 있는가: 고죠 사토루 · 마히토 · 마허라(빙의)만 (다른 캐릭터는 물체만 집는다) */
@@ -313,6 +366,7 @@ export class Grab {
   _grab(side, t, h) {
     let offset = new THREE.Vector3();
     if (t.kind === 'dummy') {
+      const wasStanding = t.state === 'stand';
       // 손에 가장 가까운 관절을 잡는다 (손바닥에서 조금만 떨어지게)
       offset = t.grab(this.by[side], h.palm);
       if (!offset) return;
@@ -322,6 +376,15 @@ export class Grab {
       const big = this._mighty() ? 1.9 : 1;
       offset.setLength(THREE.MathUtils.clamp(offset.length(), 0.085, 0.15) * (t.scale ?? 1) * big);
       this.held[side] = { t, offset, offL: offset.clone().applyQuaternion(_q.copy(h.quat).invert()) };
+      // 무량공처: 정보에 굳은 적의 머리를 한 손으로 쥐었다 → 발이 땅에 붙은 채 당겨지다 머리가 뜯긴다
+      if (RAG[t.holders?.get(this.by[side])] === 'head' && wasStanding && this._voidFrozen(t)) {
+        t.anchorFeet(true);
+        this.held[side].headTear = { p0: t.rag.p[t.holders.get(this.by[side])].clone(), hold: 0, tick: 0, creak: 0 };
+        if (!this._toldVoid) {
+          this._toldVoid = true;
+          this.ctx.ui.callout('무량공처 — 굳은 몸은 버티지 못한다: 머리를 쥐고 당기면 뜯긴다', { color: '#9fe8ff', dur: 1.8 });
+        }
+      }
       h.pulse(0.6, 60);
       this.ctx.sfx.play('grab', { at: h.palm, vol: 0.8 });
       return;

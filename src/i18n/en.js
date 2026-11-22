@@ -686,5 +686,9 @@ export default {
  "같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 물체 집기 (적은 마허라가 된 뒤에만 붙잡는다)": "Make the same hand sign again to send that shikigami back into the shadow · punch (Black Flash) · pick up objects (enemies can only be grabbed after becoming Mahoraga)",
  "V 주먹(흑섬) · T 물체 집기 → 다시 T 던지기": "V punch (Black Flash) · T pick up an object → T again to throw",
  "물체에 손을 대고 주먹 → 집기, 펴면 던지기 (적은 붙잡지 못한다) · 주먹으로 빠르게 치면 확률적으로 흑섬": "Put your hand on an object and make a fist → pick up, open to throw (can't grab enemies) · fast punches can trigger Black Flash",
- "V 주먹 · T 물체 집기 → 다시 T 던지기": "V punch · T pick up an object → T again to throw"
+ "V 주먹 · T 물체 집기 → 다시 T 던지기": "V punch · T pick up an object → T again to throw",
+ "영역 안에서 굳은 적의 머리를 한 손으로 쥐고 당기면": "Inside the domain, grab a frozen foe's head with one hand and pull",
+ "발은 땅에 붙은 채 목이 늘어나다 머리가 뜯긴다": "its feet stay planted, the neck stretches, and the head tears off",
+ "영역 안에서 굳은 적의 머리를 그립으로 쥐고 당기면 뜯긴다": "inside the domain, grip a frozen foe's head and pull to tear it off",
+ "굳은 몸은 버티지 못한다: 머리를 쥐고 당기면 뜯긴다": "a frozen body can't resist: grab the head and pull to tear it off"
 };

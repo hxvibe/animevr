@@ -44,6 +44,82 @@ const LIMBS = [['neck', 'head'], ['shL', 'elL'], ['elL', 'hdL'], ['shR', 'elR'],
 const MINS = [['shL', 'hdL', 0.45], ['shR', 'hdR', 0.45], ['hpL', 'ftL', 0.55], ['hpR', 'ftR', 0.55], ['chest', 'head', 0.8], ['hips', 'knL', 0.5], ['hips', 'knR', 0.5]];
 // 관절 둘레 반지름: 쓰러졌을 때 몸 겉면이 바닥을 뚫지 않게 실제 두께에 맞춘다
 const RAD = { hips: 0.15, chest: 0.16, neck: 0.09, head: 0.12, shL: 0.09, shR: 0.09, elL: 0.06, elR: 0.06, hdL: 0.05, hdR: 0.05, hpL: 0.1, hpR: 0.1, knL: 0.075, knR: 0.075, ftL: 0.07, ftR: 0.07 };
+// ── 선분 사이 가장 가까운 점 (캡슐 충돌) ──
+const _sd1 = new THREE.Vector3();
+const _sd2 = new THREE.Vector3();
+const _sr = new THREE.Vector3();
+const _sq1 = new THREE.Vector3();
+const _sq2 = new THREE.Vector3();
+const _cs = { s: 0, t: 0, d: 0, n: new THREE.Vector3() };
+/** p1→q1(끝을 e1 만큼 늘임) 과 p2→q2(e2) 의 가장 가까운 점: s,t (늘인 선분 기준 0~1), 거리 d, n(2→1 방향) */
+function closestSeg(p1, q1, e1, p2, q2, e2) {
+  const d1 = _sd1.subVectors(q1, p1).multiplyScalar(1 + e1);
+  const d2 = _sd2.subVectors(q2, p2).multiplyScalar(1 + e2);
+  const r = _sr.subVectors(p1, p2);
+  const a = d1.dot(d1);
+  const e = d2.dot(d2);
+  const f = d2.dot(r);
+  let s;
+  let t;
+  if (a < 1e-10 && e < 1e-10) {
+    s = t = 0;
+  } else if (a < 1e-10) {
+    s = 0;
+    t = THREE.MathUtils.clamp(f / e, 0, 1);
+  } else {
+    const c = d1.dot(r);
+    if (e < 1e-10) {
+      t = 0;
+      s = THREE.MathUtils.clamp(-c / a, 0, 1);
+    } else {
+      const b = d1.dot(d2);
+      const den = a * e - b * b;
+      s = den > 1e-10 ? THREE.MathUtils.clamp((b * f - c * e) / den, 0, 1) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) {
+        t = 0;
+        s = THREE.MathUtils.clamp(-c / a, 0, 1);
+      } else if (t > 1) {
+        t = 1;
+        s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+      }
+    }
+  }
+  _sq1.copy(p1).addScaledVector(d1, s);
+  _sq2.copy(p2).addScaledVector(d2, t);
+  _cs.n.subVectors(_sq1, _sq2);
+  _cs.d = _cs.n.length();
+  if (_cs.d > 1e-6) _cs.n.divideScalar(_cs.d);
+  else {
+    // 정확히 겹쳤다: 두 선분에 수직인 방향으로
+    _cs.n.crossVectors(d1, d2);
+    if (_cs.n.lengthSq() < 1e-10) _cs.n.set(0, 1, 0);
+    _cs.n.normalize();
+  }
+  _cs.s = s;
+  _cs.t = t;
+  return _cs;
+}
+/** 기본 자세(크기 반영)에서 두 캡슐 선분의 거리 */
+function segDist(P, A, B) {
+  return closestSeg(P[A.a], P[A.b], A.ext, P[B.a], P[B.b], B.ext).d;
+}
+
+// 몸끼리 뚫지 않게: 부위마다 캡슐 [시작, 끝, 반지름(키 1.8 기준), 끝을 더 늘이는 비율(손 · 발 · 머리통)]
+const SEGS = [
+  ['hips', 'chest', 0.13, 0], // 몸통 가운데
+  ['shL', 'hpL', 0.06, 0], // 몸통 옆
+  ['shR', 'hpR', 0.06, 0],
+  ['neck', 'head', 0.1, 1.0], // 머리통 (머리 관절은 두개골 밑이라 위로 늘인다)
+  ['shL', 'elL', 0.055, 0],
+  ['elL', 'hdL', 0.05, 0.4], // 아래팔 + 손
+  ['shR', 'elR', 0.055, 0],
+  ['elR', 'hdR', 0.05, 0.4],
+  ['hpL', 'knL', 0.08, 0],
+  ['knL', 'ftL', 0.06, 0.15], // 정강이 + 발
+  ['hpR', 'knR', 0.08, 0],
+  ['knR', 'ftR', 0.06, 0.15],
+];
 const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
@@ -667,7 +743,23 @@ export class Dummy {
     // 다리 관절의 자식 방향(로컬)
     const dir0 = {};
     for (const [a, b] of LIMBS) dir0[a] = J[b].position.clone().normalize();
-    this._rest = { rest, cons, mins, dir0 };
+    // 몸끼리 충돌: 관절을 나누지 않는 부위 쌍마다 (몸통끼리는 거리 구속이 이미 붙잡는다)
+    //  충돌 거리 = 두 반지름의 합, 단 기본 자세에서 이미 그보다 가까우면 그 거리의 90% (기본 자세가 서로 밀어내지 않게)
+    const segs = SEGS.map(([a, b, r, ext]) => ({ a: RI[a], b: RI[b], r: r * this.scale, ext }));
+    const pairs = [];
+    const restP = rest.map((p) => p.clone().multiplyScalar(this.scale));
+    for (let i = 0; i < segs.length; i++) {
+      for (let j = i + 1; j < segs.length; j++) {
+        const A = segs[i];
+        const B = segs[j];
+        if (i < 3 && j < 3) continue;
+        if (A.a === B.a || A.a === B.b || A.b === B.a || A.b === B.b) continue;
+        const d = segDist(restP, A, B);
+        const thr = Math.min(A.r + B.r, d * 0.9);
+        if (thr > 0.01 * this.scale) pairs.push([i, j, thr]);
+      }
+    }
+    this._rest = { rest, cons, mins, dir0, segs, pairs };
     return this._rest;
   }
 
@@ -713,6 +805,7 @@ export class Dummy {
       for (let it = 0; it < 6; it++) {
         for (const [a, c, L] of cons) this._ragSolve(a, c, L, 0);
         for (const [a, c, L] of mins) this._ragSolve(a, c, L, -1);
+        if (this.world.ragSelf !== false) this._ragSelf();
         for (let i = 0; i < n; i++) {
           const P = R.p[i];
           const r = RAD[RAG[i]] * this.scale;
@@ -747,6 +840,41 @@ export class Dummy {
     this.vel.divideScalar(n);
     R.vel.copy(this.vel);
     this._ragApply();
+  }
+
+  /**
+   * 몸끼리 뚫지 않기: 부위 캡슐 쌍의 가장 가까운 두 점이 충돌 거리보다 가까우면 벌린다.
+   *  밀어낸 양은 각 캡슐의 두 끝 관절에 가까운 쪽일수록 많이 나눈다. 손에 잡힌 관절은 움직이지 않는다 (대신 몸이 밀린다)
+   */
+  _ragSelf() {
+    const R = this.rag;
+    const { segs, pairs } = R.rest;
+    if (!pairs) return;
+    const P = R.p;
+    const lost = this._lostIdx?.set;
+    const pins = R.pins?.size ? R.pins : null;
+    const wOf = (i) => ((pins ? pins.has(i) : i === R.pin) ? 0 : 1);
+    for (const [i, j, thr] of pairs) {
+      const A = segs[i];
+      const B = segs[j];
+      if (lost?.size && (lost.has(A.a) || lost.has(A.b) || lost.has(B.a) || lost.has(B.b))) continue;
+      const c = closestSeg(P[A.a], P[A.b], A.ext, P[B.a], P[B.b], B.ext);
+      if (c.d >= thr) continue;
+      // 끝을 늘인 캡슐: 늘인 부분은 끝 관절이 맡는다
+      const u = Math.min(1, c.s * (1 + A.ext));
+      const v = Math.min(1, c.t * (1 + B.ext));
+      const w0 = wOf(A.a) * (1 - u);
+      const w1 = wOf(A.b) * u;
+      const w2 = wOf(B.a) * (1 - v);
+      const w3 = wOf(B.b) * v;
+      const W = w0 * (1 - u) + w1 * u + w2 * (1 - v) + w3 * v;
+      if (W < 1e-6) continue;
+      const lam = ((thr - c.d) / W) * 0.8;
+      P[A.a].addScaledVector(c.n, lam * w0);
+      P[A.b].addScaledVector(c.n, lam * w1);
+      P[B.a].addScaledVector(c.n, -lam * w2);
+      P[B.b].addScaledVector(c.n, -lam * w3);
+    }
   }
 
   /** 거리 구속. mode 0: 정확히 L, -1: 최소 L */

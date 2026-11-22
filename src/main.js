@@ -104,6 +104,7 @@ const game = {
     ctx.input.pitch = 0;
     const def = CHARACTERS.find((c) => c.id === charId) ?? CHARACTERS[0];
     ctx.character = def.create(ctx);
+    if (ctx.character && !ctx.character.id) ctx.character.id = def.id; // 캐릭터마다 id 가 있게 (잡기 권한 등)
     ctx.ui.showTitle(false);
     // 바로 시험해볼 수 있게 기본 더미 하나
     ctx.input.update(0);

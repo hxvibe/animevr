@@ -51,7 +51,8 @@ export class Grab {
         if (!want || h.speed > 1.6) continue;
         const other = this.held[side === 'left' ? 'right' : 'left']?.t;
         // 다른 손이 이미 잡은 적도 한 손 더 잡을 수 있다 (두 손 잡기)
-        const t = world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? !x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2) : !x.held));
+        const foes = this.canGrabFoes();
+        const t = world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? foes && (!x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2)) : !x.held));
         if (t) this._grab(side, t, h);
       } else {
         const t = H.t;
@@ -62,7 +63,11 @@ export class Grab {
         const release = !h.active || (h.source === 'hand' ? h.gesture !== 'fist' && h.gestureTime > 0.05 : !h.btn.grip);
         // 손을 따라감 (더미는 잡은 관절만 손에 붙고 나머지는 중력에 늘어진다)
         const target = _v.copy(h.palm).add(H.offset);
-        if (t.kind === 'dummy') t.holdAt(target, this.by[side]);
+        if (t.kind === 'dummy') {
+          // 쥔 자리는 손을 따라 돈다: 손을 돌려도 손바닥이 몸 겉면에 남는다 (몸 속으로 파고들지 않게)
+          if (H.offL) target.copy(H.offL).applyQuaternion(h.quat).add(h.palm);
+          t.holdAt(target, this.by[side], h.quat);
+        }
         else if (H.offL && t.obj) {
           // 소품 · 떨어진 팔다리: 손을 따라 함께 돈다 (쥔 순간의 자세를 손 기준으로 기억)
           target.copy(H.offL).applyQuaternion(h.quat).add(h.palm);
@@ -84,6 +89,7 @@ export class Grab {
         let best = Infinity;
         for (const x of world.targets()) {
           if (x.heldBy || x.held || x.dying || x.noGrab) continue;
+          if (x.kind === 'dummy' && !this.canGrabFoes()) continue;
           const c = x.center(new THREE.Vector3());
           const rel = c.sub(inp.head);
           const along = rel.dot(inp.headDir);
@@ -115,6 +121,12 @@ export class Grab {
         }
       }
     }
+  }
+
+  /** 적을 붙잡을 수 있는가: 고죠 사토루 · 마히토 · 마허라(빙의)만 (다른 캐릭터는 물체만 집는다) */
+  canGrabFoes() {
+    const c = this.ctx.character;
+    return !!c && (c.possessed ? true : c.id === 'gojo' || c.id === 'mahito');
   }
 
   /** 마허라(빙의)의 힘: 박기 · 뜯기 배율 */
@@ -309,6 +321,10 @@ export class Grab {
       // 마허라의 큰 손은 더 떨어져서 쥔다
       const big = this._mighty() ? 1.9 : 1;
       offset.setLength(THREE.MathUtils.clamp(offset.length(), 0.085, 0.15) * (t.scale ?? 1) * big);
+      this.held[side] = { t, offset, offL: offset.clone().applyQuaternion(_q.copy(h.quat).invert()) };
+      h.pulse(0.6, 60);
+      this.ctx.sfx.play('grab', { at: h.palm, vol: 0.8 });
+      return;
     } else {
       offset.subVectors(t.pos, h.palm);
       t.held = true;

@@ -20,6 +20,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 const AURA = { glow: 0x5a9ab0, hot: 0xc8f0ff, inner: 0x061418, line: 0x000000 };
 const SOUL = new THREE.Color(0x7ad8ff);
 const FLESH = 0xc8c0bc;
+const FLESH_C = new THREE.Color(0xc08070);
+const _q = new THREE.Quaternion();
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 // 영역 「自閉円頓裹」: 셀 수 없는 손이 빽빽한 안쪽
@@ -328,11 +330,21 @@ const TWIST_JJK = ['head', 'L_arm', 'R_arm', 'L_elbow', 'R_elbow', 'L_hand', 'R_
 const TWIST_BIP = ['Bip001_Head', 'Bip001_L_UpperArm', 'Bip001_R_UpperArm', 'Bip001_L_Forearm', 'Bip001_R_Forearm', 'Bip001_L_Hand', 'Bip001_R_Hand', 'Bip001_Spine2', 'Bip001_Spine1', 'Bip001_L_Thigh', 'Bip001_R_Thigh', 'Bip001_L_Calf', 'Bip001_R_Calf', 'Bip001_Neck'];
 
 class Transfig {
-  constructor(ctx, t, { kill = true } = {}) {
+  constructor(ctx, t, { kill = true, quiet = false } = {}) {
     this.ctx = ctx;
     this.t = t;
     this.k = 0;
     this.kill = kill;
+    if (quiet) {
+      // 부위 고르기만 (SoulStock 이 쓴다)
+      const parts = [];
+      if (t.rig) {
+        const names = t.rig.mapId === 'bip' ? TWIST_BIP : TWIST_JJK;
+        for (const n of names) if (t.rig.bones[n]) parts.push(t.rig.bones[n]);
+      } else if (t.armL) parts.push(t.head, t.armL.sh, t.armR.sh, t.armL.el, t.armR.el, t.legL.kn, t.legR.kn, t.spine);
+      this.parts = parts.filter(Boolean).sort(() => Math.random() - 0.5).slice(0, 6).map((o) => ({ o, s0: o.scale.clone(), s1: new THREE.Vector3(rnd(0.3, 2.2), rnd(0.4, 2.4), rnd(0.3, 2.2)) }));
+      return;
+    }
     // 비틀 부위: 뼈(스키닝 모델) 또는 관절(더미)
     const parts = [];
     if (t.rig) {
@@ -363,6 +375,69 @@ class Transfig {
   }
 }
 
+/**
+ * 무위전변 → 개조 인간 스톡: 붙잡은 상대의 영혼을 비틀어(몸이 일그러진다) 체스 말만 하게 오그라뜨린다.
+ *  손에 쥐고 있었으면 그 손에 스톡이 남고(던지면 풀려난다), 아니면(영역 필중 · 데스크톱) 마히토가 삼켜 비축한다
+ */
+class SoulStock {
+  constructor(ctx, mahito, t, side = null) {
+    this.ctx = ctx;
+    this.m = mahito;
+    this.t = t;
+    this.side = side;
+    this.k = 0;
+    this.phase = 'twist';
+    const tw = new Transfig(ctx, t, { kill: false, quiet: true });
+    this.parts = tw.parts;
+    for (const p of this.parts) p.s1.multiplyScalar(1.15);
+  }
+
+  update(dt) {
+    const { fx } = this.ctx;
+    const t = this.t;
+    this.k += dt;
+    if (this.phase === 'twist') {
+      // 영혼을 비튼다: 부위가 제멋대로 부풀고 오그라든다 (붙잡힌 채)
+      if (!t.alive) return false;
+      const e = Math.min(1, this.k / 0.8);
+      for (const p of this.parts) p.o.scale.lerpVectors(p.s0, p.s1, e * e);
+      if (Math.random() < 0.6) fx.spawn(t.center(_v).add(_v2.randomDirection().multiplyScalar(0.3)), _v3.set(0, 0.5, 0), SOUL, 0.05, 0.4, 1, 0);
+      if (this.k < 0.8) return true;
+      // 몸을 세상에서 빼고(처치) 껍데기를 오그라뜨린다
+      t.root.updateMatrixWorld(true);
+      this.c0 = t.center(new THREE.Vector3());
+      this.p0 = t.root.position.clone();
+      this.q0 = t.root.quaternion.clone();
+      this.s0 = t.root.scale.clone();
+      t.kill({ type: 'stock' });
+      this.phase = 'squeeze';
+      this.k = 0;
+      this.ctx.sfx.play('grab', { at: this.c0, vol: 1, rate: 0.45 });
+      return true;
+    }
+    // 오그라들며 손(또는 입) 쪽으로 빨려 든다
+    const h = this.side ? this.ctx.input[this.side] : null;
+    const dest = h?.active ? h.palm : this.m.mouthPos(new THREE.Vector3());
+    const e = Math.min(1, this.k / 0.55);
+    const ee = e * e * (3 - 2 * e);
+    const s = THREE.MathUtils.lerp(1, 0.03, ee);
+    const R = t.root;
+    R.scale.copy(this.s0).multiplyScalar(s);
+    R.quaternion.copy(this.q0).premultiply(_q.setFromAxisAngle(UP, ee * 9));
+    // 몸 가운데가 목적지로 모이도록
+    const c = _v.copy(this.c0).lerp(dest, ee);
+    R.position.copy(this.p0).sub(this.c0).multiplyScalar(s).add(c);
+    if (Math.random() < 0.8) fx.spawn(c, _v2.randomDirection().multiplyScalar(0.6), Math.random() < 0.5 ? SOUL : FLESH_C, 0.04, 0.35, 2, 0);
+    if (e < 1) return true;
+    // 다 오그라들었다 → 스톡
+    R.parent?.remove(R);
+    t._dispose?.();
+    fx.burst(c, 22, new THREE.Color(0x8a5ab0), 2, 0.04, 0.35);
+    this.m._gotStock(this.side, c);
+    return false;
+  }
+}
+
 // ───────────────── 캐릭터 ─────────────────
 export class Mahito extends Caster {
   constructor(ctx) {
@@ -374,6 +449,7 @@ export class Mahito extends Caster {
     this.arms = { left: new StretchArm(ctx, 'left'), right: new StretchArm(ctx, 'right') };
     this.effects = [];
     this.stocks = { left: null, right: null, desk: null }; // 손에 쥔 개조 인간 스톡
+    this.bank = 0; // 무위전변으로 만들어 삼켜 둔 스톡 (꺼낼 때 주력이 들지 않는다)
     this.stockFx = [];
     this.twists = [];
     this.cuts = new Map(); // 같은 대상을 한 번 휘두를 때 한 번만
@@ -412,7 +488,7 @@ export class Mahito extends Caster {
   helpLines(mode) {
     if (mode === 'hand') {
       return [
-        { head: '무위전변 — 영혼 만지기', demo: 'mahito.touch', color: '#7ad8ff', text: '편 맨손바닥으로 상대를 0.2초 만지면 영혼을 비틀어 개조 인간으로 (특급은 큰 피해)\n주먹이나 변형한 손으로는 발동하지 않는다' },
+        { head: '무위전변 — 영혼 비틀기', demo: 'common.grab', color: '#7ad8ff', text: '상대를 붙잡고(주먹) 0.7초 쥐고 있으면 영혼을 비틀어 체스 말만 한 개조 인간 스톡으로 오그라뜨린다 (특급은 버티고 큰 피해만)\n스톡은 그 손에 남는다: 휘두르며 손을 펴면 던져 풀려나고, 가만히 펴면 삼켜 비축 (입에서 꺼낼 때 주력이 들지 않는다)' },
         { head: '칼날 팔', demo: 'mahito.blade', color: '#e8e2d8', text: '검지·중지를 곧게 펴 칼처럼 세우고(손바닥을 옆으로) 0.35초 → 손이 칼날로 바뀐다 → 휘둘러 베기\n주먹을 쥐면 되돌아온다' },
         { head: '드릴 팔', demo: 'mahito.drill', color: '#c8c0bc', text: '주먹을 앞으로 겨누고 0.35초 → 드릴 → 앞으로 찌르면 꿰뚫는다' },
         { head: '늘어나는 팔', demo: 'mahito.stretch', color: '#c8c0bc', text: '검지로 앞을 빠르게 찌르면 팔이 7m까지 늘어나 때리고 끌어당긴다' },
@@ -424,12 +500,12 @@ export class Mahito extends Caster {
     if (mode === 'desktop') {
       return [
         { head: '조작 (데스크톱)', color: '#ffffff', text: '클릭 → 마우스 고정 · WASD 이동 · H/Tab 메뉴' },
-        { head: '무위전변', color: '#7ad8ff', text: 'E: 1.6m 안의 조준한 대상을 만진다' },
+        { head: '무위전변', color: '#7ad8ff', text: 'T 로 상대를 붙잡고 E → 개조 인간 스톡 (삼켜 비축 · 5 로 던진다)' },
         { head: '몸 변형', color: '#e8e2d8', text: '1 칼날 베기 · 2 드릴 찌르기 · 3 늘어나는 팔 · 4 다중혼 발체 · 5 개조인간 발사 · Q 1.2초 영역전개' },
       ];
     }
     return [
-      { head: '무위전변', color: '#7ad8ff', text: '그립을 쥐지 않은 손을 대상에 대고 트리거' },
+      { head: '무위전변', color: '#7ad8ff', text: '맨손(변형 전) 그립으로 상대를 붙잡고 0.7초 · 또는 쥔 채 트리거 → 개조 인간 스톡이 그 손에 · 그립을 놓으며 휘두르면 던지고, 가만히 놓으면 삼켜 비축' },
       { head: '몸 변형', color: '#e8e2d8', text: '오른쪽 그립: 칼날 팔 (휘두르기) · 왼쪽 그립: 드릴 팔 (찌르기) · A: 늘어나는 팔 · X: 스톡 꺼내기 → 떼면 던지기 · 양쪽 그립을 모으고 밀기: 발체' },
       { head: '영역전개', color: '#9fd8ff', text: '양쪽 스틱을 눌러 1.2초' },
     ];
@@ -443,6 +519,7 @@ export class Mahito extends Caster {
       { label: '주력', bar: this.energy / this.maxEnergy, color: '#7ad8ff' },
       { label: '체력', bar: w.player.hp / w.player.maxHp, color: '#ff9fa0' },
       { label: '변형', text: ['left', 'right'].map((s) => ({ blade: '칼날', drill: '드릴' }[this.forms[s].form] ?? '맨손')).join(' / ') },
+      { label: '스톡', text: `${this.bank}` },
       { label: '영역', text: dom },
       { label: '처치', text: `${w.kills}` },
     ];
@@ -484,12 +561,14 @@ export class Mahito extends Caster {
     const g = h.gesture;
     const ctrl = h.source === 'controller';
     const fwd = this.flatFwd(_v3);
+    const G = this.ctx.grab?.held[h.side];
+    const holding = !!G;
     // 손 모양을 바꾸면 변형이 풀린다
     if (F.form === 'blade' && (ctrl ? !h.btn.grip : (g === 'fist' || g === 'pinch') && h.gestureTime > 0.25)) F.set(null);
     if (F.form === 'drill' && (ctrl ? !h.btn.grip : g !== 'fist' && h.gestureTime > 0.25)) F.set(null);
     // 칼날: 검지·중지를 곧게 모아 세운 칼 손(손바닥을 옆으로) 유지 — 그냥 편 손으로는 바뀌지 않는다
     const knife = ctrl ? h.side === 'right' && h.btn.grip && !this._ctrlBoth() : g === 'two' && Math.abs(h.palmNormal.y) < 0.6 && h.speed < 1.0;
-    if (!F.form && this.held(h.side + 'blade', knife, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
+    if (!F.form && this.held(h.side + 'blade', knife && !holding, dt, ctrl ? 0.05 : 0.35)) F.set('blade');
     // 드릴: 주먹을 앞으로 겨눈다
     //  입에서 스톡을 꺼내는 주먹(입 가까이 · 스톡을 쥔 채 · 방금 입에 댔던 손)은 드릴이 되지 않는다
     const mouthD = h.palm.distanceTo(this.mouthPos(_v));
@@ -498,7 +577,7 @@ export class Mahito extends Caster {
     this.cds[sideKey] = (this.cds[sideKey] ?? 0) - dt;
     const nearStock = !!this.stocks[h.side] || this.cds[sideKey] > 0 || mouthD < 0.32 || this.holdK(h.side + 'pull', 0.25) > 0;
     const aimFist = ctrl ? h.side === 'left' && h.btn.grip && !this._ctrlBoth() : g === 'fist' && !nearStock && h.fingersDir.dot(fwd) > 0.45 && h.speed < 1.0 && h.palm.distanceTo(inp.head) > 0.22;
-    if (!F.form && this.held(h.side + 'drill', aimFist, dt, ctrl ? 0.05 : 0.35)) F.set('drill');
+    if (!F.form && this.held(h.side + 'drill', aimFist && !holding, dt, ctrl ? 0.05 : 0.35)) F.set('drill');
     if (F.form && !F.k) this.aura.set(h.side, 0.6);
     // 휘두르기 / 찌르기
     if (F.form === 'blade' && h.speed > 2.2) this._bladeSweep(h, F);
@@ -511,24 +590,28 @@ export class Mahito extends Caster {
       this.cds[ck] = 0.8;
       this._stretch(h);
     }
-    // 무위전변: 맨손바닥이 상대에게 닿으면
-    const bare = !F.form && (ctrl ? !h.btn.grip && h.btn.trigger : g === 'open' || g === 'none');
-    let touching = null;
-    if (bare && this.touchCd <= 0) {
-      for (const t of this.ctx.world.targets()) {
-        if (!t.alive || t.dying || t.kind === 'prop') continue;
-        if (t.distanceTo(h.palm) < 0.08 && (ctrl || h.palmNormal.dot(_v.subVectors(t.center(_v2), h.palm).normalize()) > 0.2)) {
-          touching = t;
-          break;
-        }
-      }
-    }
-    if (this.held(h.side + 'touch', !!touching, dt, ctrl ? 0.05 : 0.2)) this.transfigure(touching, h);
-    if (touching) this.aura.set(h.side, 0.3 + this.holdK(h.side + 'touch', 0.2) * 0.7);
+    // 무위전변: 닿기만 해선 안 된다 — 상대를 실제로 붙잡아 0.7초 쥐고 있으면(컨트롤러는 쥔 채 트리거로 바로)
+    //  영혼을 비틀어 개조 인간 스톡으로 오그라뜨린다 → 그 손에 스톡이 남는다
+    const gt = G?.t;
+    const soulT = gt?.kind === 'dummy' && gt.alive && !gt.dying && !this.twists.some((x) => x.t === gt) ? gt : null;
+    const fire = this.held(h.side + 'soul', !!soulT && this.touchCd <= 0, dt, 0.7) || (soulT && ctrl && h.pressed('trigger') && this.touchCd <= 0);
+    if (soulT) this.aura.set(h.side, 0.3 + this.holdK(h.side + 'soul', 0.7) * 0.7);
+    if (fire && soulT) this.transfigure(soulT, h);
     // 개조 인간 스톡: 주먹을 입에 대 0.25초 → 입에서 스톡(체스 말만 한 개조 인간)을 꺼내 쥔다 → 던지면 풀려난다
     const mouth = this.mouthPos(_v);
     const ak = h.side + 'pull';
     const S = this.stocks[h.side];
+    if (S?.fromGrab && S.state !== 'thrown') {
+      // 무위전변으로 만든 스톡: 쥔 손을 펴면 놓는다 — 휘두르며 펴면 던지고(풀려난다), 가만히 펴면 삼켜 비축한다
+      this.aura.set(h.side, 0.45);
+      const open = ctrl ? !h.btn.grip : g !== 'fist';
+      if (open && S.t > 0.25) {
+        this.stocks[h.side] = null;
+        if (h.speed > 1.6) S.throw(_v2.copy(h.vel).multiplyScalar(1.3).addScaledVector(inp.headDir, 3).add(_v3.set(0, 0.8, 0)), (pos, dir) => this._releaseWorm(pos, dir), 0.18);
+        else this._swallow(S);
+      }
+      return;
+    }
     if (ctrl) {
       // 왼쪽 A 를 누르면 입에서 꺼내 쥐고, 떼면 던진다 (1.5초 넘게 쥐고 있으면 저절로)
       if (h.side === 'left' && h.pressed('a') && !S) this.pullStock(h);
@@ -560,7 +643,9 @@ export class Mahito extends Caster {
 
   /** 입에서 스톡을 하나 꺼내 손에 쥔다 */
   pullStock(h) {
-    if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
+    // 비축한 스톡(무위전변으로 만든 것)이 있으면 그것부터 — 주력 · 재사용 대기 없이
+    if (this.bank > 0) this.bank--;
+    else if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
     const hp = new THREE.Vector3();
     const S = new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null));
     this.stocks[h.side] = S;
@@ -592,7 +677,8 @@ export class Mahito extends Caster {
     const inp = this.ctx.input;
     const hold = new THREE.Vector3();
     const S = (() => {
-      if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
+      if (this.bank > 0) this.bank--;
+      else if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
       return new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => hold.copy(inp.head).addScaledVector(inp.headDir, 0.4).add(_v2.set(0, -0.15, 0)).addScaledVector(_v3.crossVectors(inp.headDir, UP).normalize(), 0.15));
     })();
     if (!S) return;
@@ -606,14 +692,63 @@ export class Mahito extends Caster {
     void from;
   }
 
-  /** 영혼을 만졌다 */
+  /**
+   * 무위전변: 영혼에 손을 댔다 (붙잡은 손 · 영역 필중 · 데스크톱 E)
+   *  보통 상대 → 영혼을 비틀어 개조 인간 스톡으로 (손 h 가 있으면 그 손에, 없으면 삼켜 비축)
+   *  특급 · 샌드백 → 영혼이 버틴다: 몸이 잠깐 일그러지고 큰 피해만
+   */
   transfigure(t, h = null) {
-    if (!t?.alive) return;
-    this.touchCd = 0.6;
-    const strong = (t.def?.hp ?? 0) >= 500 || t.infinite; // 특급은 버틴다
-    this.twists.push(new Transfig(this.ctx, t, { kill: !strong }));
+    if (!t?.alive || t.dying || this.twists.some((x) => x.t === t)) return;
+    const strong = (t.def?.hp ?? 0) >= 500 || t.infinite;
+    this.touchCd = strong ? 1.5 : 0.6; // 특급을 붙잡은 채로는 1.5초마다 다시 비튼다
+    if (strong) this.twists.push(new Transfig(this.ctx, t, { kill: false }));
+    else {
+      this.twists.push(new SoulStock(this.ctx, this, t, h?.side ?? null));
+      this.ctx.sfx.play('shimmer', { at: t.center(_v), vol: 0.9, rate: 0.5 });
+      if (!this._toldStock) {
+        this._toldStock = true;
+        this.ctx.ui.callout('영혼을 비틀어 개조 인간 스톡으로 — 쥔 손을 휘두르며 펴면 던지고, 가만히 펴면 삼켜 비축한다', { color: '#b088d8', dur: 2.2 });
+      }
+    }
     this.ctx.ui.manga({ main: '無為転変', ruby: 'むいてんぺん', color: '#7ad8ff', side: h?.side });
     h?.pulse?.(0.8, 80);
+  }
+
+  /** 상대가 스톡이 되었다: 그 손에 쥐어 준다 (손이 없거나 이미 쥐었으면 삼킨다) */
+  _gotStock(side, at) {
+    const h = side ? this.ctx.input[side] : null;
+    if (h?.active && !this.stocks[side]) {
+      const hp = new THREE.Vector3();
+      const S = new StockPiece(this.ctx, at, () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null));
+      S.fromGrab = true;
+      this.stocks[side] = S;
+      this.stockFx.push(S);
+      h.pulse?.(0.6, 60);
+      this.ctx.ui.callout('개조 인간 스톡', { color: '#b088d8', dur: 0.9 });
+      return;
+    }
+    this.bank++;
+    this.ctx.ui.callout(`개조 인간 스톡 — 삼켜 비축 (${this.bank})`, { color: '#b088d8', dur: 1 });
+  }
+
+  /** 쥔 스톡을 입으로 가져가 삼킨다 → 비축 */
+  _swallow(S) {
+    S.state = 'pull';
+    S.t = 0;
+    S.from = S.mesh.position.clone();
+    const mouth = new THREE.Vector3();
+    S.hold = () => this.mouthPos(mouth);
+    this.later(0.18, () => {
+      S.dispose();
+      this.bank++;
+      this.ctx.sfx.play('grab', { at: this.mouthPos(_v), vol: 0.5, rate: 0.7 });
+      this.ctx.ui.callout(`삼켜 비축 — 스톡 ${this.bank}`, { color: '#b088d8', dur: 0.8 });
+    });
+  }
+
+  /** 손이 바쁘면 잡기를 하지 않는다 (칼날 · 드릴 · 늘어나는 팔 · 스톡을 쥔 손) */
+  handBusy(side) {
+    return !!this.forms[side]?.form || !!this.arms[side]?.active || !!this.stocks[side];
   }
 
   _bladeSweep(h, F) {
@@ -821,8 +956,10 @@ export class Mahito extends Caster {
     };
     const t = this.gazeTarget(inp.head, inp.headDir, 0.25, 3);
     if (press('KeyE')) {
-      const n = this.gazeTarget(inp.head, inp.headDir, 0.3, 1.8);
-      if (n && n.kind !== 'prop') this.transfigure(n);
+      // 붙잡아야 한다: T 로 잡은 상대의 영혼을 비튼다 (스톡은 삼켜 비축 → 5 로 던진다)
+      const n = this.ctx.grab?.desk?.t;
+      if (n?.kind === 'dummy') this.transfigure(n);
+      else this.ctx.ui.callout('무위전변은 상대를 붙잡아야 한다 — T 로 잡고 E', { color: '#7ad8ff', dur: 1.2 });
     }
     if (press('Digit1') && t) {
       const c = t.center(new THREE.Vector3());

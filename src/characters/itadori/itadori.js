@@ -70,7 +70,7 @@ export class Itadori {
         { head: '어주자 「解」', demo: 'itadori.cut', color: '#ff6070', text: '검지·중지를 편 가위 손으로 더미를 건드리기 → 절취선이 그어지고 싹둑\n영역 안에서는 가위 손으로 0.25초 가리키기만 해도 된다' },
         { head: '적혈조술 「穿血」', demo: 'itadori.blood', color: '#d0001a', text: '두 손바닥을 맞대고 손끝을 앞으로 (백렴: 피가 압축된다)\n0.5초 이상 모은 뒤 두 손을 떼면 손끝 방향으로 발사' },
         { head: '영역전개', demo: 'itadori.domain', color: '#ffb070', text: '두 손을 깍지 끼고 두 검지만 맞대어 위로 세워 1.5초 (수인표)\n안의 모든 것에 영혼을 가르는 해가 필중 · 메뉴에서도 발동' },
-        { head: '잡기', demo: 'common.grab', color: '#ffffff', text: '더미에 손을 대고 천천히 주먹 → 잡기, 펴면 던지기' },
+        { head: '잡기', demo: 'common.grab', color: '#ffffff', text: '물체에 손을 대고 천천히 주먹 → 집기, 펴면 던지기 (적은 붙잡지 못한다)' },
       ];
     }
     if (mode === 'desktop') {

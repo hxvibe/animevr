@@ -148,7 +148,7 @@ export class Megumi {
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
         { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 팔을 앞으로 쭉 뻗고 두 주먹을 쥐어 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
         { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 아래로 내리고 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동' },
-        { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 잡기' },
+        { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 물체 집기 (적은 마허라가 된 뒤에만 붙잡는다)' },
       ];
     }
     if (mode === 'desktop') {
@@ -163,7 +163,7 @@ export class Megumi {
         { head: '貫牛 관우', color: '#ffc0a0', text: '7' },
         { head: '魔虚羅 마허라', color: '#ffd28a', text: '8 (조복 전이면 조복의 의식 · 다시 누르면 돌려보내기)' },
         { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: 'Q 1.2초 누르고 있기' },
-        { head: '주먹 · 잡기', color: '#ffd0d0', text: 'V 주먹(흑섬) · T 잡기 → 다시 T 던지기' },
+        { head: '주먹 · 잡기', color: '#ffd0d0', text: 'V 주먹(흑섬) · T 물체 집기 → 다시 T 던지기' },
       ];
     }
     return [

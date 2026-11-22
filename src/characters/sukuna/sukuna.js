@@ -81,7 +81,7 @@ export class Sukuna {
         { head: '竈 開(フーガ) — 화염', demo: 'sukuna.fuga', color: '#ffb050', text: '한 손을 펴고, 다른 손으로 집게(엄지·검지)를 그 손 앞에서 잡아\n활처럼 뒤로 당겼다가 놓기' },
         { head: '세계를 가르는 해', demo: 'sukuna.world', color: '#ffffff', text: '편 손바닥을 앞으로 뻗고 다른 손 주먹으로 그 손목을 붙잡은 채 1.3초 (영창) → 편 손을 크게 휘두르기' },
         { head: '영역전개 「伏魔御廚子」', demo: 'sukuna.domain', color: '#ff4040', text: '얼굴 앞에서 손바닥을 마주 대고 검지·약지는 접고 중지·새끼를 세워 1.5초 (염마천인) · 메뉴에서도 발동' },
-        { head: '잡기 · 흑섬', demo: 'common.grab', color: '#ff3040', text: '더미에 손을 대고 주먹 → 잡기, 펴면 던지기 · 주먹으로 빠르게 치면 확률적으로 흑섬' },
+        { head: '잡기 · 흑섬', demo: 'common.grab', color: '#ff3040', text: '물체에 손을 대고 주먹 → 집기, 펴면 던지기 (적은 붙잡지 못한다) · 주먹으로 빠르게 치면 확률적으로 흑섬' },
       ];
     }
     if (mode === 'desktop') {

@@ -4,10 +4,12 @@ import * as THREE from 'three';
 import { getModel } from './assets.js';
 import { RiggedBody } from './rigged.js';
 import { sever as severPart, regrow as regrowParts, lostKeys, PARENT as JPARENT } from './dismember.js';
+import { startGetup, stepGetup, tryLand, stepDrop, stepLand } from './recover.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _c = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -39,6 +41,7 @@ let _nameIdx = Math.floor(Math.random() * NAMES.length);
 export const RAG = ['hips', 'chest', 'neck', 'head', 'shL', 'elL', 'hdL', 'shR', 'elR', 'hdR', 'hpL', 'knL', 'ftL', 'hpR', 'knR', 'ftR'];
 const RI = Object.fromEntries(RAG.map((k, i) => [k, i]));
 const TORSO = ['hips', 'chest', 'neck', 'shL', 'shR', 'hpL', 'hpR'];
+const TORSO_I = new Set(TORSO.map((k) => RAG.indexOf(k)));
 const LIMBS = [['neck', 'head'], ['shL', 'elL'], ['elL', 'hdL'], ['shR', 'elR'], ['elR', 'hdR'], ['hpL', 'knL'], ['knL', 'ftL'], ['hpR', 'knR'], ['knR', 'ftR']];
 // 너무 접히지 않도록 하는 최소 거리 (팔꿈치·무릎·목)
 const MINS = [['shL', 'hdL', 0.45], ['shR', 'hdR', 0.45], ['hpL', 'ftL', 0.55], ['hpR', 'ftR', 0.55], ['chest', 'head', 0.8], ['hips', 'knL', 0.5], ['hips', 'knR', 0.5]];
@@ -639,6 +642,9 @@ export class Dummy {
       }
     }
     R.pins.set(pin, R.p[pin].clone());
+    // 손 회전을 따라가는 몸통 (몸통을 잡았을 때만): 첫 holdAt 에서 손 기준 자세를 잰다
+    R.grip ??= new Map();
+    R.grip.set(pin, { q: null, offs: null });
     this.holders.set(by, pin);
     R.pin = [...R.pins.keys()][0];
     R.pinTarget.copy(R.pins.get(R.pin));
@@ -650,6 +656,7 @@ export class Dummy {
     const hs = this.holders?.size ? [...this.holders.keys()] : this.heldBy ? [this.heldBy] : [];
     this.holders?.clear();
     this.rag?.pins?.clear();
+    this.rag?.grip?.clear();
     for (const b of hs) b?.drop?.();
   }
 
@@ -659,11 +666,48 @@ export class Dummy {
   }
 
   /** 잡고 있는 동안 고정 관절이 따라갈 위치 (by: 어느 손 — 없으면 첫 손) */
-  holdAt(p, by = null) {
+  holdAt(p, by = null, q = null) {
     if (!this.rag) return;
     const pin = by && this.holders?.has(by) ? this.holders.get(by) : this.rag.pin;
     if (this.rag.pins?.has(pin)) this.rag.pins.get(pin).copy(p);
     if (pin === this.rag.pin) this.rag.pinTarget.copy(p);
+    // 손의 회전: 몸통을 쥐었으면 몸통이 손을 따라 돌고, 손이 안 돌면 몸도 안 돈다
+    const G = this.rag.grip?.get(pin);
+    if (G && q) (G.q ??= new THREE.Quaternion()).copy(q);
+  }
+
+  /**
+   * 잡힌 동안: 몸통을 쥔 손마다 몸통 관절들이 손 기준 자리(쥔 순간의 자세)를 지키게 한다.
+   *  팔·다리는 그대로 늘어지고 흔들린다. 손 회전을 모르면(데스크톱) 쥔 순간의 방향을 지킨다
+   */
+  _gripTorso(k) {
+    const R = this.rag;
+    if (!R.grip?.size || !R.pins?.size) return;
+    const lost = this._lostIdx?.set;
+    // 발이 땅에 닿아 있으면 팔·머리를 잡혀도 버티고 서 있다 (들어 올리면 그때부터 늘어진다)
+    let feet = Infinity;
+    for (const k of ['ftL', 'ftR']) if (!lost?.has(RI[k])) feet = Math.min(feet, R.p[RI[k]].y);
+    const standing = feet < (RAD.ftL + 0.06) * this.scale;
+    for (const [pin, G] of R.grip) {
+      if (!R.pins.has(pin)) continue;
+      if (!TORSO_I.has(pin) && !standing) {
+        G.offs = null; // 다시 땅을 디디면 그때 자세로 다시 잰다
+        continue;
+      }
+      const q = G.q ?? (G.q0 ??= new THREE.Quaternion());
+      if (!G.offs) {
+        // 쥔 순간: 몸통 관절의 위치를 손 기준으로 기억
+        _qa.copy(q).invert();
+        G.offs = new Map();
+        for (const i of TORSO_I) if (i !== pin) G.offs.set(i, R.p[i].clone().sub(R.p[pin]).applyQuaternion(_qa));
+      }
+      const base = R.p[pin];
+      for (const [i, off] of G.offs) {
+        if (R.pins.has(i) || lost?.has(i)) continue;
+        _v3.copy(off).applyQuaternion(q).add(base);
+        R.p[i].lerp(_v3, k);
+      }
+    }
   }
 
   /** 관절 하나의 지금 위치 (잡은 손이 다른 부위를 뜯어낼 때 쓴다) */
@@ -678,6 +722,7 @@ export class Dummy {
       const pin = this.holders.get(by);
       this.holders.delete(by);
       this.rag?.pins?.delete(pin);
+      this.rag?.grip?.delete(pin);
       const [nb, np] = [...this.holders.entries()][0];
       this.heldBy = nb;
       if (this.rag) {
@@ -689,6 +734,7 @@ export class Dummy {
     }
     this.holders?.clear();
     this.rag?.pins?.clear();
+    this.rag?.grip?.clear();
     this.heldBy = null;
     if (!this.alive) return;
     this.state = 'air';
@@ -699,6 +745,8 @@ export class Dummy {
       this.rag.vel.copy(this.vel);
       this.vel.add(vel);
       if (vel.lengthSq() < 0.01) this.vel.copy(this.rag.vel);
+      // 선 자세에 가깝고 세게 던진 게 아니면 무너지지 않고 발로 선다 (recover.js)
+      tryLand(this);
     } else {
       this.vel.copy(vel);
     }
@@ -787,6 +835,25 @@ export class Dummy {
     if (_v.lengthSq() > 1e-8) for (let i = 0; i < n; i++) if (!pinned(i)) R.v[i].add(_v);
     const g = 9.8 * (this.frozen ? 0.15 : 1);
     const damp = this.frozen ? 6 : 0.25;
+    // 잡힌 동안: 손에 대한 상대 운동(흔들림 · 빙글빙글 돌기)을 줄인다 — 손을 멈추면 몸도 곧 멈춘다.
+    //  손째 움직이는 것은 줄이지 않는다 (들고 휘두르기 · 던지기는 그대로)
+    let relDamp = 0;
+    const vPin = _v4.set(0, 0, 0);
+    if (pins) {
+      R.pinPrev ??= new Map();
+      let n0 = 0;
+      for (const [i, t] of pins) {
+        const pv = R.pinPrev.get(i);
+        if (pv && dt > 0) {
+          vPin.add(_v.subVectors(t, pv).divideScalar(dt));
+          n0++;
+        }
+        R.pinPrev.set(i, (pv ?? new THREE.Vector3()).copy(t));
+      }
+      if (n0) vPin.divideScalar(n0);
+      // 손이 거의 멈췄으면 더 세게 (금방 가만히)
+      relDamp = vPin.length() < 0.25 ? 7 : 2.5;
+    } else R.pinPrev?.clear();
     const sub = Math.min(4, Math.max(1, Math.ceil(dt / (1 / 90))));
     const h = dt / sub;
     const b = this.world.ctx.env.bounds;
@@ -800,12 +867,15 @@ export class Dummy {
         }
         R.v[i].y -= g * h;
         R.v[i].multiplyScalar(Math.max(0, 1 - damp * h));
+        if (relDamp) R.v[i].sub(vPin).multiplyScalar(Math.max(0, 1 - relDamp * h)).add(vPin);
         R.p[i].addScaledVector(R.v[i], h);
       }
       for (let it = 0; it < 6; it++) {
+        if (pins) this._gripTorso(0.3);
         for (const [a, c, L] of cons) this._ragSolve(a, c, L, 0);
         for (const [a, c, L] of mins) this._ragSolve(a, c, L, -1);
         if (this.world.ragSelf !== false) this._ragSelf();
+        this._ragHands();
         for (let i = 0; i < n; i++) {
           const P = R.p[i];
           const r = RAD[RAG[i]] * this.scale;
@@ -874,6 +944,47 @@ export class Dummy {
       P[A.b].addScaledVector(c.n, lam * w1);
       P[B.a].addScaledVector(c.n, -lam * w2);
       P[B.b].addScaledVector(c.n, -lam * w3);
+    }
+  }
+
+  /**
+   * 플레이어의 손(마허라의 큰 손 포함)이 래그돌 몸을 뚫지 못하게: 손바닥을 구로 보고 부위 캡슐을 밀어낸다.
+   *  그 손이 쥔 관절에 붙은 부위는 빼고 (쥔 자리는 손바닥 겉면에 있다), 쥔 관절 자체는 움직이지 않는다
+   */
+  _ragHands() {
+    const R = this.rag;
+    const inp = this.world.ctx.input;
+    const { segs } = R.rest;
+    if (!segs || !inp?.hands) return;
+    const P = R.p;
+    const lost = this._lostIdx?.set;
+    const pins = R.pins?.size ? R.pins : null;
+    const wOf = (i) => ((pins ? pins.has(i) : i === R.pin) ? 0 : 1);
+    const big = this.world.ctx.character?.possessed ? 1.9 : 1;
+    for (const h of inp.hands) {
+      if (!h.active || h.source === 'desktop') continue;
+      const rh = 0.055 * big;
+      // 이 손이 쥔 관절
+      let mine = -1;
+      if (this.holders) for (const [by, pin] of this.holders) if (by?.side === h.side) mine = pin;
+      for (let si = 0; si < segs.length; si++) {
+        const S = segs[si];
+        if (S.a === mine || S.b === mine) continue;
+        // 이 적을 쥐지 않은 손은 몸통만 막는다 (팔·다리·머리를 밀어내면 손목·발목·머리를 붙잡을 수 없다)
+        if (mine < 0 && si > 2) continue;
+        if (lost?.size && (lost.has(S.a) || lost.has(S.b))) continue;
+        const c = closestSeg(P[S.a], P[S.b], S.ext, h.palm, h.palm, 0);
+        const thr = S.r + rh;
+        if (c.d >= thr) continue;
+        const u = Math.min(1, c.s * (1 + S.ext));
+        const w0 = wOf(S.a) * (1 - u);
+        const w1 = wOf(S.b) * u;
+        const W = w0 * (1 - u) + w1 * u;
+        if (W < 1e-6) continue;
+        const lam = (thr - c.d) / W;
+        P[S.a].addScaledVector(c.n, lam * w0);
+        P[S.b].addScaledVector(c.n, lam * w1);
+      }
     }
   }
 
@@ -978,6 +1089,8 @@ export class Dummy {
         W.shatter.emit(c, 60, this.color, { box: _v.set(0.5, 1.6, 0.4).multiplyScalar(this.scale), speed: 1.5, size: 0.035, up: 0.5 });
       }
       this._dispose();
+    } else if (type === 'stock') {
+      // 무위전변: 몸은 개조 인간 스톡으로 오그라드는 연출(mahito.js)이 가져간다 — 거기서 치우고 버린다
     } else if (type === 'erase') {
       W.ctx.fx.burst(c, 50, new THREE.Color(0xc07bff), 2, 0.05, 0.7, { spread: 0.5 * this.scale, drag: 3 });
       W.scene.remove(this.root);
@@ -1049,7 +1162,7 @@ export class Dummy {
       }
     }
     // 다리를 잃으면 설 수 없다
-    if (this.legless && (this.state === 'stand' || this.state === 'getup') && !this.frozen) {
+    if (this.legless && (this.state === 'stand' || this.state === 'getup' || this.state === 'drop' || this.state === 'land') && !this.frozen) {
       this._getupJ = null;
       this._hipLocal = null;
       this.state = 'air';
@@ -1093,6 +1206,27 @@ export class Dummy {
       this.armR.sh.rotation.x = (Math.random() - 0.5) * 0.1;
       if (this.flash <= 0) this._setEmissive(_c.setHSL(0.58, 0.8, 0.08 + Math.random() * 0.1));
       if (this.state === 'air') this._integrate(dt, 0.15);
+      return;
+    }
+    // 놓였을 때: 선 자세로 떨어져 발로 착지 → 무릎으로 받고 선다 (recover.js)
+    if (this.state === 'drop') {
+      const r = stepDrop(this, dt);
+      if (r === 'crumple') {
+        this._ld = null;
+        this.state = 'air';
+        this.stateT = 0;
+        this._ragStart(this.vel);
+      } else if (r === 'land') {
+        this.state = 'land';
+        this.stateT = 0;
+      }
+      return;
+    }
+    if (this.state === 'land') {
+      if (stepLand(this, dt)) {
+        this.state = 'stand';
+        this.stateT = 0;
+      }
       return;
     }
     if (this.state === 'heart') {
@@ -1146,59 +1280,14 @@ export class Dummy {
         return;
       }
       if (this.stateT > 1.2 && !this.legless) {
+        // 엎드렸는지 누웠는지에 따라 다른 동작으로 일어난다 (recover.js)
         this.state = 'getup';
         this.stateT = 0;
-        this._getupFrom = this.root.quaternion.clone();
-        this._getupPos = this.root.position.clone();
-        _v.set(0, 0, 1).applyQuaternion(this.root.quaternion).setY(0);
-        if (_v.lengthSq() > 1e-3) this.yaw = Math.atan2(_v.x, _v.z);
-        this._upright.setFromAxisAngle(UP, this.yaw);
-        const J = this._jointMap();
-        this._getupJ = Object.values(J).map((j) => [j, j.quaternion.clone()]);
+        startGetup(this);
       }
     } else if (this.state === 'getup') {
-      // 엉덩이를 바닥 근처에 둔 채 몸을 세우며 무릎을 꿇었다가 → 일어선다 (발을 축으로 판자처럼 들리지 않게)
-      const dur = 0.9;
-      const k = Math.min(1, this.stateT / dur);
-      const e = k * k * (3 - 2 * k);
-      const J = this._jointMap();
-      if (!this._hipLocal) {
-        this._hipLocal = this._ragRestPose().rest[RI.hips].clone(); // 서 있을 때 엉덩이 (root 기준, 크기 1)
-        this._hipStart = J.hips.getWorldPosition(new THREE.Vector3());
-      }
-      if (this._getupJ) for (const [j, q0] of this._getupJ) j.quaternion.slerpQuaternions(q0, _q.identity(), Math.min(1, e * 1.4));
-      // 웅크림: 가운데쯤 무릎을 가장 깊게
-      const crouch = Math.sin(Math.min(1, k * 1.15) * Math.PI);
-      for (const leg of [this.legL, this.legR]) {
-        leg.hp.rotateX(-1.25 * crouch);
-        leg.kn.rotateX(2.1 * crouch);
-        leg.ft.rotateX(-0.75 * crouch);
-      }
-      this.spine.rotateX(0.45 * crouch);
-      const rot = Math.min(1, e * 1.6);
-      this.root.quaternion.slerpQuaternions(this._getupFrom, this._upright, rot);
-      // 엉덩이 높이: 누운 높이 → 웅크린 높이 → 선 높이
-      const standY = this._hipLocal.y * this.scale;
-      const hy = k < 0.55 ? lerpN(this._hipStart.y, standY * 0.5, k / 0.55) : lerpN(standY * 0.5, standY, (k - 0.55) / 0.45);
-      const hipNow = _v.copy(this._hipLocal).multiplyScalar(this.scale).applyQuaternion(this.root.quaternion);
-      // 수평 위치는 엉덩이를 축으로 (엉덩이가 제자리에 있도록)
-      this.root.position.set(this._hipStart.x - hipNow.x, 0, this._hipStart.z - hipNow.z);
-      const hw = J.hips.getWorldPosition(_v3);
-      this.root.position.y += hy - hw.y;
-      // 다리를 웅크린 만큼 발이 바닥 위에 있도록
-      let pen = 0;
-      for (const kk of ['ftL', 'ftR', 'knL', 'knR']) pen = Math.max(pen, RAD[kk] * this.scale - J[kk].getWorldPosition(_v2).y);
-      if (pen > 0) this.root.position.y += pen;
-      if (k >= 1) {
-        for (const leg of [this.legL, this.legR]) {
-          leg.hp.quaternion.identity();
-          leg.kn.quaternion.identity();
-          leg.ft.quaternion.identity();
-        }
-        this.spine.quaternion.identity();
-        this._getupJ = null;
-        this._hipLocal = null;
-        this.root.position.y = 0;
+      if (!this._gu) startGetup(this);
+      if (stepGetup(this, dt)) {
         this.state = 'stand';
         this.stateT = 0;
       }

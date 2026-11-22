@@ -168,9 +168,42 @@ class MahoragaArm {
   /** 오른팔의 퇴마의 검: 칼자루 쪽 · 칼끝 (월드) */
   blade(base, tip) {
     const R = this.M?.rig;
-    if (!R?.bones.R_sword_end) return false;
-    R.pos('R_sword', base);
-    R.pos('R_sword_end', tip);
+    const bone = R?.bones.R_sword;
+    if (!bone) return false;
+    bone.updateWorldMatrix(true, false);
+    // 칼끝: 뼈 끝(R_sword_end)은 칼자루에서 3cm 남짓이라 칼자루만 판정되던 문제 →
+    //  검 뼈에 붙은 정점 중 가장 먼 점을 뼈 기준으로 한 번 재 둔다
+    if (!this._tipLocal) {
+      const inv = new THREE.Matrix4().copy(bone.matrixWorld).invert();
+      const v = new THREE.Vector3();
+      let best = 0;
+      for (const o of this.M.meshes ?? []) {
+        if (!o.isSkinnedMesh) continue;
+        const bi = o.skeleton.bones.indexOf(bone);
+        if (bi < 0) continue;
+        o.skeleton.update();
+        const si = o.geometry.attributes.skinIndex;
+        const sw = o.geometry.attributes.skinWeight;
+        for (let i = 0; i < si.count; i++) {
+          let w = 0;
+          for (let j = 0; j < 4; j++) if (si.getComponent(i, j) === bi) w += sw.getComponent(i, j);
+          if (w < 0.5) continue;
+          v.fromBufferAttribute(o.geometry.attributes.position, i);
+          o.applyBoneTransform(i, v);
+          v.applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+          if (v.length() > best) {
+            best = v.length();
+            this._tipLocal = v.clone();
+          }
+        }
+      }
+      if (!this._tipLocal) {
+        const e = R.bones.R_sword_end;
+        this._tipLocal = e ? e.position.clone().normalize().multiplyScalar(1.2 / bone.getWorldScale(v).x) : new THREE.Vector3(0, 1, 0);
+      }
+    }
+    bone.getWorldPosition(base);
+    tip.copy(this._tipLocal).applyMatrix4(bone.matrixWorld);
     return true;
   }
 
@@ -253,7 +286,7 @@ export class MahoragaSelf {
       // 무하한에 적응(②)하면: 크게 휘두르면 공간째 베는 참격이 날아간다 (무하한을 무시한다)
       if (speed > 9 && this._infStage() >= 2 && (this.cutCd ?? 0) <= world.time) this._spaceSlash();
       if (this.exitT <= 0) this.aura.set('right', 0.2 + Math.min(0.5, speed * 0.05));
-      if (speed > 3) this._cut(this.base, this.tip, speed);
+      this._cut(this.base, this.tip, speed); // 닿기만 해도 (세기는 칼끝 속도)
       if (speed > 4 && Math.random() < 0.6) fx.spawn(this.tip, _v.randomDirection().multiplyScalar(0.4), new THREE.Color(0xfff0c0), 0.05, 0.3, 2, 0);
     } else this.hasPrev = false;
     if (this.exitT <= 0) this.aura.set('left', fist(L) ? 0.3 : 0);
@@ -313,15 +346,16 @@ export class MahoragaSelf {
       const curse = !!(t.def?.curse || t.curse);
       // 공략 적응: 같은 종류를 벨 때마다 분석해, 끝나면 그 상대에게 더 깊이 들어간다 (팔다리도 더 잘 잘린다)
       const key = t.type ?? t.kind;
-      const a = this.wheel.ad.atk.get(key) ?? 0;
+      const atkLv = this.wheel.ad.atk.get(key) ?? 0; // (a 는 칼자루 위치 — 같은 이름으로 가리면 안 된다)
       if (t.kind !== 'prop') this.wheel.ad.expose('atk:' + key);
-      const dmg = (60 + speed * 14) * (curse ? 1.6 : 1) * (1 + a * 0.35);
+      // 살짝 닿기만 해도 베인다 (휘두를수록 깊게)
+      const dmg = (speed < 3 ? 30 + speed * 8 : 60 + speed * 14) * (curse ? 1.6 : 1) * (1 + atkLv * 0.35);
       const n = new THREE.Vector3().subVectors(b, a).cross(this.swing?.lengthSq() > 1e-8 ? this.swing : _v3.set(0, 1, 0)).normalize();
       // 무하한: 법진이 분석해 적응한다 (① 절반 · ② 전부 들어간다)
       if (t.infinityOn) this.wheel.ad.expose('infinity');
       t.damage(dmg, { type: 'slash', plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n.lengthSq() > 0.5 ? n : new THREE.Vector3(0, 1, 0), c), color: '#ffe0a0', vsInf: this._infStage() });
       if (t.infinityOn && this._infStage() >= 2) spaceCut(this.ctx, c, this.swing?.clone().normalize() ?? new THREE.Vector3(0, 0, -1));
-      t.impulse?.(_v3.subVectors(c, a).setY(0).normalize().multiplyScalar(5).add(_v.set(0, 2, 0)), 5);
+      if (speed >= 3) t.impulse?.(_v3.subVectors(c, a).setY(0).normalize().multiplyScalar(5).add(_v.set(0, 2, 0)), 5);
       fx.burst(c, 18, new THREE.Color(0xfff2c8), 3.5, 0.03, 0.3);
       sfx.slash(c, 0.6);
       this.ctx.input.right.pulse?.(0.8, 60);

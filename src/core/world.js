@@ -8,6 +8,7 @@ import { RiggedEnemy } from './enemies.js';
 import { Shatter, Slicer } from './slicer.js';
 import { DomainClash } from './domainClash.js';
 import { Impacts } from './impacts.js';
+import { stepWeapon } from './weapons.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -121,7 +122,7 @@ export class Prop {
   }
 
   damage(amount, info = {}) {
-    if (!this.alive || amount <= 0) return 0;
+    if (!this.alive || amount <= 0 || this.unbreakable) return 0;
     this.hp -= amount;
     if (this.hp <= 0) this.kill(info);
     return amount;
@@ -621,6 +622,8 @@ export class World {
       for (let i = 0; i < sub; i++) p.step(dt / sub, bnd);
       if (this.shield && p.vel.lengthSq() > 4) this.shield(p, dt, bc);
     }
+    // 날붙이: 쥐고 휘두르거나 던져서 날아가는 칼이 벤다
+    for (const p of this.props) if (p.weapon) stepWeapon(ctx, p, dt, p.held ? p.heldHand : null, this.time);
     // 소품끼리 / 소품-더미 충돌 (구 근사)
     const props = this.props;
     for (let i = 0; i < props.length; i++) {

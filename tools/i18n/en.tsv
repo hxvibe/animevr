@@ -719,3 +719,9 @@
 719	Beer crate
 720	Foam block
 721	It won't budge — {0}{1} kg (you can lift {2} kg · Mahoraga could)
+722	Nothing pressed = open hand · trigger = pinch · grip = index · grip+A(X) = index + middle\ngrip+trigger = fist · grip+trigger+A(X) = thumbs-up fist\nY menu · left stick move (click the stick to run · swing both arms while walking to go faster) · right stick turn
+723	Hold an open hand over the shadow at your feet (the floor right below you) and the stored item rises → make a fist to pull it out · keep the open hand there for 1 s for the next item\nCursed tools (curved blade · ring sword): you grip them wherever your hand touches · swing big to cut · grip with both hands · thrown, they spin and cut; catch an incoming one with a fist\nHold an object (tools included) down into the shadow at your feet and open the hand to store it (during the domain, anywhere on the shadow sea)\nThe caster carries the weight of everything in the shadow — the heavier, the slower you move and the slower cursed energy recovers · max {0} kg
+724	G pull out · G stores an object held with T (tools included) · B choose the item to pull out (max carried weight {0} kg)
+725	Hold a controller to the floor at your feet and grip → pull out a tool/object (hold there 1 s: next item) · tools can be thrown and caught, and gripped with both hands\nHold an object (tools included) down at your feet and release the grip to store it · max carried weight {0} kg
+726	{0} — swing big to cut · you can throw and catch it · put it into the shadow at your feet and open the hand to send it back
+727	Gripped with both hands — the blade lines up between your hands

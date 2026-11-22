@@ -150,7 +150,7 @@ export class Megumi {
         { head: '貫牛 관우', demo: 'megumi.ox', color: '#a8b8ff', text: '한 손 검지를 뿔처럼 세우고 다른 손을 그 아래에 받치기\n바라본 쪽으로 곧게 돌진. 달릴수록 빨라지고 세진다' },
         { head: '魔虚羅 마허라', demo: 'megumi.mahoraga', color: '#ffd28a', text: '두 팔을 앞으로 쭉 뻗고 두 주먹을 쥐어 1초 — 布瑠部由良由良 · 맞은 성질에 적응하면 법진이 돌며 완전 재생\n조복 전 첫 소환은 조복의 의식 연출(布瑠部由良由良 … 번데기가 풀리며 등장, 설정에서 끄기) · 조복 전: 상대가 없으면 술사를 노린다 → 적응 전에 한 방에 쓰러뜨리면 조복 · 조복 후: 법진만 먼저 → 한 번 더 맺으면 이어받아 등장' },
         { head: '영역전개 「嵌合暗翳庭」', demo: 'megumi.domain', color: '#6f86ff', text: '팔을 아래로 내리고 두 주먹을 맞대고 1.2초 → 「領域展開… 嵌合暗翳庭」\n식신 소모 없음 · 그림자 송곳 · 식신이 사라지지 않음 · 메뉴에서도 발동\n미완성 영역: 막힌 실내(연습장)에서만 결계가 닫히고, 탁 트인 곳에선 바닥만 그림자 바다가 된다' },
-        { head: '그림자 수납 (주구 · 물건)', color: '#b8c4ff', text: `발밑 그림자(바로 아래 바닥)에 편 손을 대면 꺼낼 물건이 떠오른다 → 주먹을 쥐면 꺼내 쥔다 · 편 손을 1초 대고 있으면 다음 물건\n주구(곡도 · 고리칼): 크게 휘둘러 벤다 · 손을 펴면 그림자로 돌아간다 · 물건을 쥔 채 발밑 그림자에 넣고 손을 펴면 그림자에 넣는다 (영역전개 중엔 그림자 바다 어디든)\n그림자에 든 무게는 술사가 짊어진다 — 무거울수록 느려지고 주력이 덜 찬다 · 최대 ${CAP_KG}kg` },
+        { head: '그림자 수납 (주구 · 물건)', color: '#b8c4ff', text: `발밑 그림자(바로 아래 바닥)에 편 손을 대면 꺼낼 물건이 떠오른다 → 주먹을 쥐면 꺼내 쥔다 · 편 손을 1초 대고 있으면 다음 물건\n주구(곡도 · 고리칼): 손이 닿은 자리를 쥔다 · 크게 휘둘러 벤다 · 두 손으로 쥐기 · 던지면 돌며 날아가 베고, 날아오는 걸 주먹으로 받는다\n물건(주구 포함)을 쥔 채 발밑 그림자에 넣고 손을 펴면 그림자에 넣는다 (영역전개 중엔 그림자 바다 어디든)\n그림자에 든 무게는 술사가 짊어진다 — 무거울수록 느려지고 주력이 덜 찬다 · 최대 ${CAP_KG}kg` },
         { head: '공통', demo: 'common.grab', color: '#ffffff', text: '같은 수인을 다시 맺으면 그 식신을 그림자로 돌려보낸다 · 주먹으로 치기(흑섬) · 물체 집기 (적은 마허라가 된 뒤에만 붙잡는다)' },
       ];
     }
@@ -167,14 +167,14 @@ export class Megumi {
         { head: '魔虚羅 마허라', color: '#ffd28a', text: '8 (조복 전이면 조복의 의식 · 다시 누르면 돌려보내기)' },
         { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: 'Q 1.2초 누르고 있기' },
         { head: '주먹 · 잡기', color: '#ffd0d0', text: 'V 주먹(흑섬) · T 물체 집기 → 다시 T 던지기' },
-        { head: '그림자 수납', color: '#b8c4ff', text: `G 주구 꺼내기/돌려보내기 · T로 든 물건을 G로 그림자에 넣기 · B 꺼낼 물건 고르기 (짊어지는 무게 최대 ${CAP_KG}kg)` },
+        { head: '그림자 수납', color: '#b8c4ff', text: `G 꺼내기 · T로 든 물건(주구 포함)을 G로 그림자에 넣기 · B 꺼낼 물건 고르기 (짊어지는 무게 최대 ${CAP_KG}kg)` },
       ];
     }
     return [
       { head: '식신 고르기 · 부르기', color: '#a8b8ff', text: '왼쪽 트리거만: 식신 고르기 · 오른쪽 트리거만: 부르기 (바라본 대상을 노린다 · 그립까지 쥐면 주먹이라 부르지 않는다)\n다시 부르면 돌려보내기' },
       { head: '魔虚羅 마허라', color: '#ffd28a', text: '두 컨트롤러를 앞으로 쭉 뻗고 두 그립+트리거(주먹)를 1초' },
       { head: '영역전개 「嵌合暗翳庭」', color: '#6f86ff', text: '팔을 아래로 내리고 두 그립+트리거(주먹)를 맞대고 1.2초 (메뉴에서도 발동)' },
-      { head: '그림자 수납', color: '#b8c4ff', text: `발밑 바닥에 컨트롤러를 대고 그립 → 주구·물건 꺼내기 (대고 1초: 다음 물건) · 그립을 놓으면 주구는 그림자로\n물건을 쥔 채 발밑에 대고 그립을 놓으면 그림자에 넣는다 · 짊어지는 무게 최대 ${CAP_KG}kg` },
+      { head: '그림자 수납', color: '#b8c4ff', text: `발밑 바닥에 컨트롤러를 대고 그립 → 주구·물건 꺼내기 (대고 1초: 다음 물건) · 주구는 던지고 받을 수 있고 두 손으로 쥔다\n물건(주구 포함)을 쥔 채 발밑에 대고 그립을 놓으면 그림자에 넣는다 · 짊어지는 무게 최대 ${CAP_KG}kg` },
       { head: '버튼', color: '#ffd0d0', text: '그립 쥐고 휘둘러 치기 → 흑섬 · Y 메뉴' },
     ];
   }
@@ -227,7 +227,7 @@ export class Megumi {
       this._controller(dt);
       if (inp.mode === 'desktop') this._desktop(dt);
       this.shadow.update(dt);
-    } else if (this.possessed) for (const sd of ['left', 'right']) this.shadow.putTool(sd);
+    }
     if (this.ritual && !this.ritual.update(dt)) this.ritual = null;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const s = this.list[i];
@@ -414,7 +414,7 @@ export class Megumi {
   }
 
   handBusy(side) {
-    return this.sign.t > 0 || this.elephant.armed > 0 || (side && (this.vessel?.holds(side) || this.shadow?.holds(side)));
+    return this.sign.t > 0 || this.elephant.armed > 0 || (side && this.vessel?.holds(side));
   }
 
   /** 지금 펼친 영역 (스쿠나의 손가락을 먹었으면 복마어주자가 겹친다) */

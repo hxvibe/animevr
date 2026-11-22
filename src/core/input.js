@@ -9,9 +9,11 @@ import { CtrlHands } from './ctrlHands.js';
 const _v = new THREE.Vector3();
 const _rigInv = new THREE.Matrix4();
 const _rigQ = new THREE.Quaternion();
+const _qInv = new THREE.Quaternion();
 const _q = new THREE.Quaternion();
 const _fwd = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _hl = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const PROFILES = new URL('../../assets/profiles/', import.meta.url).href;
 
@@ -111,6 +113,13 @@ export class Input {
     this._snapReady = true;
     this.locomotion = true;
     this.moveMul = 1; // 이동 속도 배율 (메구미가 그림자에 무거운 걸 짊어지면 느려진다)
+    this.sprint = false; // 스틱을 눌러 달리는 중
+    this.swing = 0; // 팔을 휘젓는 세기 (m/s)
+    this.run = 0; // 달리기 0~1
+    this.headVel = new THREE.Vector3();
+    // 보이는 손만 미는 양(월드): 물체를 뚫지 못하게 (잡기 · 판정은 실제 손 위치 그대로)
+    this.handOff = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+    this._headPrev = null;
     // 핸드트래킹 이동: 엄지 척을 한 손이 가상 조이스틱 (왼손 = 이동, 오른손 = 회전)
     this.handLoco = { left: null, right: null };
     this._locoViz = this._makeLocoViz();
@@ -333,6 +342,10 @@ export class Input {
     this.rig.updateMatrixWorld();
     _rigInv.copy(this.rig.matrixWorld).invert();
     _rigQ.copy(this.rig.quaternion);
+    // 머리 속도 (손 속도처럼 리그 기준 — 팔 휘젓기를 잴 때 몸이 흔들린 몫을 뺀다)
+    _hl.copy(this.head).applyMatrix4(_rigInv).applyQuaternion(_rigQ);
+    if (this._headPrev && dt > 0) this.headVel.subVectors(_hl, this._headPrev).divideScalar(dt);
+    (this._headPrev ??= new THREE.Vector3()).copy(_hl);
     for (const h of this.hands) h.active = false;
     if (this.mode === 'xr') this._updateXR(dt);
     else if (this.mode === 'desktop') this._updateDesktop(dt);
@@ -383,7 +396,11 @@ export class Input {
         const m = slot.models[hd];
         const on = tracked && src.handedness === hd;
         m.group.visible = on && !this.hideHands && !this.hideHand?.[hd]; // hideHand[side]: 그 손만 다른 모양으로 바뀐 동안(마히토 변형) · hideHands: 손이 다른 몸으로 바뀐 동안 (마허라)
-        if (on) m.mesh.updateMesh();
+        if (on) {
+          m.mesh.updateMesh();
+          // 물체에 막힌 손은 보이는 메시만 밀어 둔다 (리그 공간)
+          m.group.position.copy(this.handOff[hd]).applyQuaternion(_qInv.copy(this.rig.quaternion).invert());
+        }
       }
       if (!src) continue;
       const h = src.handedness === 'left' ? L : src.handedness === 'right' ? R : null;
@@ -408,13 +425,29 @@ export class Input {
     // 로코모션 / 스냅 회전 (컨트롤러)
     if (this.locomotion && (L.source === 'controller' || L.emulated) && L.active) {
       const [x, y] = L.axes;
-      if (Math.hypot(x, y) > 0.15) {
+      const moving = Math.hypot(x, y) > 0.15;
+      // 달리기: 스틱을 눌러(클릭) 두면 멈출 때까지 달린다 · 또는 걸으며 두 팔을 휘저으면 빨라진다
+      if (L.pressed('stick') && moving) this.sprint = true;
+      if (!moving) this.sprint = false;
+      // 팔 휘젓기: 머리에 대한 두 손의 상대 속도 (몸이 움직인 속도는 뺀다)
+      let sw = 0;
+      let n = 0;
+      for (const h of this.hands) {
+        if (!h.active || h.source !== 'controller') continue;
+        sw += _v2.subVectors(h.vel, this.headVel).length();
+        n++;
+      }
+      sw = n === 2 ? sw / 2 : 0;
+      this.swing += (sw - this.swing) * (1 - Math.exp(-dt * 4));
+      const swingK = moving ? THREE.MathUtils.clamp((this.swing - 0.7) / 1.3, 0, 1) : 0;
+      this.run = Math.max(this.sprint ? 1 : 0, swingK);
+      if (moving) {
         _fwd.copy(this.headDir).setY(0).normalize();
         const rightV = _v.set(-_fwd.z, 0, _fwd.x);
-        const speed = 2.4 * this.moveMul * dt;
+        const speed = 2.4 * (1 + 1.4 * this.run) * this.moveMul * dt;
         this.rig.position.addScaledVector(_fwd, -y * speed).addScaledVector(rightV, x * speed);
       }
-    }
+    } else this.run = 0;
     if ((R.source === 'controller' || R.emulated) && R.active) {
       const x = R.axes[0];
       if (Math.abs(x) > 0.7 && this._snapReady) {

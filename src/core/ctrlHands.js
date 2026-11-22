@@ -85,7 +85,7 @@ function chest(inp, L, R) {
 }
 
 // 조작법: 컨트롤러 버튼 범례 · 기술마다 무엇을 누르는지
-export const CTRL_LEGEND = '아무것도 안 누름 = 편 손 · 트리거 = 집기 · 그립 = 검지 · 그립+A(X) = 검지·중지\n그립+트리거 = 주먹 · 그립+트리거+A(X) = 엄지 세운 주먹\nY 메뉴 · 왼쪽 스틱 이동 · 오른쪽 스틱 회전';
+export const CTRL_LEGEND = '아무것도 안 누름 = 편 손 · 트리거 = 집기 · 그립 = 검지 · 그립+A(X) = 검지·중지\n그립+트리거 = 주먹 · 그립+트리거+A(X) = 엄지 세운 주먹\nY 메뉴 · 왼쪽 스틱 이동(스틱을 눌러 달리기 · 두 팔을 휘저으며 걸으면 빨라진다) · 오른쪽 스틱 회전';
 const N = '아무것도 누르지 않은';
 export const CTRL_HELP = {
   'sukuna.dismantle': `${N} 손으로 컨트롤러를 빠르게 휘두르기 → 휘두른 방향으로 참격 (연속 가능)`,
@@ -295,6 +295,9 @@ export class CtrlHands {
       if (!bone) return false;
       J[n].setFromMatrixPosition(bone.matrixWorld).applyMatrix4(rigInv);
     }
+    // 물체에 막힌 손: 관절(판정)은 그대로 두고 보이는 손만 밀어 둔다
+    const off = this.input.handOff?.[side];
+    if (off && off.lengthSq() > 1e-8) H.root.position.add(_v.copy(off).applyQuaternion(inv));
     return true;
   }
 

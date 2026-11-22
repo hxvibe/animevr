@@ -4,12 +4,19 @@
 import * as THREE from 'three';
 import { RAG } from './dummy.js';
 import { PART_NAME } from './dismember.js';
+import { gripPoint } from './body.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _bloodC = new THREE.Color(0x5a0508);
+const _q2 = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const _w = new THREE.Vector3();
+const _n = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+const HAND_R = 0.035; // 손(손바닥 · 손가락) 두께
 
 /** 잡은 관절 → 뜯겨 나갈 부위 ('torso' = 몸통) */
 function tearPart(pin) {
@@ -55,11 +62,20 @@ export class Grab {
       if (!H) {
         if (!h.active || h.uiBlock || h.source === 'desktop' || busy(side)) continue;
         const want = h.source === 'hand' ? h.gesture === 'fist' && h.gestureTime < 0.25 : h.pressed('grip');
-        if (!want || h.speed > 1.6) continue;
         const other = this.held[side === 'left' ? 'right' : 'left']?.t;
-        // 다른 손이 이미 잡은 적도 한 손 더 잡을 수 있다 (두 손 잡기)
+        // 받기: 주먹을 쥔(그립을 쥔) 채로 날아오는 물체(던진 칼 등)가 손에 닿으면 붙잡는다
+        if (!want) {
+          const closed = h.source === 'hand' ? h.gesture === 'fist' : h.btn.grip;
+          // 방금 놓은 손은 잠깐 받지 않는다 (던지자마자 다시 쥐지 않게)
+          if (!closed || world.time - (this._relT?.[side] ?? -9) < 0.3) continue;
+          const fly = world.nearestTarget(h.palm, 0.1, (x) => x.kind !== 'dummy' && !x.held && !x.noGrab && !x.asleep && x.vel?.lengthSq() > 2);
+          if (fly && this._canLift(fly, h)) this._grab(side, fly, h);
+          continue;
+        }
+        if (h.speed > 1.6) continue;
+        // 다른 손이 이미 잡은 적도 한 손 더 잡을 수 있다 (두 손 잡기) · 날붙이도 두 손으로
         const foes = this.canGrabFoes();
-        const t = world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? foes && (!x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2)) : !x.held));
+        const t = world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? foes && (!x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2)) : !x.held || (x.weapon && x === other)));
         if (t && t.kind !== 'dummy' && !this._canLift(t, h)) continue;
         if (t) this._grab(side, t, h);
       } else {
@@ -77,6 +93,7 @@ export class Grab {
           if (H.headTear) this._headTear(side, H, t, h, target, dt);
           else t.holdAt(target, this.by[side], h.quat);
         }
+        else if (H.weapon) this._holdWeapon(side, H, t, h, dt);
         else if (H.offL && t.obj) {
           // 소품 · 떨어진 팔다리: 손을 따라 함께 돈다 (쥔 순간의 자세를 손 기준으로 기억)
           // 무거울수록 손을 굼뜨게 따라온다 (들 수 있는 무게에 가까울수록)
@@ -94,6 +111,7 @@ export class Grab {
       }
     }
     this._tear(dt);
+    this._block(dt);
     // 데스크톱
     if (inp.mode === 'desktop') {
       const down = inp.keyDown('KeyT');
@@ -436,7 +454,8 @@ export class Grab {
       t.asleep = false;
     }
     this.held[side] = { t, offset };
-    if (t.kind !== 'dummy' && t.obj) {
+    if (t.weapon) this._gripWeapon(side, t, h);
+    else if (t.kind !== 'dummy' && t.obj) {
       _q.copy(h.quat).invert();
       this.held[side].offL = offset.clone().applyQuaternion(_q);
       this.held[side].rel = _q.clone().multiply(t.obj.quaternion);
@@ -445,11 +464,185 @@ export class Grab {
     this.ctx.sfx.play('grab', { at: h.palm, vol: 0.8 });
   }
 
+  // ───────────── 날붙이 쥐기 ─────────────
+  /** 손의 쥐는 점 · 칼끝 방향(엄지 쪽) · 날 기준 방향 */
+  _weaponGrip(h, out) {
+    const inp = this.ctx.input;
+    if (h.source === 'desktop') {
+      out.G.copy(h.palm);
+      out.dir.copy(inp.headDir).add(_w.set(0, 0.25, 0)).normalize();
+      out.ref.copy(UP);
+      return out;
+    }
+    gripPoint(h, this.ctx.rig, out.G);
+    if (h.source === 'hand') {
+      out.dir.crossVectors(h.fingersDir, h.palmNormal);
+      if (h.side === 'left') out.dir.negate();
+      out.ref.copy(h.fingersDir);
+    } else {
+      out.dir.copy(h.dir);
+      out.ref.copy(UP);
+    }
+    out.dir.normalize();
+    return out;
+  }
+
+  /**
+   * 날붙이를 손이 닿은 자리 그대로 쥔다 (손잡이든 칼날이든). 칼끝은 언제나 엄지 쪽(앞) — 거꾸로 쥐어 칼날이 나를 향하지 않게.
+   *  날이 향한 쪽(손가락 쪽/손등 쪽)은 쥔 순간의 모양을 따른다. 다른 손이 이미 쥐고 있으면 두 손 쥐기
+   */
+  _gripWeapon(side, t, h) {
+    const H = this.held[side];
+    const W = t.weapon;
+    const g = this._weaponGrip(h, { G: new THREE.Vector3(), dir: new THREE.Vector3(), ref: new THREE.Vector3() });
+    const A = _w.set(0, 1, 0).applyQuaternion(t.obj.quaternion);
+    const other = this.held[side === 'left' ? 'right' : 'left'];
+    H.second = !!(other && other.t === t);
+    const y = THREE.MathUtils.clamp(_v.subVectors(g.G, t.pos).dot(A), W.lo, W.tip - 0.04);
+    // 날이 향한 쪽: 지금 칼의 +X 와 가까운 쪽
+    const X = _v2.set(1, 0, 0).applyQuaternion(t.obj.quaternion);
+    const edge = _v3.copy(g.ref).addScaledVector(g.dir, -g.ref.dot(g.dir)).normalize().negate();
+    H.weapon = { y, es: X.dot(edge) >= 0 ? 1 : -1, blend: 0, prevQ: t.obj.quaternion.clone(), prevP: t.pos.clone(), w: new THREE.Vector3() };
+    H.offL = null;
+    if (H.second && !this._told2) {
+      this._told2 = true;
+      this.ctx.ui.callout('두 손으로 쥐었다 — 두 손을 잇는 방향으로 칼이 선다', { color: '#c8d0ff', dur: 1.4 });
+    }
+  }
+
+  _holdWeapon(side, H, t, h, dt) {
+    const W = H.weapon;
+    const oSide = side === 'left' ? 'right' : 'left';
+    const O = this.held[oSide];
+    const two = O && O.t === t && O.weapon;
+    if (H.second) {
+      if (two) return; // 두 손일 땐 먼저 쥔 손이 움직인다
+      H.second = false; // 앞손이 놓았다 → 이 손이 이어받는다
+      W.blend = 0;
+    }
+    const g = this._weaponGrip(h, (this._g1 ??= { G: new THREE.Vector3(), dir: new THREE.Vector3(), ref: new THREE.Vector3() }));
+    const dir = _v.copy(g.dir);
+    if (two) {
+      // 두 손: 칼끝 쪽 손을 향해 칼이 선다 (두 쥔 점을 잇는 축)
+      const g2 = this._weaponGrip(this.ctx.input[oSide], (this._g2 ??= { G: new THREE.Vector3(), dir: new THREE.Vector3(), ref: new THREE.Vector3() }));
+      const d = _v2.subVectors(g2.G, g.G);
+      if (d.length() > 0.05) {
+        d.normalize();
+        if (O.weapon.y < W.y) d.negate();
+        // 앞손이 뒤로 밀려 엇갈리면 축이 뒤집힌다 → 그땐 한 손 방향을 그대로
+        if (d.dot(g.dir) > -0.2) dir.copy(d);
+      }
+    }
+    const edge = _v2.copy(g.ref).addScaledVector(dir, -g.ref.dot(dir));
+    if (edge.lengthSq() < 1e-5) edge.set(1, 0, 0).addScaledVector(dir, -dir.x);
+    edge.normalize().multiplyScalar(-W.es);
+    const Z = _v3.crossVectors(edge, dir).normalize();
+    _m.makeBasis(edge, dir, Z);
+    _q.setFromRotationMatrix(_m);
+    const target = _w.copy(g.G).addScaledVector(dir, -W.y);
+    // 쥔 순간엔 지금 자세에서 손 자세로 부드럽게 (휙 순간이동하지 않게) · 무거울수록 굼뜨다
+    W.blend = Math.min(1, W.blend + dt * 7);
+    const rate = (8 + 32 * W.blend) / (1 + (2 * (t.kg ?? 0)) / this._liftKg());
+    const k = 1 - Math.exp(-dt * rate);
+    W.prevP.copy(t.pos);
+    W.prevQ.copy(t.obj.quaternion);
+    t.pos.lerp(target, k);
+    t.obj.quaternion.slerp(_q, k);
+    if (dt > 0) {
+      t.vel.lerp(_n.subVectors(t.pos, W.prevP).divideScalar(dt), 0.5);
+      // 각속도 (던질 때 손목 스냅이 그대로 회전이 된다)
+      _q2.copy(t.obj.quaternion).multiply(W.prevQ.clone().invert());
+      if (_q2.w < 0) _q2.set(-_q2.x, -_q2.y, -_q2.z, -_q2.w);
+      W.w.lerp(_n.set(_q2.x, _q2.y, _q2.z).multiplyScalar(2 / dt), 0.5);
+    }
+    t.heldHand = h;
+  }
+
+  // ───────────── 손이 물체를 뚫지 못하게 ─────────────
+  /**
+   * 빈손(과 다른 손에 든 물체)이 물체에 파고들면: 가벼운 물체는 손에 밀려나고(툭 치면 튕긴다),
+   *  무겁거나 고정됐거나 다른 손에 쥔 물체면 보이는 손이 그 겉면에 멈춘다 (실제 손 위치 · 판정은 그대로)
+   */
+  _block(dt) {
+    const inp = this.ctx.input;
+    const props = this.ctx.world.props;
+    const lift = this._liftKg();
+    for (const h of inp.hands) {
+      const off = (this._off ??= { left: new THREE.Vector3(), right: new THREE.Vector3() })[h.side].set(0, 0, 0);
+      if (h.active && h.source !== 'desktop') {
+        const mine = this.held[h.side]?.t;
+        const pts = [h.palm, _v3.copy(h.palm).addScaledVector(h.fingersDir ?? h.dir, 0.075)];
+        for (const p of props) {
+          if (!p.alive || p.away || p === mine || !p.obj) continue;
+          const reach = Math.max(p.he.x, p.he.y, p.he.z) * 1.8 + 0.2;
+          if (p.center(_w).distanceToSquared(h.palm) > reach * reach) continue;
+          for (const pt of pts) {
+            const pen = this._penetrate(p, pt, _n);
+            if (pen <= 0) continue;
+            const movable = !p.held && !p.fixed && (p.kg ?? 0) <= lift * 0.5;
+            if (movable) {
+              p.pos.addScaledVector(_n, -pen);
+              const vn = -h.vel.dot(_n);
+              if (vn > 0) p.vel.addScaledVector(_n, (-vn * 1.3 * 5) / (5 + (p.kg ?? 1)));
+              p.asleep = false;
+              p.restT = 0;
+            } else off.addScaledVector(_n, pen);
+          }
+        }
+      }
+      off.clampLength(0, 0.3);
+      inp.handOff[h.side].lerp(off, 1 - Math.exp(-dt * 30));
+    }
+  }
+
+  /** 점(손 두께 HAND_R)이 소품 상자에 파고든 깊이 · n = 상자에서 손 쪽으로 */
+  _penetrate(p, pt, n) {
+    const c = p.center(_v);
+    _q.copy(p.obj.quaternion).invert();
+    const L = _v2.subVectors(pt, c).applyQuaternion(_q);
+    const he = p.he;
+    const dx = he.x - Math.abs(L.x);
+    const dy = he.y - Math.abs(L.y);
+    const dz = he.z - Math.abs(L.z);
+    if (dx > 0 && dy > 0 && dz > 0) {
+      // 안에 들어왔다: 가장 얕은 면으로
+      if (dx <= dy && dx <= dz) n.set(Math.sign(L.x) || 1, 0, 0);
+      else if (dy <= dz) n.set(0, Math.sign(L.y) || 1, 0);
+      else n.set(0, 0, Math.sign(L.z) || 1);
+      n.applyQuaternion(p.obj.quaternion);
+      return Math.min(dx, dy, dz) + HAND_R;
+    }
+    const cl = p.closest(pt, _v3.clone());
+    n.subVectors(pt, cl);
+    const d = n.length();
+    if (d >= HAND_R || d < 1e-6) return 0;
+    n.divideScalar(d);
+    return HAND_R - d;
+  }
+
   _release(side, vel) {
     const H = this.held[side];
     if (!H) return;
     this.held[side] = null;
+    (this._relT ??= {})[side] = this.ctx.world.time;
     const t = H.t;
+    if (H.weapon) {
+      const oSide = side === 'left' ? 'right' : 'left';
+      const O = this.held[oSide];
+      if (O && O.t === t) {
+        // 한 손은 아직 쥐고 있다 → 그 손이 이어받는다
+        O.second = false;
+        return;
+      }
+      // 던진다: 실제로 움직이던 속도와 손목이 돌던 회전 그대로 (위로 던져 돌다 떨어지는 칼을 다시 받을 수 있다)
+      t.held = false;
+      t.heldHand = null;
+      t.asleep = false;
+      t.restT = 0;
+      t.vel.multiplyScalar(1.15).clampLength(0, 18);
+      t.spin.copy(H.weapon.w).clampLength(0, 30);
+      return;
+    }
     if (vel.length() > 18) vel.setLength(18);
     if (t.kind === 'dummy') {
       if (t.heldBy) t.release(vel, this.by[side]);

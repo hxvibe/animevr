@@ -268,6 +268,13 @@ export class CtrlHands {
       o: open.o + (sh.o - open.o) * k,
       thumbUp: S.drawShape === 'two' || S.drawShape === 'fistUp' ? 0.6 : 0,
     };
+    // 쥔 것이 있으면 손가락은 그 두께만큼만 접힌다 (칼자루는 꽉 · 머리는 감싸듯 · 큰 상자는 거의 편 손)
+    const gr = this.input.ctx?.grab?.gripR?.[side];
+    if (gr != null) {
+      const cap = THREE.MathUtils.clamp(1.15 - gr * 7, 0.25, 1);
+      pose.c = pose.c.map((x, i) => Math.min(x, i === 0 ? cap * 0.85 : cap));
+      pose.o = Math.min(pose.o, 0.3 + cap * 0.4);
+    }
     // 2) 수인 맞물림: 시연 자세(머리 기준) → rig 공간
     if (S.snapK > 0 && S.mudra) {
       const dp = demoPose(S.mudra, side);

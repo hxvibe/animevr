@@ -1359,7 +1359,9 @@ export class RiggedEnemy extends Dummy {
    */
   _heal(dt) {
     const kind = this.def.rct;
-    if (!kind || this.hp >= this.maxHp || this.infinite) return;
+    // 석혼도로 영혼째 베인 만큼은 낫지 않는다
+    const cap = this.maxHp - (this.soulDmg ?? 0);
+    if (!kind || this.hp >= cap || this.infinite) return;
     const W = this.world;
     const since = W.time - (this._hurtT ?? -99);
     if (since < (kind === 'regen' ? 3 : 1.2)) {
@@ -1367,7 +1369,7 @@ export class RiggedEnemy extends Dummy {
       return;
     }
     const rate = { rct: 0.07, reshape: 0.06, regen: 0.02 }[kind] * this.maxHp;
-    this.hp = Math.min(this.maxHp, this.hp + rate * dt);
+    this.hp = Math.min(cap, this.hp + rate * dt);
     if (kind === 'rct' && (this.burnout ?? 0) > W.time) this.burnout -= dt; // 타 버린 술식도 빨리 회복
     const { fx, ui } = W.ctx;
     const c = this.center(_v);

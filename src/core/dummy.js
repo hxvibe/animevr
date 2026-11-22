@@ -48,7 +48,7 @@ const LIMBS = [['neck', 'head'], ['shL', 'elL'], ['elL', 'hdL'], ['shR', 'elR'],
 // 너무 접히지 않도록 하는 최소 거리 (팔꿈치·무릎·목)
 const MINS = [['shL', 'hdL', 0.45], ['shR', 'hdR', 0.45], ['hpL', 'ftL', 0.55], ['hpR', 'ftR', 0.55], ['chest', 'head', 0.8], ['hips', 'knL', 0.5], ['hips', 'knR', 0.5]];
 // 관절 둘레 반지름: 쓰러졌을 때 몸 겉면이 바닥을 뚫지 않게 실제 두께에 맞춘다
-const RAD = { hips: 0.15, chest: 0.16, neck: 0.09, head: 0.12, shL: 0.09, shR: 0.09, elL: 0.06, elR: 0.06, hdL: 0.05, hdR: 0.05, hpL: 0.1, hpR: 0.1, knL: 0.075, knR: 0.075, ftL: 0.07, ftR: 0.07 };
+export const RAD = { hips: 0.15, chest: 0.16, neck: 0.09, head: 0.12, shL: 0.09, shR: 0.09, elL: 0.06, elR: 0.06, hdL: 0.05, hdR: 0.05, hpL: 0.1, hpR: 0.1, knL: 0.075, knR: 0.075, ftL: 0.07, ftR: 0.07 };
 // ── 선분 사이 가장 가까운 점 (캡슐 충돌) ──
 const _sd1 = new THREE.Vector3();
 const _sd2 = new THREE.Vector3();
@@ -497,7 +497,8 @@ export class Dummy {
     if (p && !this.dying) {
       const kind = this.infinite ? 'sandbag' : this.def.rct;
       const delay = { sandbag: 3, rct: 2.5, reshape: 1.5, regen: 4 }[kind];
-      if (delay) this._regrowAt = this.world.time + delay;
+      if (this._soulNow) this.soulLost = true; // 영혼째 잘린 부위는 되살리지 못한다
+      else if (delay && !this.soulLost) this._regrowAt = this.world.time + delay;
     }
     return p;
   }
@@ -516,7 +517,8 @@ export class Dummy {
 
   /** 참격(평면)이 팔다리 · 목을 지나면 그 부위가 잘려 나간다 — 팔다리 맷집(limbGuard)보다 세야 한다 */
   _slashSever(amount, info) {
-    const guard = this.limbGuard;
+    // 석혼도는 경도를 무시한다: 강한 적도 잘린다
+    const guard = info.soul ? Math.min(this.limbGuard, 40) : this.limbGuard;
     if (amount < guard || this.world.time < (this._sevT ?? 0)) return;
     const planes = info.planes?.length ? info.planes.slice(0, 3) : info.plane ? [info.plane] : [];
     if (!planes.length) return;
@@ -602,6 +604,9 @@ export class Dummy {
     this.dpsWindow.push([this.world.time, amount]);
     this.world.onDamage?.(this, amount, info);
     this._hurtT = this.world.time;
+    // 석혼도: 영혼을 벤 상처는 평범한 반전술식 · 재생으로 낫지 않는다
+    if (info.soul) this.soulDmg = Math.min(this.maxHp, (this.soulDmg ?? 0) + amount);
+    this._soulNow = !!info.soul;
     const cut = (info.type === 'slash' || info.type === 'cleave') && (info.plane || info.planes) && !this.dying;
     if (this.infinite) {
       if (cut) this._slashSever(amount, info);
@@ -611,6 +616,12 @@ export class Dummy {
     if (this.hp <= 0) this.kill(info);
     else if (cut) this._slashSever(amount, info);
     return amount;
+  }
+
+  /** 세게 떨어지거나 박혔다: 쓰러진 뒤 일어나기까지 더 오래 (초, 누적은 최대 4초) */
+  knock(sec) {
+    if (!(sec > 0)) return;
+    this._knock = Math.min(4, Math.max(this._knock ?? 0, sec) + (this._knock ? sec * 0.3 : 0));
   }
 
   // ── 잡기 / 던지기 ──
@@ -962,10 +973,12 @@ export class Dummy {
     if ((this._markT ?? -9) < W.time) {
       if (impact > 11 && impactAt >= 0) {
         this._markT = W.time + 0.5;
+        this.knock((impact - 9) * 0.25);
         W.impacts?.floor(R.p[impactAt], 0.4 + (impact - 11) * 0.12);
       } else if (wallV > 9) {
         this._markT = W.time + 0.5;
         if (wallV > 13) this.damage((wallV - 9) * 4, { type: 'impact' });
+        this.knock((wallV - 8) * 0.25);
         W.impacts?.wall(wallP, wallD, 0.4 + (wallV - 9) * 0.12);
       }
     }
@@ -1398,17 +1411,21 @@ export class Dummy {
         if (this.stateT > 2.5) this.kill({ type: 'fade' });
         return;
       }
-      if (this.stateT > 1.2 && !this.legless) {
+      // 세게 떨어지거나 박혔으면 한참 뻗어 있다가 (최대 +4초) 힘겹게(느리게) 일어난다
+      if (this.stateT > 1.2 + (this._knock ?? 0) && !this.legless) {
         // 엎드렸는지 누웠는지에 따라 다른 동작으로 일어난다 (recover.js)
         this.state = 'getup';
         this.stateT = 0;
+        this._guSlow = 1 / (1 + (this._knock ?? 0) * 0.25);
+        this._knock = 0;
         startGetup(this);
       }
     } else if (this.state === 'getup') {
       if (!this._gu) startGetup(this);
-      if (stepGetup(this, dt)) {
+      if (stepGetup(this, dt * (this._guSlow ?? 1))) {
         this.state = 'stand';
         this.stateT = 0;
+        this._guSlow = 1;
       }
     }
     if (this.root.position.lengthSq() > 250 * 250 || this.root.position.y < -20) this.kill({ type: 'erase' });
@@ -1516,7 +1533,10 @@ export class Dummy {
     if (this.grounded) {
       if (this.vel.y < 0) {
         const imp = -this.vel.y;
-        if (imp > 9) this.damage((imp - 9) * 4, { type: 'impact' });
+        if (imp > 9) {
+          this.damage((imp - 9) * 4, { type: 'impact' });
+          this.knock((imp - 9) * 0.25);
+        }
         this.vel.y = imp * 0.25;
       }
       this.vel.x *= Math.max(0, 1 - dt * 4);

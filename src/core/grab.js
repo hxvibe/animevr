@@ -2,7 +2,7 @@
 // 핸드트래킹: 더미(또는 소품)에 손을 대고 주먹 쥐기 → 잡기, 손을 펴면 놓기(손의 속도로 던짐)
 // 컨트롤러: 그립 / 데스크톱: T 키
 import * as THREE from 'three';
-import { RAG } from './dummy.js';
+import { RAG, RAD } from './dummy.js';
 import { PART_NAME } from './dismember.js';
 import { gripPoint } from './body.js';
 import { onGrabStuck, holdStuck, afterHoldStuck, onReleaseStuck } from './stab.js';
@@ -41,6 +41,8 @@ export class Grab {
       right: { side: 'right', drop: () => this._release('right', new THREE.Vector3()), onLimb: (p) => this._takePiece('right', p) },
     };
     this.tearS = null; // 뜯는 중인 상태
+    // 손마다 쥔 것의 두께(반지름, m): 손가락이 그만큼만 접힌다 (null = 빈손)
+    this.gripR = { left: null, right: null };
   }
 
   /** 다른 기능(메구미의 그림자 등)이 꺼낸 물건을 그 손에 바로 쥐여 준다 */
@@ -83,6 +85,7 @@ export class Grab {
         const t = H.t;
         if (!t.alive) {
           this.held[side] = null;
+          this.gripR[side] = null;
           continue;
         }
         const release = !h.active || (h.source === 'hand' ? h.gesture !== 'fist' && h.gestureTime > 0.05 : !h.btn.grip);
@@ -155,6 +158,18 @@ export class Grab {
         }
       }
     }
+  }
+
+  /** 손바닥 가운데 (월드): 마허라의 큰 손은 손가락 쪽으로 6cm 더 나가 있다 */
+  _palmPoint(h, out) {
+    out.copy(h.palm);
+    if (this._mighty()) out.addScaledVector(h.source === 'hand' ? h.fingersDir : h.dir, 0.06);
+    return out;
+  }
+
+  /** 손바닥 두께 (반) */
+  _palmThick() {
+    return this._mighty() ? 0.045 : 0.025;
   }
 
   /** 들 수 있는 무게(kg): 마허라는 차도 번쩍 · 이타도리·스쿠나는 장사 · 나머지는 사람 힘 */
@@ -269,6 +284,7 @@ export class Grab {
     H.slamT = world.time + 0.35;
     const k = this._mighty() ? 3.2 : 1;
     const dmg = sp * 9 * k;
+    t.knock?.(0.4 + (sp * k) / 6); // 내리꽂힌 적은 한참 못 일어난다
     t.damage(dmg, { type: 'impact', dir: h.vel.clone().normalize(), point: lead.clone(), color: '#ffffff' });
     fx.burst(lead, Math.round(16 * k), new THREE.Color(0xd8d0c0), 3 + k, 0.06, 0.5);
     // 바닥이 패이고 벽이 부서진다
@@ -420,6 +436,7 @@ export class Grab {
     if (!p?.alive || !h.active) return;
     const offset = _v.subVectors(p.pos, h.palm).clone();
     this.held[side] = { t: p, offset, offL: offset.clone().applyQuaternion(_q.copy(h.quat).invert()), rel: _q.clone().multiply(p.obj.quaternion) };
+    this.gripR[side] = Math.min(0.06, (p.radius ?? 0.06) * 0.6);
     p.held = true;
     p.asleep = false;
   }
@@ -429,13 +446,19 @@ export class Grab {
     if (t.kind === 'dummy') {
       const wasStanding = t.state === 'stand';
       // 손에 가장 가까운 관절을 잡는다 (손바닥에서 조금만 떨어지게)
-      offset = t.grab(this.by[side], h.palm);
+      // 손바닥 (마허라의 큰 손은 손바닥이 손가락 쪽으로 더 나가 있다)
+      const P = this._palmPoint(h, _v3);
+      offset = t.grab(this.by[side], P);
       if (!offset) return;
-      // 손이 몸을 뚫지 않게: 관절은 손바닥에서 몸 두께만큼 떨어져 있다 (손은 겉면을 쥔다)
-      if (offset.lengthSq() < 1e-6) offset.copy(h.palmNormal ?? h.dir).multiplyScalar(0.1);
-      // 마허라의 큰 손은 더 떨어져서 쥔다
-      const big = this._mighty() ? 1.9 : 1;
-      offset.setLength(THREE.MathUtils.clamp(offset.length(), 0.085, 0.15) * (t.scale ?? 1) * big);
+      // 겉면을 쥔다: 잡힌 부위의 중심은 손바닥에서 (부위 두께 + 손바닥 두께)만큼 손바닥이 향한 쪽에 있다
+      //  (머리를 쥐면 손바닥이 머리 겉에 닿고 손가락이 머리를 감싼다 — 손이 머리 속에 묻히지 않게)
+      const key = RAG[t.holders.get(this.by[side])];
+      const r = (RAD[key] ?? 0.1) * (t.scale ?? 1);
+      const toJ = _v2.copy(offset).add(P).sub(h.palm);
+      const pn = _n.copy(h.palmNormal ?? h.dir).normalize();
+      const dir = toJ.lengthSq() > 1e-6 && toJ.clone().normalize().dot(pn) < 0.3 ? toJ.normalize() : pn;
+      offset = _v.subVectors(P, h.palm).addScaledVector(dir, r + this._palmThick()).clone();
+      this.gripR[side] = r;
       this.held[side] = { t, offset, offL: offset.clone().applyQuaternion(_q.copy(h.quat).invert()) };
       // 무량공처: 정보에 굳은 적의 머리를 한 손으로 쥐었다 → 발이 땅에 붙은 채 당겨지다 머리가 뜯긴다
       if (RAG[t.holders?.get(this.by[side])] === 'head' && wasStanding && this._voidFrozen(t)) {
@@ -451,6 +474,20 @@ export class Grab {
       return;
     } else {
       offset.subVectors(t.pos, h.palm);
+      // 겉면을 쥔다: 물체 겉면이 손바닥에 닿게 (손이 물체 속에 묻히거나 떠 있지 않게) — 날붙이는 손잡이를 감싸 쥔다
+      if (!t.weapon && t.obj && t.he) {
+        const P = this._palmPoint(h, _v3);
+        const pen = this._penetrate(t, P, _n); // n: 물체 → 손바닥
+        const gap = pen > 0 ? -pen : (() => {
+          const cl = t.closest(P, new THREE.Vector3());
+          _n.subVectors(P, cl);
+          const d = _n.length();
+          if (d > 1e-6) _n.divideScalar(d);
+          return d - HAND_R - this._palmThick() * 0.3;
+        })();
+        if (_n.lengthSq() > 0.5) offset.addScaledVector(_n, gap);
+        this.gripR[side] = Math.min(t.he.x, t.he.y, t.he.z);
+      } else this.gripR[side] = 0.015;
       t.held = true;
       t.asleep = false;
     }
@@ -543,6 +580,7 @@ export class Grab {
     _m.makeBasis(edge, dir, Z);
     _q.setFromRotationMatrix(_m);
     const target = _w.copy(g.G).addScaledVector(dir, -W.y);
+    if (t.weapon.block) target.add(t.weapon.block); // 바닥 · 벽 · 몸에 막혀 있다
     // 꽂힌 칼: 박힌 채 움직이지 않거나(바닥 · 벽 · 무거운 물체) 꿰인 적 · 물체를 끌고 온다 (stab.js)
     if (t.weapon.stuck && holdStuck(this.ctx, t, h, target, this._liftKg())) {
       W.w.set(0, 0, 0);
@@ -601,6 +639,9 @@ export class Grab {
           }
         }
       }
+      // 쥔 칼이 바닥 · 벽 · 몸에 막혀 밀려났으면 그 칼을 쥔 손도 같이 (손잡이를 놓지 않은 것처럼)
+      const push = this.held[h.side]?.t?.weapon?.block;
+      if (push && push.lengthSq() > 1e-8) off.add(push);
       off.clampLength(0, 0.3);
       inp.handOff[h.side].lerp(off, 1 - Math.exp(-dt * 30));
     }
@@ -635,6 +676,7 @@ export class Grab {
     const H = this.held[side];
     if (!H) return;
     this.held[side] = null;
+    this.gripR[side] = null;
     (this._relT ??= {})[side] = this.ctx.world.time;
     const t = H.t;
     if (H.weapon) {

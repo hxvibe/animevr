@@ -728,6 +728,7 @@ export class World {
       const dmg = fast * (2 + 1.2 * Math.sqrt(kgEff));
       const point = _cm.copy(dc).addScaledVector(_n, Math.min(dist, rD));
       d.damage(dmg, { type: 'impact', dir: _n.clone().negate(), point: point.clone() });
+      if (fast > 4) d.knock?.((fast - 4) * 0.15 * Math.min(2, kgEff / mD)); // 큰 것에 치였다
       // 서로 밀려난다 (무거운 쪽은 거의 그대로)
       const J = closing * 1.3;
       if (d.alive) d.impulse(_v.copy(_n).multiplyScalar(-J * kg / (kg + mD)));

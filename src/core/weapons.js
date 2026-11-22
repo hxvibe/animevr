@@ -3,7 +3,7 @@
 //  · 쥔 채 크게 휘두르거나, 던져서 칼날이 빠르게 닿으면 벤다 (자른 면은 칼날이 지나간 면)
 //  · 잡기(grab.js)가 손잡이·칼날 어디든 손이 닿은 자리를 쥐게 하고, 칼끝은 언제나 엄지 쪽(앞)으로 — 두 손으로도 쥔다
 import * as THREE from 'three';
-import { tryStick, followStuck } from './stab.js';
+import { tryStick, followStuck, nullify, collideWeapon } from './stab.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -57,6 +57,7 @@ export function stepWeapon(ctx, p, dt, hand = null, time = 0) {
   (W.prevTip ??= new THREE.Vector3()).copy(W.tipW);
   W.arc = speed > 1.8 ? W.arc + speed * dt : W.arc * Math.max(0, 1 - dt * 10);
   if (W.stuck) {
+    W.push?.set(0, 0, 0);
     if (W.mesh) W.mesh.visible = false;
     W.trail.length = 0;
     return;
@@ -84,10 +85,14 @@ export function stepWeapon(ctx, p, dt, hand = null, time = 0) {
   }
   // 베기: 쥐고 크게 휘두를 때 · 던져서 빠르게 날아갈 때
   const desk = hand?.source === 'desktop';
+  // 천역모: 날아오는 주술(탄 · 불덩이)을 칼날로 튕겨낸다
+  if (W.nullify && hand) deflect(ctx, p);
   // 칼끝으로 찌르면(칼끝부터 던지면) 꽂힌다 — 꽂히면 베지 않는다
   if (!desk && tryStick(ctx, p, hand)) return;
   const big = hand ? (desk ? speed > 2.6 : speed > 4 && W.arc > 0.4) : speed > 6;
   if (big) slash(ctx, p, speed, hand, time);
+  // 그 밖엔 바닥 · 벽 · 물체 · 적 몸을 뚫지 못한다 (쥔 칼도 — 찌르기 · 벤 자리는 위에서 먼저 처리)
+  collideWeapon(ctx, p, hand);
 }
 
 function slash(ctx, p, speed, hand, time) {
@@ -123,7 +128,12 @@ function slash(ctx, p, speed, hand, time) {
     const push = W.tipVel.clone().normalize().multiplyScalar(1.5);
     fx.burst(near, 12, new THREE.Color(0xc8d0ff), 2.5, 0.03, 0.3, { dir: push, dirAmt: 1 });
     sfx.cut(near);
-    t.damage((28 + Math.min(speed, 14) * 8) * (W.dmg ?? 1), { type: 'slash', plane, push });
+    if (W.nullify && dummy) nullify(ctx, t, near);
+    t.damage((28 + Math.min(speed, 14) * 8) * (W.dmg ?? 1), { type: 'slash', plane, push, soul: W.soul, vsInf: W.nullify ? 2 : undefined });
+    if (W.soul && dummy && !ctx._toldSoul) {
+      ctx._toldSoul = true;
+      ctx.ui.callout('석혼도 — 경도를 무시하고 영혼을 벤다 (이 상처는 반전술식으로 낫지 않는다)', { color: '#e8f0ff', dur: 1.8 });
+    }
     if (t.alive) t.impulse?.(push.multiplyScalar(1.2), 2);
     hand?.pulse?.(0.8, 60);
     if (hand) ctx.game.hitstop = Math.max(ctx.game.hitstop ?? 0, 0.03);
@@ -132,6 +142,22 @@ function slash(ctx, p, speed, hand, time) {
   if (W.swish < time) {
     W.swish = time + 0.25;
     sfx.slash(W.tipW, 1.1);
+  }
+}
+
+function deflect(ctx, p) {
+  const W = p.weapon;
+  for (const b of ctx.world.bullets) {
+    if (!b.alive || b.deflected) continue;
+    const ab = _v.subVectors(W.tipW, W.baseW);
+    const t = THREE.MathUtils.clamp(_v2.subVectors(b.pos, W.baseW).dot(ab) / ab.lengthSq(), 0, 1);
+    if (_v3.copy(W.baseW).addScaledVector(ab, t).distanceTo(b.pos) > 0.14) continue;
+    b.deflected = true;
+    b.vel.negate().multiplyScalar(0.7).add(_v4.randomDirection().multiplyScalar(2));
+    b.src = null;
+    ctx.fx.burst(b.pos, 14, new THREE.Color(0xffe0a0), 3, 0.03, 0.25);
+    ctx.sfx.play?.('shatter_2', { at: b.pos, vol: 0.4, rate: 1.8 });
+    p.heldHand?.pulse?.(0.6, 50);
   }
 }
 

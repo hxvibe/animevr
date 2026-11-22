@@ -162,6 +162,12 @@ class MahoragaArm {
       want[2] = want[3] = want[4] = g;
       want[0] = h.btn?.a ? 1 : g * 0.6;
     }
+    // 쥔 것이 있으면 그 두께만큼만 접힌다 (머리를 쥐면 손가락이 머리를 감싼다)
+    const gr = this.ctx.grab?.gripR?.[this.side];
+    if (gr != null) {
+      const cap = THREE.MathUtils.clamp(1.15 - (gr / 1.5) * 7, 0.25, 1);
+      for (let i = 0; i < 5; i++) want[i] = Math.max(want[i] > 0.3 ? 0.25 : 0, Math.min(want[i], i === 0 ? cap * 0.85 : cap));
+    }
     for (let i = 0; i < 5; i++) this.curls[i] += (want[i] - this.curls[i]) * Math.min(1, dt * 20);
     this.fingers.applyEach(this.side === 'left' ? 'L' : 'R', this.curls);
   }

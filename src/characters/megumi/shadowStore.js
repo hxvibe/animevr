@@ -25,16 +25,129 @@ const UP = new THREE.Vector3(0, 1, 0);
 /** 짊어질 수 있는 무게 (kg) */
 export const CAP_KG = 150;
 
-/** 주구: 모델 원점 = 기본으로 쥐는 곳, +Y = 칼끝, +X = 날 (곡도는 외날) · lo = 손잡이 끝 · base = 날이 시작하는 곳 */
+/**
+ * 주구: 모델 원점 = 기본으로 쥐는 곳, +Y = 칼끝, +X = 날 (곡도는 외날) · lo = 손잡이 끝 · base = 날이 시작하는 곳
+ *  free: 그림자에 넣어도 무게를 짊어지지 않는다 (주구 4종 — 술사의 그림자에 길든 물건)
+ *  soul: 석혼도 — 만물의 경도를 무시하고 영혼을 벤다 (강한 적도 늘 잘리고, 그 상처는 평범한 반전술식으로 낫지 않는다)
+ *  nullify: 천역모 — 닿은 상대의 발동 중인 술식을 강제로 해제한다 (무하한도 뚫고 꽂힌다 · 날아오는 주술은 튕겨낸다) · 살상력은 낮다
+ */
 export const TOOLS = {
-  blade: { model: 'wpn_megumi_blade', label: '주구 · 곡도', kg: 1.6, tip: 0.67, base: 0.12, lo: -0.18, dmg: 1 },
-  sword: { model: 'wpn_megumi_sword', label: '주구 · 고리칼', kg: 2.6, tip: 0.67, base: 0.18, lo: -0.12, dmg: 1.2 },
+  blade: { model: 'wpn_megumi_blade', label: '주구 · 곡도', kg: 1.6, tip: 0.67, base: 0.12, lo: -0.18, dmg: 1, free: true },
+  sword: { model: 'wpn_megumi_sword', label: '주구 · 고리칼', kg: 2.6, tip: 0.67, base: 0.18, lo: -0.12, dmg: 1.2, free: true },
+  splitsoul: { model: 'wpn_splitsoul', label: '석혼도', kg: 3.2, len: 1.1, bake: true, dmg: 1.3, soul: true, free: true, color: 0xe8f0ff },
+  spear: { model: 'wpn_spear', label: '천역모', kg: 0.9, len: 0.46, bake: true, dmg: 0.55, nullify: true, free: true, color: 0xffe0a0 },
 };
+
+const _baked = {};
+/**
+ * 스키닝된 무기 모델 → 정점마다 뼈 변환을 적용해(바인드 자세 그대로) 평범한 메시로 굽고 주구 축에 맞춘다:
+ *  +Y = 칼끝(손잡이 반대쪽), 원점 = 손잡이 가운데, +X = 칼날의 폭 방향, 길이 = def.len
+ *  def 에 tip · base · lo 를 채운다
+ */
+function bakeSkinnedTool(id) {
+  if (_baked[id] !== undefined) return _baked[id]?.clone(true) ?? null;
+  const def = TOOLS[id];
+  const src = getModel(def.model);
+  if (!src) return null;
+  src.updateMatrixWorld(true);
+  const parts = [];
+  const all = [];
+  const handle = [];
+  const v = new THREE.Vector3();
+  src.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = new THREE.BufferGeometry();
+    const P = o.geometry.attributes.position;
+    const arr = new Float32Array(P.count * 3);
+    for (let i = 0; i < P.count; i++) {
+      v.fromBufferAttribute(P, i);
+      if (o.isSkinnedMesh) o.applyBoneTransform(i, v);
+      v.applyMatrix4(o.matrixWorld);
+      arr.set([v.x, v.y, v.z], i * 3);
+      const pv = v.clone();
+      all.push(pv);
+      if (/handle|grip/i.test(o.name)) handle.push(pv);
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const uv = o.geometry.attributes.uv;
+    if (uv) {
+      const ua = new Float32Array(uv.count * 2);
+      for (let i = 0; i < uv.count; i++) ua.set([uv.getX(i), uv.getY(i)], i * 2);
+      g.setAttribute('uv', new THREE.BufferAttribute(ua, 2));
+    }
+    if (o.geometry.index) g.setIndex(o.geometry.index.clone());
+    parts.push({ g, m: o.material });
+  });
+  // 주축 (손잡이 → 칼끝)
+  const c = all.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(all.length);
+  const C = new THREE.Matrix3();
+  const e = C.elements.fill(0);
+  for (const p of all) {
+    const d = [p.x - c.x, p.y - c.y, p.z - c.z];
+    for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) e[a * 3 + b] += d[a] * d[b];
+  }
+  const pow = (exclude) => {
+    const ax = new THREE.Vector3(0.6, 0.7, 0.4).normalize();
+    for (let it = 0; it < 50; it++) {
+      ax.set(e[0] * ax.x + e[1] * ax.y + e[2] * ax.z, e[3] * ax.x + e[4] * ax.y + e[5] * ax.z, e[6] * ax.x + e[7] * ax.y + e[8] * ax.z);
+      if (exclude) ax.addScaledVector(exclude, -ax.dot(exclude));
+      ax.normalize();
+    }
+    return ax;
+  };
+  const axis = pow(null);
+  const hc = handle.length ? handle.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(handle.length) : c.clone();
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of all) {
+    const t = v.subVectors(p, c).dot(axis);
+    lo = Math.min(lo, t);
+    hi = Math.max(hi, t);
+  }
+  // 손잡이가 있는 쪽이 아래(-Y)
+  if (v.subVectors(hc, c).dot(axis) > 0) {
+    axis.negate();
+    [lo, hi] = [-hi, -lo];
+  }
+  const L = hi - lo;
+  const width = pow(axis); // 칼날이 가장 넓게 퍼진 가로축 → +X
+  const z = new THREE.Vector3().crossVectors(width, axis).normalize();
+  const basis = new THREE.Matrix4().makeBasis(width, axis, z).invert();
+  const S = def.len / L;
+  // 원점: 손잡이 가운데 (없으면 끝에서 15%)
+  const hcT = handle.length ? v.subVectors(hc, c).dot(axis) : lo + L * 0.15;
+  const origin = c.clone().addScaledVector(axis, hcT);
+  // 날: 손잡이 끝부분(hcT 보다 조금 위)부터 칼끝까지
+  let hTop = hcT;
+  for (const p of handle) hTop = Math.max(hTop, v.subVectors(p, c).dot(axis));
+  def.lo = (lo - hcT) * S;
+  def.tip = (hi - hcT) * S;
+  def.base = Math.min(def.tip * 0.5, (hTop - hcT) * S + 0.02);
+  const xf = new THREE.Matrix4().makeScale(S, S, S).multiply(basis).multiply(new THREE.Matrix4().makeTranslation(-origin.x, -origin.y, -origin.z));
+  const group = new THREE.Group();
+  for (const { g, m } of parts) {
+    g.applyMatrix4(xf);
+    g.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color: m.color ?? 0xffffff, map: m.map ?? null, roughness: 0.45, metalness: 0.3 });
+    if (m.alphaTest > 0 || m.transparent) {
+      mat.alphaTest = 0.5;
+      mat.side = THREE.DoubleSide;
+    }
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.castShadow = true;
+    group.add(mesh);
+  }
+  _baked[id] = group;
+  return group.clone(true);
+}
 
 function toolMesh(id) {
   const src = getModel(TOOLS[id].model);
   const g = new THREE.Group();
-  if (src) {
+  if (TOOLS[id].bake && src) {
+    const b = bakeSkinnedTool(id);
+    if (b) g.add(b);
+  } else if (src) {
     const c = src.clone(true);
     c.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
@@ -71,9 +184,9 @@ export class ShadowStore {
     this.ctx.scene.add(this.pool);
   }
 
-  /** 그림자에 든 무게 (꺼낸 주구는 그림자 밖) */
+  /** 그림자에 든 무게 (꺼낸 주구는 그림자 밖 · 주구 4종은 짊어지지 않는다) */
   get load() {
-    return this.items.reduce((s, x) => s + x.kg, 0);
+    return this.items.reduce((s, x) => s + (x.kind === 'tool' && TOOLS[x.id]?.free ? 0 : x.kg), 0);
   }
 
   /** 짊어진 정도 0~1 */
@@ -180,14 +293,15 @@ export class ShadowStore {
     const { ui, sfx, fx, world } = this.ctx;
     const kg = t.kg ?? 0;
     const at = t.center(new THREE.Vector3());
-    if (this.load + kg > CAP_KG) {
+    const tool = t.weapon?.toolId;
+    const burden = tool && TOOLS[tool]?.free ? 0 : kg; // 주구 4종은 짊어지지 않는다
+    if (this.load + burden > CAP_KG) {
       ui.callout(`그림자가 감당 못한다 — ${t.label ?? '물건'} ${Math.round(kg)}kg · 짊어진 무게 ${Math.round(this.load)}/${CAP_KG}kg`, { color: '#ff9a9a', dur: 2 });
       sfx.denied();
       h?.pulse?.(0.8, 120);
       return false;
     }
     // 소품 정보를 기억해 두고 세계에서 뺀다 (다시 꺼낼 때 그대로 만든다) · 주구는 주구로
-    const tool = t.weapon?.toolId;
     const rec = tool ? { kind: 'tool', id: tool, kg: TOOLS[tool].kg, label: TOOLS[tool].label } : { kind: 'prop', kg, label: t.label ?? '물건', obj: t.obj, opts: { radius: t.radius, halfH: t.halfH, mass: t.mass, kg, label: t.label, hp: t.hp, color: t.color.getHex() }, limb: !!t.limb, limbData: t.limb ? t : null };
     t.alive = false;
     if (t.weapon) disposeWeaponFx(this.ctx, t);
@@ -199,7 +313,7 @@ export class ShadowStore {
     shadowSplash(fx, _v.set(at.x, 0, at.z), 0.5, 18);
     sfx.play('whoosh_2', { at, vol: 0.5, rate: 0.6 });
     h?.pulse?.(0.5, 60);
-    ui.callout(`그림자에 넣었다 — ${rec.label} ${kg < 10 ? kg.toFixed(1) : Math.round(kg)}kg · 짊어진 무게 ${Math.round(this.load)}/${CAP_KG}kg`, { color: '#b8c4ff', dur: 1.6 });
+    ui.callout(burden ? `그림자에 넣었다 — ${rec.label} ${kg < 10 ? kg.toFixed(1) : Math.round(kg)}kg · 짊어진 무게 ${Math.round(this.load)}/${CAP_KG}kg` : `그림자에 넣었다 — ${rec.label} (주구는 짊어지지 않는다)`, { color: '#b8c4ff', dur: 1.6 });
     return true;
   }
 
@@ -222,7 +336,7 @@ export class ShadowStore {
       g.position.copy(h.palm);
       this.ctx.scene.add(g);
       const p = world.addProp(g, { radius: 0.08, mass: 0.5, kg: def.kg, label: def.label, hp: 1e9, color: 0x1a1a1a });
-      makeWeapon(p, { tip: def.tip, base: def.base, lo: def.lo, dmg: def.dmg, toolId: it.id });
+      makeWeapon(p, { tip: def.tip, base: def.base, lo: def.lo, dmg: def.dmg, toolId: it.id, soul: !!def.soul, nullify: !!def.nullify, color: def.color });
       p.asleep = false;
       if (h.source === 'desktop') {
         p.held = true;

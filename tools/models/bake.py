@@ -211,16 +211,16 @@ def paint(name, C, bounds, names, edge_lo):
         dark = hexc('#2a110d') * (0.8 + 0.3 * n_mid[..., None])
         col[f] = dark[f]; rough[f] = (0.5 + 0.2 * n_mid)[f]; metal[f] = 0.05; hgt[f] = 0.2 * n_fine[f]
     else:
-        # ── 칼날: 전체가 검은 무쇠 (참고 이미지) · 날 면도 검고, 모서리 쪽만 닳아 회색 점무늬가 돋는다
+        # ── 칼날: 어두운 은색 금속 (참고 이미지) · 날 면은 조금 밝은 은색, 모서리 쪽이 닳아 밝은 점무늬
         b = region('blade')
         edge = (vq < 0.27).astype(float)
         bv = np.clip(vq / 0.24, 0, 1)  # 날 면 안에서: 0 = 날 끝 쪽
         speck = (noise2(H, W, 1.2, 65) > 0.72).astype(float) * np.clip(fbm(H, W, 20, 66) * 1.6 - 0.4, 0, 1)
-        iron = hexc('#242424') * (0.85 + 0.25 * n_big[..., None]) + 0.03 * (n_mid[..., None] - 0.5)
-        bevc = hexc('#2e2e2e') * (0.85 + 0.25 * n_mid[..., None])
-        # 날 면: 끝(날)으로 갈수록 닳아 밝은 점 · 가는 밝은 선
-        wearc = speck[..., None] * hexc('#8d8b86') * (1 - bv[..., None]) * 0.9
-        line = np.exp(-((vq - 0.015) / 0.008) ** 2)[..., None] * 0.35 + np.exp(-((vq - 0.255) / 0.006) ** 2)[..., None] * 0.15
+        brushed = fbm(H, W, 40, 67, 3) * 0.6 + 0.4 * noise2(H, W, 1.5, 68)
+        iron = hexc('#5d6064') * (0.82 + 0.22 * n_big[..., None]) * (0.92 + 0.12 * brushed[..., None]) + 0.03 * (n_mid[..., None] - 0.5)
+        bevc = hexc('#74777b') * (0.85 + 0.2 * brushed[..., None])
+        wearc = speck[..., None] * hexc('#b9b7b0') * (1 - bv[..., None]) * 0.7
+        line = np.exp(-((vq - 0.015) / 0.008) ** 2)[..., None] * 0.35 + np.exp(-((vq - 0.255) / 0.006) ** 2)[..., None] * 0.12
         scr = np.zeros((H, W))
         r = np.random.default_rng(7)
         for _ in range(90):
@@ -229,11 +229,11 @@ def paint(name, C, bounds, names, edge_lo):
             xs = np.linspace(x0, x0 + ln * np.cos(a), 40); ys = np.clip(y0 + ln * 4 * np.sin(a) * np.linspace(0, 1, 40), 0, 0.999)
             xi = np.clip((xs * W).astype(int), 0, W - 1); yi = np.clip(((1 - ys) * H).astype(int), 0, H - 1)
             scr[yi, xi] = r.uniform(0.2, 0.45)
-        c = iron * (1 - edge[..., None]) + (bevc + wearc + line * hexc('#9a978f')) * edge[..., None] + scr[..., None] * 0.15
+        c = iron * (1 - edge[..., None]) + (bevc + wearc + line * hexc('#c9c7c0')) * edge[..., None] + scr[..., None] * 0.18
         col[b] = c[b]
-        rough[b] = (0.62 + 0.15 * n_mid - 0.12 * edge - 0.15 * scr)[b]
-        metal[b] = (0.7 + 0.15 * edge)[b]
-        hgt[b] = (0.12 * n_fine - 0.4 * scr + 0.3 * speck * edge)[b] * 0.4
+        rough[b] = (0.42 + 0.12 * n_mid - 0.1 * edge - 0.12 * scr)[b]
+        metal[b] = (0.9 + 0.05 * edge)[b]
+        hgt[b] = (0.12 * n_fine - 0.4 * scr + 0.3 * speck * edge + 0.15 * brushed)[b] * 0.4
         # ── 손잡이 · 고리 · 칼날 밑동: 감은 천 (나선 띠 · 띠 사이 그늘 · 때)
         cloth = region('wrap') | region('ring') | region('flare')
         Ls = uu * L

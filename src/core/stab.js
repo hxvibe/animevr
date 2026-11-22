@@ -75,6 +75,22 @@ export function addWound(ctx, d, key, point, outDir, { dur = 6, rate = 16 } = {}
   return w;
 }
 
+/**
+ * 천역모: 닿은 상대의 발동 중인 술식을 강제로 해제한다 — 무하한이 꺼지고(구멍이 뚫린 듯 · 6초), 펼치던 술식이 끊긴다
+ */
+export function nullify(ctx, d, at) {
+  const W = ctx.world;
+  const was = !!d.infinityOn;
+  d.burnout = Math.max(d.burnout ?? 0, W.time + 6);
+  d._cancel?.();
+  ctx.fx.burst(at ?? d.center(new THREE.Vector3()), 22, new THREE.Color(0xffe0a0), 3, 0.03, 0.4);
+  ctx.sfx.play?.('shatter_2', { at, vol: 0.5, rate: 0.7 });
+  if (was || (ctx._toldNull ?? 0) < W.time) {
+    ctx._toldNull = W.time + 20;
+    ctx.ui.callout(was ? '천역모 — 무하한에 구멍이 뚫렸다 (술식 강제 해제)' : '천역모 — 발동 중인 술식이 강제로 해제된다', { color: '#ffe0a0', dur: 1.6 });
+  }
+}
+
 /** 날붙이가 꽂힐까 (stepWeapon 이 매 프레임) */
 export function tryStick(ctx, p, hand) {
   const W = p.weapon;
@@ -89,7 +105,7 @@ export function tryStick(ctx, p, hand) {
     if (d.center(_v2).distanceTo(W.tipW) > 1.4 * (d.scale ?? 1)) continue;
     const hit = bodyHit(d, W.tipW);
     if (!hit) continue;
-    if (d.def?.infinity || d.type === 'gojo') {
+    if ((d.def?.infinity || d.type === 'gojo') && !W.nullify) {
       // 무하한: 칼끝이 닿기 직전에 멈춘다
       if ((W.infT ?? 0) < world.time) {
         W.infT = world.time + 0.6;
@@ -106,9 +122,10 @@ export function tryStick(ctx, p, hand) {
     stickDummy(ctx, p, d, hit.key, along, hand, dir);
     return true;
   }
-  // ── 물체 (다른 날붙이 · 쥔 물체 제외)
+  // ── 물체 (다른 날붙이 제외 · 다른 손에 쥔 물체에도 꽂힌다)
   for (const o of world.props) {
-    if (o === p || !o.alive || o.away || o.weapon || o.held) continue;
+    if (o === p || !o.alive || o.away || o.weapon) continue;
+    if (o.held && hand && ctx.grab?.held?.[hand.side]?.t === o) continue;
     if (o.center(_v2).distanceTo(W.tipW) > Math.max(o.he.x, o.he.y, o.he.z) + 0.3) continue;
     if (o.closest(W.tipW, _v3).distanceToSquared(W.tipW) > 1e-6) continue; // 칼끝이 상자 안
     stickProp(ctx, p, o, along);
@@ -168,7 +185,8 @@ function stickDummy(ctx, p, d, key, along, hand, dir) {
   fx.burst(entry, 26, BLOOD, 2.8, 0.05, 0.6, { dark: true, grav: 9, dir: dir.clone().negate(), dirAmt: 0.8 });
   sfx.cut?.(entry);
   sfx.play?.('punch_3', { at: entry, vol: 0.6, rate: 1.3 });
-  d.damage((30 + Math.min(along, 12) * 7) * (W.dmg ?? 1), { type: 'pierce', dir: dir.clone(), point: entry.clone(), color: '#ff6060' });
+  if (W.nullify) nullify(ctx, d, entry);
+  d.damage((30 + Math.min(along, 12) * 7) * (W.dmg ?? 1), { type: 'pierce', dir: dir.clone(), point: entry.clone(), color: '#ff6060', soul: W.soul, vsInf: W.nullify ? 2 : undefined });
   if (d.alive) d.impulse?.(dir.clone().multiplyScalar(hand ? 1.2 : 2.5), 1);
   (d.stuckBy ??= new Set()).add(p);
   hand?.pulse?.(0.9, 90);
@@ -241,6 +259,7 @@ export function unstick(ctx, p, pulled = true) {
   if (!S) return;
   W.stuck = null;
   W.noStickT = ctx.world.time + 0.4;
+  if (S.kind === 'prop' && S.carried) S.t.held = false;
   p.fixed = false;
   p.asleep = false;
   if (S.kind === 'dummy') {
@@ -282,7 +301,9 @@ export function holdStuck(ctx, p, h, target, lift) {
   const dir = _v.set(0, 1, 0).applyQuaternion(p.obj.quaternion);
   // 칼자루 쪽으로 홱 당기기 (손 속도의 칼날 반대 방향 성분)
   const yank = -h.vel.dot(dir);
-  const heavy = S.kind === 'world' || (S.kind === 'prop' && (S.t.kg ?? 0) > lift) || (S.kind === 'prop' && S.t.fixed);
+  // 박힌 채 움직이지 않는 곳: 바닥 · 벽 · 무거운 물체 · 다른 손이 쥔 물체(그 손을 따라간다)
+  const otherHeld = S.kind === 'prop' && S.t.held && !S.carried;
+  const heavy = S.kind === 'world' || (S.kind === 'prop' && (S.t.kg ?? 0) > lift) || (S.kind === 'prop' && S.t.fixed) || otherHeld;
   if (heavy) {
     // 박힌 그대로: 손이 칼자루 쪽으로 12cm 넘게 빠지면 뽑힌다
     const pull = -_v2.subVectors(target, p.pos).dot(dir);
@@ -343,6 +364,7 @@ export function afterHoldStuck(ctx, p) {
     o.vel.subVectors(o.pos, prev).divideScalar(Math.max(1e-3, ctx._dt ?? 0.016));
     o.held = true;
     o.asleep = false;
+    S.carried = true; // 칼에 매달려 들려 있다 (다른 손이 쥔 게 아니다)
   }
 }
 
@@ -361,8 +383,9 @@ export function onReleaseStuck(ctx, p, vel) {
     if (S.by && S.t.holders?.has(S.by)) S.t.release(vel.clone().multiplyScalar(0.8), S.by);
     S.by = null;
     S.lpWound = null;
-  } else if (S.kind === 'prop') {
+  } else if (S.kind === 'prop' && S.carried) {
     S.t.held = false;
+    S.carried = false;
     S.t.vel.copy(vel).clampLength(0, 12);
   }
   p.fixed = true;
@@ -439,5 +462,151 @@ export function updateWounds(ctx, d, dt) {
     const el = J['el' + side];
     const hd = J['hd' + side];
     if (sh?.parent && el && hd) reach(sh, el, hd, target, 0.85 * k);
+  }
+}
+
+// ───────────── 칼이 물체 · 바닥 · 벽 · 적을 뚫지 못하게 ─────────────
+const _cp = new THREE.Vector3();
+const _pn = new THREE.Vector3();
+const _push = new THREE.Vector3();
+const _pts = Array.from({ length: 7 }, () => new THREE.Vector3());
+const _A = new THREE.Vector3();
+const _B = new THREE.Vector3();
+const _C = new THREE.Vector3();
+
+/** 점이 상자 소품에 파고든 깊이 (n: 소품 → 점 방향) */
+function boxPen(o, pt, n, r) {
+  const c = o.center(_cp);
+  _q.copy(o.obj.quaternion).invert();
+  const L = _v4.subVectors(pt, c).applyQuaternion(_q);
+  const he = o.he;
+  const dx = he.x - Math.abs(L.x);
+  const dy = he.y - Math.abs(L.y);
+  const dz = he.z - Math.abs(L.z);
+  if (dx > 0 && dy > 0 && dz > 0) {
+    if (dx <= dy && dx <= dz) n.set(Math.sign(L.x) || 1, 0, 0);
+    else if (dy <= dz) n.set(0, Math.sign(L.y) || 1, 0);
+    else n.set(0, 0, Math.sign(L.z) || 1);
+    n.applyQuaternion(o.obj.quaternion);
+    return Math.min(dx, dy, dz) + r;
+  }
+  o.closest(pt, _cp);
+  n.subVectors(pt, _cp);
+  const d = n.length();
+  if (d >= r || d < 1e-6) return 0;
+  n.divideScalar(d);
+  return r - d;
+}
+
+/**
+ * 칼(쥔 칼 포함)이 바닥 · 벽 · 물체 · 적 몸속으로 들어가면 밖으로 밀어낸다.
+ *  · 크게 휘둘러 실제로 벤 적은 그대로 지나간다(베인 것) · 꽂힌 칼은 stab 이 맡는다
+ *  · 가볍고 아무도 안 쥔 물체는 칼에 밀려나고, 그 밖엔 칼이 멈춘다 — 쥔 손의 보이는 손도 칼과 함께 (grab._block)
+ *  · 날아가던 칼은 부딪힌 면에서 튕긴다
+ */
+export function collideWeapon(ctx, p, hand) {
+  const W = p.weapon;
+  const push = (W.push ??= new THREE.Vector3()).set(0, 0, 0);
+  if (W.stuck || !p.alive) return;
+  const { world } = ctx;
+  p.obj.updateMatrixWorld(true);
+  const n = _pts.length;
+  for (let i = 0; i < n; i++) _pts[i].set(0, W.lo + ((W.tip - W.lo) * i) / (n - 1), 0).applyMatrix4(p.obj.matrixWorld);
+  const R = 0.012; // 칼날 두께 (반)
+  const add = (nv, d) => {
+    // 같은 방향으로는 가장 깊은 것만 (겹쳐 더하지 않게)
+    const along = push.dot(nv);
+    if (along < d) push.addScaledVector(nv, d - along);
+  };
+  // ── 바닥 (쥔 칼만 — 놓인 칼은 소품 물리가 맡는다)
+  if (hand) {
+    let low = 0;
+    for (const q of _pts) low = Math.max(low, R - q.y);
+    if (low > 0) add(_pn.set(0, 1, 0), low);
+  }
+  // ── 벽 · 고정물 (배경): 칼자루 → 칼끝 광선이 면을 지나면 칼끝이 면에 닿을 때까지 민다
+  const env = ctx.env;
+  const G = env?.current?.group;
+  if (G && !env.hidden) {
+    const b = env.bounds;
+    let near = false;
+    for (const q of _pts) {
+      if (b && (q.x < b.minX + 0.6 || q.x > b.maxX - 0.6 || q.z < b.minZ + 0.6 || q.z > b.maxZ - 0.6)) near = true;
+      if (q.y < 0.08) near = true;
+      for (const c of env.colliders ?? []) if (q.y < (c.maxY ?? 99) + 0.1 && q.x > c.minX - 0.15 && q.x < c.maxX + 0.15 && q.z > c.minZ - 0.15 && q.z < c.maxZ + 0.15) near = true;
+      if (near) break;
+    }
+    if (near) {
+      const a = _pts[0];
+      const e = _pts[n - 1];
+      const len = a.distanceTo(e);
+      _ray.set(a, _v.subVectors(e, a).normalize());
+      _ray.far = len;
+      const h = _ray.intersectObject(G, true).find((x) => x.object.visible && !x.object.userData.isProp && x.face);
+      if (h) {
+        const nv = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+        if (nv.dot(_ray.ray.direction) > 0) nv.negate();
+        const d = _v2.subVectors(e, h.point).dot(nv) * -1 + R;
+        if (d > 0 && !(nv.y > 0.6 && !hand)) add(nv, d);
+      }
+    }
+  }
+  // ── 물체
+  const lift = ctx.grab?._liftKg?.() ?? 60;
+  for (const o of world.props) {
+    if (o === p || !o.alive || o.away || !o.obj || o.weapon?.stuck?.t === p) continue;
+    if (o.weapon && !hand) continue; // 놓인 칼끼리는 소품 충돌로
+    const reach = Math.max(o.he.x, o.he.y, o.he.z) + Math.abs(W.tip - W.lo) + 0.2;
+    if (o.center(_C).distanceToSquared(p.pos) > reach * reach) continue;
+    const movable = !o.held && !o.fixed && (o.kg ?? 0) <= Math.min(lift * 0.5, 30);
+    for (const q of _pts) {
+      const d = boxPen(o, q, _pn, R);
+      if (d <= 0) continue;
+      if (movable && hand) {
+        o.pos.addScaledVector(_pn, -d);
+        const vn = -(W.tipVel?.dot(_pn) ?? 0);
+        if (vn > 0) o.vel.addScaledVector(_pn, (-vn * 1.2 * 4) / (4 + (o.kg ?? 1)));
+        o.asleep = false;
+      } else add(_pn, d);
+    }
+  }
+  // ── 적 몸 (방금 실제로 벤 적은 지나간다)
+  for (const d of world.dummies) {
+    if (!d.alive || d.dying) continue;
+    if (world.time - (W.hits.get(d) ?? -9) < 0.25) continue;
+    if (d.center(_C).distanceTo(p.pos) > 1.2 * (d.scale ?? 1) + Math.abs(W.tip - W.lo)) continue;
+    const J = d._jointMap?.();
+    if (!J) continue;
+    const s = d.scale ?? 1;
+    const lost = d._lost?.().set;
+    for (const [a, b, r] of SEGS) {
+      if (!J[a] || !J[b] || (lost && (lost.has(RAG_I[a]) || lost.has(RAG_I[b])))) continue;
+      J[a].getWorldPosition(_A);
+      J[b].getWorldPosition(_B);
+      for (const q of _pts) {
+        const dist = segDist(q, _A, _B, _C);
+        const pen = r * s + R - dist;
+        if (pen <= 0 || dist < 1e-6) continue;
+        add(_pn.subVectors(q, _C).divideScalar(dist), pen);
+      }
+    }
+  }
+  // 쥔 칼: 막힌 만큼을 기억해 두고 손 목표에 더한다 (매 프레임 파고들었다 밀려나며 떨지 않게) · 안 막히면 서서히 풀린다
+  const block = (W.block ??= new THREE.Vector3());
+  if (!hand) block.set(0, 0, 0);
+  if (push.lengthSq() < 1e-8) {
+    block.multiplyScalar(0.85);
+    return;
+  }
+  push.clampLength(0, 0.25);
+  p.pos.add(push);
+  W.prevTip?.add(push); // 밀려난 건 휘두른 속도가 아니다
+  if (hand) block.add(push).clampLength(0, 0.4);
+  if (!hand) {
+    // 날아가던 칼: 부딪힌 면에서 튕긴다
+    _pn.copy(push).normalize();
+    const vn = p.vel.dot(_pn);
+    if (vn < 0) p.vel.addScaledVector(_pn, -vn * 1.35);
+    p.spin.multiplyScalar(0.85);
   }
 }

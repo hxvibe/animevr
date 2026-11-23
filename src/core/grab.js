@@ -539,8 +539,16 @@ export class Grab {
     H.second = !!(other && other.t === t);
     // 쥔 자리: 손이 닿은 곳 (손잡이든 칼날이든) — 칼은 주먹 가운데 구멍을 지난다 (gripPoint)
     const y = THREE.MathUtils.clamp(_v.subVectors(g.G, t.pos).dot(A), W.lo + 0.02, W.tip - 0.06);
+    // 칼끝이 엄지 쪽이면 바로 쥐기, 새끼손가락 쪽(손 반대)을 향해 있으면 역수 — 단검처럼 칼날이 아래로
+    //  (그림자에서 꺼낼 땐 언제나 바로 쥐기. 두 손째로 쥐는 손은 앞손을 따른다)
+    const rev = !H.second && !t.weapon.fresh && A.dot(g.dir) < -0.25;
     // 날은 언제나 손가락이 감아쥔 쪽 (유타의 칼과 같다) — 쥘 때마다 칼이 뒤집히지 않게
-    H.weapon = { y, es: 1, blend: 0, prevQ: t.obj.quaternion.clone(), prevP: t.pos.clone(), w: new THREE.Vector3() };
+    H.weapon = { y, es: 1, rev, blend: 0, prevQ: t.obj.quaternion.clone(), prevP: t.pos.clone(), w: new THREE.Vector3() };
+    t.weapon.fresh = false;
+    if (rev && !this._toldRev) {
+      this._toldRev = true;
+      this.ctx.ui.callout('역수로 쥐었다 — 칼끝이 손 아래로 (단검처럼)', { color: '#c8d0ff', dur: 1.4 });
+    }
     // 손가락: 손잡이는 꽉, 칼날을 쥐면 조금 덜 접힌다
     this.gripR[side] = y < W.base ? 0.016 : 0.032;
     H.offL = null;
@@ -563,6 +571,8 @@ export class Grab {
       W.blend = 0;
     }
     const g = this._weaponGrip(h, (this._g1 ??= { G: new THREE.Vector3(), dir: new THREE.Vector3(), ref: new THREE.Vector3() }));
+    // 역수(단검처럼 칼날이 새끼손가락 쪽 · 아래로): 칼끝이 손 반대쪽을 향한 채 쥐었을 때
+    if (W.rev) g.dir.negate();
     const dir = _v.copy(g.dir);
     if (two) {
       // 두 손: 칼끝 쪽 손을 향해 칼이 선다 (두 쥔 점을 잇는 축)

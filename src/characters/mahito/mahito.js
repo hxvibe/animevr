@@ -379,6 +379,11 @@ class Transfig {
  * 무위전변 → 개조 인간 스톡: 붙잡은 상대의 영혼을 비틀어(몸이 일그러진다) 체스 말만 하게 오그라뜨린다.
  *  손에 쥐고 있었으면 그 손에 스톡이 남고(던지면 풀려난다), 아니면(영역 필중 · 데스크톱) 마히토가 삼켜 비축한다
  */
+const _sq1 = new THREE.Vector3();
+const _sq2 = new THREE.Vector3();
+const _sq3 = new THREE.Vector3();
+const _sqm = new THREE.Matrix4();
+
 class SoulStock {
   constructor(ctx, mahito, t, side = null) {
     this.ctx = ctx;
@@ -641,6 +646,18 @@ export class Mahito extends Caster {
     if (S && !S.alive) this.stocks[h.side] = null;
   }
 
+  /** 스톡을 쥔 손의 자세: 스톡이 손바닥 위에 서고(+Y = 손바닥이 향한 쪽) 앞(+Z)은 손가락 쪽 — 손을 돌리면 함께 돈다 */
+  _stockQ(h) {
+    const q = (h._stockQ ??= new THREE.Quaternion());
+    const y = _sq1.copy(h.palmNormal ?? UP).normalize();
+    const f = _sq2.copy(h.source === 'hand' ? h.fingersDir : h.dir);
+    f.addScaledVector(y, -f.dot(y));
+    if (f.lengthSq() < 1e-6) f.set(0, 0, 1).addScaledVector(y, -y.z);
+    f.normalize();
+    const x = _sq3.crossVectors(y, f);
+    return q.setFromRotationMatrix(_sqm.makeBasis(x, y, f));
+  }
+
   /** 입 (스톡을 꺼내는 곳) */
   mouthPos(out) {
     const inp = this.ctx.input;
@@ -655,7 +672,7 @@ export class Mahito extends Caster {
     if (this.bank > 0) this.bank--;
     else if (!cool(this.ctx, 'worm', 2.5, '개조 인간') || !this.spend(12)) return null;
     const hp = new THREE.Vector3();
-    const S = new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null));
+    const S = new StockPiece(this.ctx, this.mouthPos(new THREE.Vector3()), () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null), { quat: () => (h.active ? this._stockQ(h) : null) });
     this.stocks[h.side] = S;
     this.stockFx.push(S);
     this.ctx.ui.callout('개조 인간 스톡 — 입에서 꺼냈다', { color: '#b088d8', dur: 1 });
@@ -727,7 +744,7 @@ export class Mahito extends Caster {
     const h = side ? this.ctx.input[side] : null;
     if (h?.active && !this.stocks[side]) {
       const hp = new THREE.Vector3();
-      const S = new StockPiece(this.ctx, at, () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null));
+      const S = new StockPiece(this.ctx, at, () => (h.active ? hp.copy(h.palm).addScaledVector(h.palmNormal ?? UP, 0.02) : null), { quat: () => (h.active ? this._stockQ(h) : null) });
       S.fromGrab = true;
       this.stocks[side] = S;
       this.stockFx.push(S);

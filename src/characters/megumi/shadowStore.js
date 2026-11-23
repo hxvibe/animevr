@@ -341,6 +341,7 @@ export class ShadowStore {
       this.ctx.scene.add(g);
       const p = world.addProp(g, { radius: 0.08, mass: 0.5, kg: def.kg, label: def.label, hp: 1e9, color: 0x1a1a1a });
       makeWeapon(p, { tip: def.tip, base: def.base, lo: def.lo, dmg: def.dmg, toolId: it.id, soul: !!def.soul, nullify: !!def.nullify, color: def.color });
+      p.weapon.fresh = true; // 막 꺼낸 주구는 바로 쥔다
       p.asleep = false;
       if (h.source === 'desktop') {
         p.held = true;

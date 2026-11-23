@@ -241,10 +241,14 @@ export function makeStockPiece() {
  * 스톡 하나: 입에서 꺼내(pull) → 손에 쥐고(held) → 던지면(thrown) 날아가다 → 풀려나 개조인간이 된다(onPop).
  * hold(): 손 위치(없으면 null), from: 꺼내는 곳(입)
  */
+const _wq = new THREE.Quaternion();
+const _we = new THREE.Euler();
+
 export class StockPiece {
   constructor(ctx, from, hold, o = {}) {
     this.ctx = ctx;
     this.hold = hold;
+    this.holdQ = o.quat ?? null; // 쥔 손의 자세 (주면 손과 함께 돈다 — 세상의 위쪽이 아니라)
     this.mesh = makeStockPiece();
     this.mesh.scale.setScalar(o.scale ?? 1);
     this.mesh.position.copy(from);
@@ -282,8 +286,11 @@ export class StockPiece {
       const k = this.state === 'pull' ? Math.min(1, this.t / 0.15) : 1;
       M.position.lerpVectors(this.from, h, k * k * (3 - 2 * k));
       if (k >= 1) this.state = 'held';
-      // 손안에서 꿈틀 (살아 있다)
-      M.rotation.set(Math.sin(this.t * 13) * 0.25, this.t * 0.8, Math.sin(this.t * 9) * 0.2);
+      // 손안에서 꿈틀 (살아 있다) — 손바닥 위에 선 채 손과 함께 돈다
+      _wq.setFromEuler(_we.set(Math.sin(this.t * 13) * 0.25, Math.sin(this.t * 3) * 0.3, Math.sin(this.t * 9) * 0.2));
+      const hq = this.holdQ?.();
+      if (hq) M.quaternion.copy(hq).multiply(_wq);
+      else M.quaternion.copy(_wq);
       return true;
     }
     // 날아간다

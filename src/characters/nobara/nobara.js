@@ -475,8 +475,19 @@ class Nail {
     this._orient(this.dir);
   }
 
-  _orient(d) {
-    _q.setFromUnitVectors(_v.set(0, 0, 1), _v2.copy(d).normalize());
+  /** 못 끝 방향 d · up 을 주면 못이 그 축으로도 손과 함께 돈다 (손목을 비틀면 못도 돈다) */
+  _orient(d, up = null) {
+    const z = _v2.copy(d).normalize();
+    if (up) {
+      const y = _v.copy(up).addScaledVector(z, -up.dot(z));
+      if (y.lengthSq() > 1e-6) {
+        y.normalize();
+        const x = _v3.crossVectors(y, z);
+        this.mesh.quaternion.setFromRotationMatrix(_m.makeBasis(x, y, z));
+        return;
+      }
+    }
+    _q.setFromUnitVectors(_v.set(0, 0, 1), z);
     this.mesh.quaternion.copy(_q);
   }
 
@@ -781,12 +792,14 @@ export class Nobara extends Caster {
     if (!this.held.length) return;
     // 엄지·검지 사이에서 부채꼴로
     const F = L.active ? (L.source === 'hand' ? L.fingersDir : L.dir) : this.ctx.input.headDir;
-    const base = L.active ? (L.source === 'hand' ? _v3.copy(L.palm).lerp(L.indexTip, 0.6) : L.palm) : this.ctx.input.head;
+    const base = (this._nb ??= new THREE.Vector3()).copy(L.active ? (L.source === 'hand' ? _v4.copy(L.palm).lerp(L.indexTip, 0.6) : L.palm) : this.ctx.input.head);
+    // 부채꼴 · 못의 비틀림 기준은 손바닥 (컨트롤러면 컨트롤러 자세) — 세상의 위쪽이 아니라
+    const N = (this._nn ??= new THREE.Vector3()).copy(L.active ? L.palmNormal : UP);
     this.held.forEach((n, i) => {
       const spread = (i - 1) * 0.35;
-      const d = _v.copy(F).applyAxisAngle(L.palmNormal, spread).normalize();
+      const d = (this._nd ??= new THREE.Vector3()).copy(F).applyAxisAngle(N, spread).normalize();
       n.p.copy(base).addScaledVector(d, 0.02);
-      n._orient(d);
+      n._orient(d, N);
       n.mesh.position.copy(n.p);
     });
   }

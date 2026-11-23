@@ -33,9 +33,11 @@ export const CAP_KG = 150;
  */
 export const TOOLS = {
   blade: { model: 'wpn_megumi_blade', label: '주구 · 곡도', kg: 1.6, tip: 0.67, base: 0.12, lo: -0.18, dmg: 1, free: true },
-  sword: { model: 'wpn_megumi_sword', label: '주구 · 고리칼', kg: 2.6, tip: 0.67, base: 0.18, lo: -0.12, dmg: 1.2, free: true },
-  splitsoul: { model: 'wpn_splitsoul', label: '석혼도', kg: 3.2, len: 1.1, bake: true, dmg: 1.3, soul: true, free: true, color: 0xe8f0ff },
-  spear: { model: 'wpn_spear', label: '천역모', kg: 0.9, len: 0.46, bake: true, dmg: 0.55, nullify: true, free: true, color: 0xffe0a0 },
+  // 고리칼은 모델(0.8m)을 1.25배로 키운다 (tip · base · lo 도 키운 길이)
+  sword: { model: 'wpn_megumi_sword', label: '주구 · 고리칼', kg: 3.4, scale: 1.25, tip: 0.67 * 1.25, base: 0.18 * 1.25, lo: -0.12 * 1.25, dmg: 1.2, free: true },
+  // 석혼도: 굽힌 모델의 날이 반대쪽을 향해 180° 돌린다
+  splitsoul: { model: 'wpn_splitsoul', label: '석혼도', kg: 3.2, len: 1.1, bake: true, flip: true, dmg: 1.3, soul: true, free: true, color: 0xe8f0ff },
+  spear: { model: 'wpn_spear', label: '천역모', kg: 1.2, len: 0.62, bake: true, dmg: 0.55, nullify: true, free: true, color: 0xffe0a0 },
 };
 
 const _baked = {};
@@ -111,6 +113,7 @@ function bakeSkinnedTool(id) {
   }
   const L = hi - lo;
   const width = pow(axis); // 칼날이 가장 넓게 퍼진 가로축 → +X
+  if (def.flip) width.negate(); // 날이 반대쪽 → 칼 축으로 180°
   const z = new THREE.Vector3().crossVectors(width, axis).normalize();
   const basis = new THREE.Matrix4().makeBasis(width, axis, z).invert();
   const S = def.len / L;
@@ -147,6 +150,13 @@ function toolMesh(id) {
   if (TOOLS[id].bake && src) {
     const b = bakeSkinnedTool(id);
     if (b) g.add(b);
+  } else if (src && TOOLS[id].scale) {
+    const c = src.clone(true);
+    c.scale.setScalar(TOOLS[id].scale);
+    c.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
+    g.add(c);
   } else if (src) {
     const c = src.clone(true);
     c.traverse((o) => {

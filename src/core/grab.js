@@ -78,7 +78,9 @@ export class Grab {
         if (h.speed > 1.6) continue;
         // 다른 손이 이미 잡은 적도 한 손 더 잡을 수 있다 (두 손 잡기) · 날붙이도 두 손으로
         const foes = this.canGrabFoes();
-        const t = world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? foes && (!x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2)) : !x.held || (x.weapon && x === other)));
+        // 칼자루가 손에 닿아 있으면 칼이 먼저 (적에게 꽂힌 칼을 쥐려다 적을 잡지 않게)
+        const blade = world.nearestTarget(h.palm, 0.07, (x) => x.weapon && !x.noGrab && (!x.held || x === other));
+        const t = blade ?? world.nearestTarget(h.palm, this._mighty() ? 0.26 : 0.13, (x) => !x.dying && !x.noGrab && (x.kind === 'dummy' ? foes && (!x.heldBy || (x === other && (x.holdCount?.() ?? 1) < 2) || (!this._handHeld(x) && (x.holdCount?.() ?? 1) < 3)) : !x.held || (x.weapon && x === other)));
         if (t && t.kind !== 'dummy' && !this._canLift(t, h)) continue;
         if (t) this._grab(side, t, h);
       } else {
@@ -246,9 +248,15 @@ export class Grab {
   }
 
   /** 적을 붙잡을 수 있는가: 고죠 사토루 · 마히토 · 마허라(빙의)만 (다른 캐릭터는 물체만 집는다) */
+  /** 이 적을 손(왼손 · 오른손)이 잡고 있나 — 칼에 꿰인 적은 손으로 더 잡을 수 있다 */
+  _handHeld(d) {
+    for (const b of d.holders?.keys() ?? []) if (b === this.by.left || b === this.by.right) return true;
+    return d.heldBy === this.by.left || d.heldBy === this.by.right;
+  }
+
+  /** 적을 잡을 수 있나: 모든 캐릭터 (마허라 · 고죠 · 마히토만이던 제한을 풀었다) */
   canGrabFoes() {
-    const c = this.ctx.character;
-    return !!c && (c.possessed ? true : c.id === 'gojo' || c.id === 'mahito');
+    return !!this.ctx.character;
   }
 
   /** 마허라(빙의)의 힘: 박기 · 뜯기 배율 */
@@ -513,15 +521,12 @@ export class Grab {
       return out;
     }
     gripPoint(h, this.ctx.rig, out.G);
-    if (h.source === 'hand') {
-      out.dir.crossVectors(h.fingersDir, h.palmNormal);
-      if (h.side === 'left') out.dir.negate();
-      out.ref.copy(h.fingersDir);
-    } else {
-      // 컨트롤러: 가리키는 방향 · 날 기준은 컨트롤러의 위(+Y) — 손목을 돌리면 칼도 같이 돈다 (노바라의 망치 · 유타의 칼처럼)
-      out.dir.copy(h.dir);
-      out.ref.set(0, 1, 0).applyQuaternion(h.quat);
-    }
+    // 칼은 주먹을 꿰뚫는 축(엄지 쪽)으로 선다 — 주먹 가운데 구멍을 세로로 지난다 (컨트롤러도 그려진 주먹 손 기준이라
+    //  컨트롤러를 쥔 자연스러운 자세면 칼이 위로 선다). 날은 손가락이 감아쥔 쪽 · 손목을 돌리면 칼도 함께 돈다
+    out.dir.crossVectors(h.fingersDir, h.palmNormal);
+    if (h.side === 'left') out.dir.negate();
+    if (out.dir.lengthSq() < 1e-6) out.dir.copy(h.dir);
+    out.ref.copy(h.fingersDir);
     out.dir.normalize();
     return out;
   }

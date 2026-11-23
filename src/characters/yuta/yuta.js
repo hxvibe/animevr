@@ -16,6 +16,7 @@ import { HandAura } from '../../core/handAura.js';
 import { ShellDomain } from '../../core/shellDomain.js';
 import { RiggedBody } from '../../core/rigged.js';
 import { FingerRig } from '../../core/enemies.js';
+import { HeldBladeStab } from '../../core/stab.js';
 import { makeCrescent } from '../sukuna/vfx.js';
 import { loadModel, getModel } from '../../core/assets.js';
 import { makeGlowSprite } from '../../core/fx.js';
@@ -1085,6 +1086,7 @@ export class Yuta extends Caster {
     const ctrl = h.source === 'controller';
     const desk = h.source === 'desktop';
     if (!h.active || h.uiBlock) {
+      if (S.stab?.busy) S.stab.release();
       S.update(dt, h, false);
       return;
     }
@@ -1100,8 +1102,14 @@ export class Yuta extends Caster {
     if (inSheath) S.setPose(_v.copy(this.sheath.hilt).addScaledVector(this.sheath.dir, -D.s), this.sheath.g.quaternion);
     else speed = S.update(dt, desk ? { ...h, source: 'controller', dir: _v.copy(inp.headDir).add(_v2.set(0, 0.2, 0)).normalize() } : h, want);
     S.trailMesh.material.uniforms.uColor.value.setHex(this.tech.color); // 궤적은 깃든 술식의 빛
+    // 꽂기: 칼날 방향으로 찌르면 적 · 바닥 · 벽에 꽂힌다 (stab.js) — 꽂혀 있는 동안은 베지 않는다
+    if (!desk && !inSheath) {
+      S.stab ??= new HeldBladeStab(this.ctx, h.side, { tipLen: TIP, baseLen: BASE });
+      if (want && S.k > 0.9) S.stab.step(dt, S, h, speed);
+      else if (S.stab.busy) S.stab.release();
+    }
     // 크게 휘둘러야 벤다: 칼끝이 빠르고(4m/s) 휘두른 호가 충분히 길 때(데스크톱은 마우스라 덜 엄격)
-    const bigSwing = desk ? speed > 2.6 : speed > 4 && (S.arc ?? 0) > 0.45;
+    const bigSwing = !S.stab?.busy && (desk ? speed > 2.6 : speed > 4 && (S.arc ?? 0) > 0.45);
     if (want && bigSwing) this._slash(S, speed);
     // 아주 세게 휘두르면 검기 (고른 술식이 실린다)
     if (want && speed > 7 && (desk || (S.arc ?? 0) > 0.6) && S.k > 0.9 && (this.cds[h.side + 'qi'] ?? 0) <= 0 && this.energy > 12) {

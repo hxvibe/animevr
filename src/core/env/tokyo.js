@@ -55,10 +55,18 @@ function roofMats() {
  * spec: { x, z, w, d, h, rotY, mat, shop?, signs?: [text...], vSigns?: [{ text, bg, fg }], roof? }
  * front = 로컬 +Z 면 (길 쪽)
  */
+let _bseq = 0;
 function building(B, atlas, F, RM, spec) {
-  const { x, z, w, d, h, rotY = 0 } = spec;
-  const m4 = new THREE.Matrix4().makeRotationY(rotY).setPosition(x, 0, z);
+  // 나란히 붙은 건물끼리 앞면(같은 평면)과 옥상 · 처마(같은 높이)가 겹쳐 지글거리지 않게:
+  //  건물마다 앞면을 2~9cm 다르게 물리고(뒤쪽은 그대로) 높이 · 처마를 조금씩 다르게 (눈에는 안 띈다)
+  const k = _bseq++ % 5;
+  const inset = 0.02 + 0.0175 * k;
+  const { x, z, w, rotY = 0 } = spec;
+  const d = spec.d - inset;
+  const h = spec.h + 0.04 * k;
+  const m4 = new THREE.Matrix4().makeRotationY(rotY).setPosition(x, 0, z).multiply(new THREE.Matrix4().makeTranslation(0, 0, -inset / 2));
   const shopH = spec.shop === false ? 0 : 4.2;
+  const eaveY = shopH + 0.012 * k;
   const bay = spec.bay ?? (spec.mat === F.glassBlue || spec.mat === F.glassGray ? 3 : 4);
   const g = R.buildingGeo(w, h, d, { bay, floorH: spec.floorH ?? 3.5, groundH: shopH, uOff: Math.floor(R.rnd() * 8), vOff: Math.floor(R.rnd() * 8) });
   B.add(spec.mat, g.sides, m4);
@@ -67,16 +75,17 @@ function building(B, atlas, F, RM, spec) {
     const s = R.buildingGeo(w, shopH, d, { bay: 3, floorH: shopH, uOff: Math.floor(R.rnd() * 4) });
     B.add(R.rnd() < 0.5 ? F.shop : F.shopWarm, s.sides, m4);
     // 1층과 위층 사이 처마
-    B.add(RM.parapet, new THREE.BoxGeometry(w + 0.3, 0.35, d + 0.3).translate(0, shopH, 0), m4);
+    B.add(RM.parapet, new THREE.BoxGeometry(w + 0.3, 0.35, d + 0.3).translate(0, eaveY, 0), m4);
   }
   // 옥상 난간 · 실외기 · 물탱크
   if (spec.roof !== false) {
-    for (const [px, pz, pw, pd] of [[0, d / 2, w, 0.25], [0, -d / 2, w, 0.25], [w / 2, 0, 0.25, d], [-w / 2, 0, 0.25, d]]) B.add(RM.parapet, new THREE.BoxGeometry(pw, 1.0, pd).translate(px, h + 0.5, pz), m4);
+    // 옆 난간은 앞뒤 난간 사이에만 (끝면이 옆 건물 벽과 같은 평면에 놓이지 않게), 설비는 옥상에 살짝 묻는다
+    for (const [px, pz, pw, pd] of [[0, d / 2, w, 0.25], [0, -d / 2, w, 0.25], [w / 2, 0, 0.25, d - 0.25], [-w / 2, 0, 0.25, d - 0.25]]) B.add(RM.parapet, new THREE.BoxGeometry(pw, 1.0, pd).translate(px, h + 0.47, pz), m4);
     const n = 1 + Math.floor(R.rnd() * 4);
-    for (let i = 0; i < n; i++) B.add(RM.unit, new THREE.BoxGeometry(1.2, 0.9, 0.8).translate((R.rnd() - 0.5) * (w - 2), h + 0.45, (R.rnd() - 0.5) * (d - 2)), m4);
+    for (let i = 0; i < n; i++) B.add(RM.unit, new THREE.BoxGeometry(1.2, 0.9, 0.8).translate((R.rnd() - 0.5) * (w - 2), h + 0.4, (R.rnd() - 0.5) * (d - 2)), m4);
     if (R.rnd() < 0.4) {
       B.add(RM.tank, new THREE.CylinderGeometry(1, 1, 2, 14).translate((R.rnd() - 0.5) * (w - 3), h + 2.4, (R.rnd() - 0.5) * (d - 3)), m4);
-      B.add(RM.unit, new THREE.BoxGeometry(2.2, 1.4, 2.2).translate(0, h + 0.7, 0), m4);
+      B.add(RM.unit, new THREE.BoxGeometry(2.2, 1.4, 2.2).translate(0, h + 0.65, 0), m4);
     }
   }
   // 1층 가로 간판
@@ -110,14 +119,27 @@ function building(B, atlas, F, RM, spec) {
   }
 }
 
+/** 상자에서 옆면 4개만 남긴다 (BoxGeometry 면 순서: +x −x +y −y +z −z) */
+function sidesOnly(g) {
+  const idx = g.index.array;
+  const keep = [];
+  for (const gr of g.groups) {
+    if (gr.materialIndex === 2 || gr.materialIndex === 3) continue;
+    for (let i = gr.start; i < gr.start + gr.count; i++) keep.push(idx[i]);
+  }
+  g.setIndex(keep);
+  g.clearGroups();
+  return g;
+}
+
 /** 보도 + 연석 + 점자 블록 (축 정렬 직사각형) */
 function sidewalk(group, B, mats, x0, z0, x1, z1, { tactile = true, axis = 'z' } = {}) {
   const w = x1 - x0;
   const d = z1 - z0;
   const top = R.ground(w, d, mats.paver, 1, (x0 + x1) / 2, (z0 + z1) / 2, 0.15);
   group.add(top);
-  // 연석 옆면
-  B.add(mats.curb, new THREE.BoxGeometry(w, 0.15, d).translate((x0 + x1) / 2, 0.075, (z0 + z1) / 2));
+  // 연석 옆면 — 윗면 · 밑면은 뺀다 (윗면이 보도판과 같은 높이(0.15)라 겹쳐 지글거렸다)
+  B.add(mats.curb, sidesOnly(new THREE.BoxGeometry(w, 0.15, d)).translate((x0 + x1) / 2, 0.075, (z0 + z1) / 2));
   if (tactile) {
     const tw = 0.3;
     const g = axis === 'z' ? R.ground(tw, d, mats.tactile, 0.3, x0 + w * 0.35, (z0 + z1) / 2, 0.152, 1) : R.ground(w, tw, mats.tactile, 0.3, (x0 + x1) / 2, z0 + d * 0.35, 0.152, 1);
@@ -166,7 +188,8 @@ function tree(B, x, z, s = 1) {
   B.add(_treeMats.bark, new THREE.CylinderGeometry(0.12 * s, 0.2 * s, 3.2 * s, 8).translate(x, 1.6 * s, z));
   for (let i = 0; i < 5; i++) {
     const r = (1.1 + R.rnd() * 0.6) * s;
-    const geo = new THREE.IcosahedronGeometry(r, 1).translate(x + (R.rnd() - 0.5) * 1.6 * s, (3.4 + R.rnd() * 1.6) * s, z + (R.rnd() - 0.5) * 1.6 * s);
+    // 잎 덩어리마다 조금씩 돌려 면 방향이 겹치지 않게
+    const geo = new THREE.IcosahedronGeometry(r, 1).rotateY(i * 1.37 + x * 0.71 + z * 0.53).translate(x + (R.rnd() - 0.5) * 1.6 * s, (3.4 + R.rnd() * 1.6) * s, z + (R.rnd() - 0.5) * 1.6 * s);
     B.add(i % 2 ? _treeMats.leaf : _treeMats.leaf2, geo);
   }
 }
@@ -365,7 +388,7 @@ export function buildShibuya(ctx) {
   for (let k = 0; k < 6; k++) {
     const z = -60 + k * 20.5;
     B.add(trainBody, new THREE.BoxGeometry(2.9, 3.2, 20).translate(vx - 2.5, 11, z));
-    B.add(trainLine, new THREE.BoxGeometry(2.95, 0.35, 20).translate(vx - 2.5, 10.2, z));
+    B.add(trainLine, new THREE.BoxGeometry(2.95, 0.35, 19.98).translate(vx - 2.5, 10.2, z));
     const win = R.buildingGeo(2.92, 12.3, 19.6, { bay: 2.5, floorH: 1.2, groundH: 11.1 });
     B.add(trainWin, win.sides, new THREE.Matrix4().makeTranslation(vx - 2.5, 0, z));
   }
@@ -637,7 +660,7 @@ export function buildAlley(ctx) {
     }
   }
   // 막다른 벽 · 입구 너머 큰길 불빛
-  building(B, null, F, RM, { x: 0, z: z1 + 5, w: AW + 16, d: 8, h: 16, mat: F.tileBrown, shop: false });
+  building(B, null, F, RM, { x: 0, z: z1 + 5, w: AW + 15.8, d: 8, h: 16, mat: F.tileBrown, shop: false });
   building(B, null, F, RM, { x: 0, z: z0 - 22, w: 60, d: 10, h: 30, mat: F.office, shop: false });
   // 붉은 초롱 (발광)
   const lantern = new THREE.MeshStandardMaterial({ color: 0xff3020, emissive: 0xff2a10, emissiveIntensity: 2.2, roughness: 0.6 });

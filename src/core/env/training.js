@@ -54,11 +54,11 @@ function padSet() {
 }
 
 /** 바닥 위 선 (테이프) */
-function lineRect(B, mat, cx, cz, w, d, t = 0.06) {
-  B.add(mat, R.stripe(cx, cz - d / 2, w, t, 0, 0.004));
-  B.add(mat, R.stripe(cx, cz + d / 2, w, t, 0, 0.004));
-  B.add(mat, R.stripe(cx - w / 2, cz, t, d, 0, 0.004));
-  B.add(mat, R.stripe(cx + w / 2, cz, t, d, 0, 0.004));
+function lineRect(B, mat, cx, cz, w, d, t = 0.06, y = 0.004) {
+  B.add(mat, R.stripe(cx, cz - d / 2, w, t, 0, y));
+  B.add(mat, R.stripe(cx, cz + d / 2, w, t, 0, y));
+  B.add(mat, R.stripe(cx - w / 2, cz, t, d, 0, y));
+  B.add(mat, R.stripe(cx + w / 2, cz, t, d, 0, y));
 }
 
 /** 재질별로 기하를 모았다가 한 번에 합친다 (그리기 호출 줄이기) */
@@ -167,14 +167,17 @@ export function buildTrainingHall(ctx) {
   yellow.userData.noShadow = true;
   const red = new THREE.MeshStandardMaterial({ color: 0xc8262e, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -12 });
   red.userData.noShadow = true;
-  lineRect(B, white, 0, (AZ0 + AZ1) / 2, AW - 1.2, AZ1 - AZ0 - 1.2, 0.07);
-  B.add(white, R.stripe(0, -12, AW - 1.2, 0.07, 0, 0.004));
-  B.add(white, new THREE.RingGeometry(3.4, 3.47, 72).rotateX(-Math.PI / 2).translate(0, 0.004, -12));
-  B.add(red, new THREE.RingGeometry(0.0, 0.3, 24).rotateX(-Math.PI / 2).translate(0, 0.004, -12));
-  lineRect(B, yellow, 0, (AZ0 + AZ1) / 2, AW + 0.6, AZ1 - AZ0 + 0.6, 0.1);
-  // 시작 위치 표시 (발 모양 대신 작은 십자)
-  B.add(yellow, R.stripe(0, 1, 0.6, 0.06, 0, 0.004));
-  B.add(yellow, R.stripe(0, 1, 0.06, 0.6, 0, 0.004));
+  // 고무 바닥(6mm) 위의 선은 그보다 확실히 위(11mm)에 — 고무 아래(4mm)에 두고 polygonOffset 으로 끌어올리면
+  //  가까이선 고무에 묻히고 멀리선 떠올라 그 사이가 지글거렸다 (Z-fighting)
+  const LY = 0.011;
+  lineRect(B, white, 0, (AZ0 + AZ1) / 2, AW - 1.2, AZ1 - AZ0 - 1.2, 0.07, LY);
+  B.add(white, R.stripe(0, -12, AW - 1.2, 0.07, 0, LY));
+  B.add(white, new THREE.RingGeometry(3.4, 3.47, 72).rotateX(-Math.PI / 2).translate(0, LY, -12));
+  B.add(red, new THREE.RingGeometry(0.0, 0.3, 24).rotateX(-Math.PI / 2).translate(0, LY + 0.002, -12));
+  lineRect(B, yellow, 0, (AZ0 + AZ1) / 2, AW + 0.6, AZ1 - AZ0 + 0.6, 0.1); // 콘크리트(0) 위 · 고무 밖
+  // 시작 위치 표시 (발 모양 대신 작은 십자) — 고무 위
+  B.add(yellow, R.stripe(0, 1, 0.6, 0.06, 0, LY));
+  B.add(yellow, R.stripe(0, 1, 0.06, 0.6, 0, LY));
 
   // ── 벽: 아래는 충격 흡수 패드, 위는 흰 도장 블록 벽 ──
   const pad = R.pbrMat(padSet(), { normal: 1, env: 0.6 });
@@ -248,7 +251,7 @@ export function buildTrainingHall(ctx) {
   group.add(exit);
   // 문 (앞 벽 · 양개 철문)
   const door = new THREE.MeshStandardMaterial({ color: 0x8a929c, metalness: 0.5, roughness: 0.45 });
-  B.box(door, 2.2, 2.4, 0.08, -8, 1.2, Z1 - 0.14);
+  B.box(door, 2.2, 2.4, 0.08, -8, 1.2, Z1 - 0.155);
   B.box(frame, 0.04, 2.3, 0.1, -8, 1.2, Z1 - 0.2);
 
   // ── 왼쪽 벽: 샌드백 (철골 보에 사슬로) ──
@@ -300,7 +303,7 @@ export function buildTrainingHall(ctx) {
   B.cyl(extMat, 0.08, 0.08, 0.5, -6, 0.3, Z1 - 0.2, 14);
   // 모서리 기둥
   const col = new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.8 });
-  for (const [x, z] of [[X0 + 0.3, Z0 + 0.3], [X1 - 0.3, Z0 + 0.3], [X0 + 0.3, Z1 - 0.3], [X1 - 0.3, Z1 - 0.3]]) B.box(col, 0.6, H, 0.6, x, H / 2, z);
+  for (const [x, z] of [[X0 + 0.3, Z0 + 0.3], [X1 - 0.3, Z0 + 0.3], [X0 + 0.3, Z1 - 0.3], [X1 - 0.3, Z1 - 0.3]]) B.box(col, 0.6, H - 0.02, 0.6, x, (H - 0.02) / 2, z); // 윗면이 천장 데크와 붙지 않게
   void base;
   B.flush(group);
 
